@@ -4,18 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
+	"sort"
+	"strings"
+	"time"
+
 	"github.com/scylladb/scylla-operator/pkg/api/scylla/v1alpha1"
 	"github.com/scylladb/scylla-operator/pkg/helpers/slices"
 	"github.com/scylladb/scylla-operator/pkg/naming"
 	"github.com/scylladb/scylla-operator/test/e2e/framework"
 	v1alpha2 "github.com/scylladb/scylla-operator/test/e2e/utils/v1alpha1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	v2 "k8s.io/client-go/kubernetes/typed/core/v1"
-	"reflect"
-	"sort"
-	"strings"
-	"time"
 )
 
 func WaitForFullQuorum(ctx context.Context, rkcClusterMap map[string]framework.ClusterInterface, sc *v1alpha1.ScyllaDBCluster) error {

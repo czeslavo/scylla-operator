@@ -2,9 +2,10 @@ package naming
 
 import (
 	"fmt"
-	"github.com/scylladb/scylla-operator/pkg/util/hash"
 	"strconv"
 	"strings"
+
+	"github.com/scylladb/scylla-operator/pkg/util/hash"
 
 	"github.com/containers/image/v5/docker/reference"
 	"github.com/pkg/errors"

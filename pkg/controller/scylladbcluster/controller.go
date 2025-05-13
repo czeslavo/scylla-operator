@@ -420,29 +420,6 @@ func (scc *Controller) deleteRemoteRemoteOwner(obj interface{}) {
 	)
 }
 
-func (scc *Controller) addScyllaDBDatacenter(obj interface{}) {
-	scc.handlers.HandleAdd(
-		obj.(*scyllav1alpha1.ScyllaDBDatacenter),
-		scc.enqueueThroughParentLabel,
-	)
-}
-
-func (scc *Controller) updateScyllaDBDatacenter(old, cur interface{}) {
-	scc.handlers.HandleUpdate(
-		old.(*scyllav1alpha1.ScyllaDBDatacenter),
-		cur.(*scyllav1alpha1.ScyllaDBDatacenter),
-		scc.enqueueThroughParentLabel,
-		scc.deleteScyllaDBDatacenter,
-	)
-}
-
-func (scc *Controller) deleteScyllaDBDatacenter(obj interface{}) {
-	scc.handlers.HandleDelete(
-		obj,
-		scc.enqueueThroughParentLabel,
-	)
-}
-
 func (scc *Controller) addRemoteNamespace(obj interface{}) {
 	scc.handlers.HandleAdd(
 		obj.(*corev1.Namespace),

@@ -18,7 +18,7 @@ import (
 	"github.com/scylladb/scylla-operator/pkg/util/cpuset"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
-	"k8s.io/kubelet/pkg/apis/podresources/v1"
+	v1 "k8s.io/kubelet/pkg/apis/podresources/v1"
 )
 
 const (
