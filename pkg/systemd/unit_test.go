@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/scylladb/scylla-operator/pkg/helpers/slices"
+	oslices "github.com/scylladb/scylla-operator/pkg/helpers/slices"
 	apierrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/tools/record"
 )
@@ -565,10 +565,10 @@ func Test_unitManager_EnsureUnits(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			unexpectedEntries := slices.Filter(entries, func(entry os.DirEntry) bool {
+			unexpectedEntries := oslices.Filter(entries, func(entry os.DirEntry) bool {
 				return !entry.IsDir() &&
 					entry.Name() != m.getStatusName() &&
-					!slices.Contains(
+					!oslices.Contains(
 						tc.expectedUnits,
 						func(v *NamedUnit) bool {
 							return v.FileName == entry.Name()
@@ -577,7 +577,7 @@ func Test_unitManager_EnsureUnits(t *testing.T) {
 			})
 
 			if len(unexpectedEntries) != 0 {
-				unexpectedEntryNames := slices.ConvertSlice(unexpectedEntries, func(entry os.DirEntry) string {
+				unexpectedEntryNames := oslices.ConvertSlice(unexpectedEntries, func(entry os.DirEntry) string {
 					return entry.Name()
 				})
 				t.Errorf("Unexpected files were created: %q", strings.Join(unexpectedEntryNames, ","))

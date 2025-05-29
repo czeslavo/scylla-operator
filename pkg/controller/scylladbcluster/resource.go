@@ -8,7 +8,7 @@ import (
 
 	scyllav1alpha1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1alpha1"
 	"github.com/scylladb/scylla-operator/pkg/controllerhelpers"
-	"github.com/scylladb/scylla-operator/pkg/helpers/slices"
+	oslices "github.com/scylladb/scylla-operator/pkg/helpers/slices"
 	"github.com/scylladb/scylla-operator/pkg/naming"
 	"github.com/scylladb/scylla-operator/pkg/pointer"
 	remotelister "github.com/scylladb/scylla-operator/pkg/remoteclient/lister"
@@ -127,7 +127,7 @@ func MakeRemoteScyllaDBDatacenters(sc *scyllav1alpha1.ScyllaDBCluster, dc *scyll
 
 		for _, remoteSDCs := range remoteScyllaDBDatacenters {
 			for _, remoteSDC := range remoteSDCs {
-				isReferencedByOtherDCAsSeed := slices.Contains(remoteSDC.Spec.ScyllaDB.ExternalSeeds, func(remoteSDCSeed string) bool {
+				isReferencedByOtherDCAsSeed := oslices.Contains(remoteSDC.Spec.ScyllaDB.ExternalSeeds, func(remoteSDCSeed string) bool {
 					return naming.DCNameFromSeedServiceAddress(sc, remoteSDCSeed, remoteSDC.Namespace) == dcSpec.Name
 				})
 
@@ -443,7 +443,7 @@ func MakeRemoteEndpointSlices(sc *scyllav1alpha1.ScyllaDBCluster, dc *scyllav1al
 }
 
 func mergeScyllaV1Alpha1Placement(placementGetters ...func() *scyllav1alpha1.Placement) *scyllav1alpha1.Placement {
-	placementGetters = slices.FilterOut(placementGetters, func(getter func() *scyllav1alpha1.Placement) bool {
+	placementGetters = oslices.FilterOut(placementGetters, func(getter func() *scyllav1alpha1.Placement) bool {
 		return getter() == nil
 	})
 	if len(placementGetters) == 0 {
@@ -506,7 +506,7 @@ func mergeScyllaV1Alpha1Placement(placementGetters ...func() *scyllav1alpha1.Pla
 }
 
 func mergeScyllaV1Alpha1ScyllaDB(scyllaDBTemplateGetters ...func() *scyllav1alpha1.ScyllaDBTemplate) *scyllav1alpha1.ScyllaDBTemplate {
-	scyllaDBTemplateGetters = slices.FilterOut(scyllaDBTemplateGetters, func(getter func() *scyllav1alpha1.ScyllaDBTemplate) bool {
+	scyllaDBTemplateGetters = oslices.FilterOut(scyllaDBTemplateGetters, func(getter func() *scyllav1alpha1.ScyllaDBTemplate) bool {
 		return getter() == nil
 	})
 	if len(scyllaDBTemplateGetters) == 0 {
@@ -568,7 +568,7 @@ func mergeScyllaV1Alpha1ScyllaDB(scyllaDBTemplateGetters ...func() *scyllav1alph
 }
 
 func mergeScyllaV1Alpha1ScyllaDBManagerAgent(scyllaDBManagerAgentTemplateGetters ...func() *scyllav1alpha1.ScyllaDBManagerAgentTemplate) *scyllav1alpha1.ScyllaDBManagerAgentTemplate {
-	scyllaDBManagerAgentTemplateGetters = slices.FilterOut(scyllaDBManagerAgentTemplateGetters, func(getter func() *scyllav1alpha1.ScyllaDBManagerAgentTemplate) bool {
+	scyllaDBManagerAgentTemplateGetters = oslices.FilterOut(scyllaDBManagerAgentTemplateGetters, func(getter func() *scyllav1alpha1.ScyllaDBManagerAgentTemplate) bool {
 		return getter() == nil
 	})
 	if len(scyllaDBManagerAgentTemplateGetters) == 0 {

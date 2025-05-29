@@ -17,7 +17,7 @@
 package v1
 
 import (
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
@@ -245,7 +245,7 @@ type PodMetricsEndpoint struct {
 	// +optional
 	//
 	// Deprecated: use `authorization` instead.
-	BearerTokenSecret v1.SecretKeySelector `json:"bearerTokenSecret,omitempty"`
+	BearerTokenSecret corev1.SecretKeySelector `json:"bearerTokenSecret,omitempty"`
 
 	// When true, `honorLabels` preserves the metric's labels when they collide
 	// with the target's labels.

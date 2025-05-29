@@ -11,7 +11,7 @@ import (
 	scyllav1alpha1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1alpha1"
 	"github.com/scylladb/scylla-operator/pkg/controllerhelpers"
 	"github.com/scylladb/scylla-operator/pkg/helpers"
-	"github.com/scylladb/scylla-operator/pkg/helpers/slices"
+	oslices "github.com/scylladb/scylla-operator/pkg/helpers/slices"
 	"github.com/scylladb/scylla-operator/pkg/internalapi"
 	"github.com/scylladb/scylla-operator/pkg/naming"
 	"github.com/scylladb/scylla-operator/pkg/pointer"
@@ -90,7 +90,7 @@ func (sdcc *Controller) backupKeyspaces(ctx context.Context, scyllaClient *scyll
 			return fmt.Errorf("can't list snapshots on host %q: %w", host, err)
 		}
 
-		if slices.ContainsItem(snapshots, snapshotTag) {
+		if oslices.ContainsItem(snapshots, snapshotTag) {
 			return nil
 		}
 
@@ -385,7 +385,7 @@ func (sdcc *Controller) pruneStatefulSets(
 			continue
 		}
 
-		status.Racks = slices.FilterOut(status.Racks, func(rackStatus scyllav1alpha1.RackStatus) bool {
+		status.Racks = oslices.FilterOut(status.Racks, func(rackStatus scyllav1alpha1.RackStatus) bool {
 			return rackStatus.Name == rackName
 		})
 	}
@@ -431,7 +431,7 @@ func (sdcc *Controller) createMissingStatefulSets(
 				}
 
 				updatedRackStatus := *sdcc.calculateRackStatus(sdc, sts)
-				_, idx, ok := slices.Find(status.Racks, func(rackStatus scyllav1alpha1.RackStatus) bool {
+				_, idx, ok := oslices.Find(status.Racks, func(rackStatus scyllav1alpha1.RackStatus) bool {
 					return rackStatus.Name == rackName
 				})
 				if ok {
@@ -774,7 +774,7 @@ func (sdcc *Controller) syncStatefulSets(
 						continue
 					}
 
-					_, idx, ok := slices.Find(sdc.Status.Racks, func(status scyllav1alpha1.RackStatus) bool {
+					_, idx, ok := oslices.Find(sdc.Status.Racks, func(status scyllav1alpha1.RackStatus) bool {
 						return status.Name == rackName
 					})
 					if !ok {
@@ -1043,7 +1043,7 @@ func (sdcc *Controller) syncStatefulSets(
 					naming.RackNameLabel,
 				)
 			}
-			_, idx, ok := slices.Find(sdc.Status.Racks, func(status scyllav1alpha1.RackStatus) bool {
+			_, idx, ok := oslices.Find(sdc.Status.Racks, func(status scyllav1alpha1.RackStatus) bool {
 				return status.Name == rackName
 			})
 			if !ok {
@@ -1091,7 +1091,7 @@ func (sdcc *Controller) setStatefulSetsAvailableStatusCondition(
 		}
 		desiredMembers += *rackCount
 
-		rackStatus, _, found := slices.Find(status.Racks, func(status scyllav1alpha1.RackStatus) bool {
+		rackStatus, _, found := oslices.Find(status.Racks, func(status scyllav1alpha1.RackStatus) bool {
 			return status.Name == rack.Name
 		})
 		if !found {

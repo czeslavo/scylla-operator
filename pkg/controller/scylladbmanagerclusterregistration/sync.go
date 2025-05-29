@@ -12,7 +12,7 @@ import (
 	scyllav1alpha1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1alpha1"
 	"github.com/scylladb/scylla-operator/pkg/controllerhelpers"
 	"github.com/scylladb/scylla-operator/pkg/controllertools"
-	"github.com/scylladb/scylla-operator/pkg/helpers/slices"
+	oslices "github.com/scylladb/scylla-operator/pkg/helpers/slices"
 	"github.com/scylladb/scylla-operator/pkg/internalapi"
 	"github.com/scylladb/scylla-operator/pkg/naming"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -156,7 +156,7 @@ func isManagedByGlobalScyllaDBManagerInstance(smcr *scyllav1alpha1.ScyllaDBManag
 }
 
 func (smcrc *Controller) hasFinalizer(finalizers []string) bool {
-	return slices.ContainsItem(finalizers, naming.ScyllaDBManagerClusterRegistrationFinalizer)
+	return oslices.ContainsItem(finalizers, naming.ScyllaDBManagerClusterRegistrationFinalizer)
 }
 
 func (smcrc *Controller) addFinalizer(ctx context.Context, smcr *scyllav1alpha1.ScyllaDBManagerClusterRegistration) error {

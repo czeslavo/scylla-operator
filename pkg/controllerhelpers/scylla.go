@@ -7,7 +7,7 @@ import (
 	scyllav1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1"
 	scyllav1alpha1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1alpha1"
 	"github.com/scylladb/scylla-operator/pkg/helpers"
-	"github.com/scylladb/scylla-operator/pkg/helpers/slices"
+	oslices "github.com/scylladb/scylla-operator/pkg/helpers/slices"
 	"github.com/scylladb/scylla-operator/pkg/naming"
 	"github.com/scylladb/scylla-operator/pkg/pointer"
 	"github.com/scylladb/scylla-operator/pkg/scyllaclient"
@@ -267,7 +267,7 @@ func IsScyllaPod(pod *corev1.Pod) bool {
 }
 
 func GetRackNodeCount(sdc *scyllav1alpha1.ScyllaDBDatacenter, rackName string) (*int32, error) {
-	rackSpec, _, ok := slices.Find(sdc.Spec.Racks, func(spec scyllav1alpha1.RackSpec) bool {
+	rackSpec, _, ok := oslices.Find(sdc.Spec.Racks, func(spec scyllav1alpha1.RackSpec) bool {
 		return spec.Name == rackName
 	})
 	if !ok {

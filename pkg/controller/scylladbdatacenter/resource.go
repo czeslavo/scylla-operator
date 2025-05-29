@@ -16,7 +16,7 @@ import (
 	"github.com/scylladb/scylla-operator/pkg/controllerhelpers"
 	"github.com/scylladb/scylla-operator/pkg/features"
 	"github.com/scylladb/scylla-operator/pkg/helpers"
-	"github.com/scylladb/scylla-operator/pkg/helpers/slices"
+	oslices "github.com/scylladb/scylla-operator/pkg/helpers/slices"
 	"github.com/scylladb/scylla-operator/pkg/internalapi"
 	"github.com/scylladb/scylla-operator/pkg/naming"
 	"github.com/scylladb/scylla-operator/pkg/pointer"
@@ -194,7 +194,7 @@ func MemberService(sdc *scyllav1alpha1.ScyllaDBDatacenter, rackName, name string
 		svc.Spec.ExternalTrafficPolicy = getValueOrDefault(ns.ExternalTrafficPolicy, "")
 	}
 
-	rackSpec, _, ok := slices.Find(sdc.Spec.Racks, func(rs scyllav1alpha1.RackSpec) bool {
+	rackSpec, _, ok := oslices.Find(sdc.Spec.Racks, func(rs scyllav1alpha1.RackSpec) bool {
 		return rs.Name == rackName
 	})
 	if !ok {
@@ -361,7 +361,7 @@ func StatefulSetForRack(rack scyllav1alpha1.RackSpec, sdc *scyllav1alpha1.Scylla
 
 	var existingDataPVCTemplate *corev1.PersistentVolumeClaim
 	if existingSts != nil {
-		pvc, _, ok := slices.Find(existingSts.Spec.VolumeClaimTemplates, func(pvc corev1.PersistentVolumeClaim) bool {
+		pvc, _, ok := oslices.Find(existingSts.Spec.VolumeClaimTemplates, func(pvc corev1.PersistentVolumeClaim) bool {
 			return pvc.Name == naming.PVCTemplateName
 		})
 		if !ok {

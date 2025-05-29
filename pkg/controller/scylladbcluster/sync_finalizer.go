@@ -8,7 +8,7 @@ import (
 
 	scyllav1alpha1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1alpha1"
 	"github.com/scylladb/scylla-operator/pkg/controllerhelpers"
-	"github.com/scylladb/scylla-operator/pkg/helpers/slices"
+	oslices "github.com/scylladb/scylla-operator/pkg/helpers/slices"
 	"github.com/scylladb/scylla-operator/pkg/naming"
 	"github.com/scylladb/scylla-operator/pkg/pointer"
 	corev1 "k8s.io/api/core/v1"
@@ -77,7 +77,7 @@ func (scc *Controller) syncFinalizer(ctx context.Context, sc *scyllav1alpha1.Scy
 			continue
 		}
 
-		clientRemoteNamespaces[dc.RemoteKubernetesClusterName] = slices.ConvertSlice(rnss.Items, pointer.Ptr[corev1.Namespace])
+		clientRemoteNamespaces[dc.RemoteKubernetesClusterName] = oslices.ConvertSlice(rnss.Items, pointer.Ptr[corev1.Namespace])
 	}
 
 	deletionProgressingCondition, err = scc.deleteRemoteNamespaces(ctx, sc, clientRemoteNamespaces)
@@ -134,7 +134,7 @@ func (scc *Controller) deleteRemoteNamespaces(ctx context.Context, sc *scyllav1a
 }
 
 func (scc *Controller) hasFinalizer(finalizers []string) bool {
-	return slices.ContainsItem(finalizers, naming.ScyllaDBClusterFinalizer)
+	return oslices.ContainsItem(finalizers, naming.ScyllaDBClusterFinalizer)
 }
 
 func (scc *Controller) addFinalizer(ctx context.Context, sc *scyllav1alpha1.ScyllaDBCluster) error {

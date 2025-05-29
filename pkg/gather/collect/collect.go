@@ -11,7 +11,7 @@ import (
 	scyllav1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1"
 	scyllav1alpha1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1alpha1"
 	"github.com/scylladb/scylla-operator/pkg/helpers"
-	"github.com/scylladb/scylla-operator/pkg/helpers/slices"
+	oslices "github.com/scylladb/scylla-operator/pkg/helpers/slices"
 	"github.com/scylladb/scylla-operator/pkg/kubeinterfaces"
 	"github.com/scylladb/scylla-operator/pkg/naming"
 	"github.com/scylladb/scylla-operator/pkg/pointer"
@@ -241,7 +241,7 @@ func retrieveContainerLogs(ctx context.Context, podClient corev1client.PodInterf
 func (c *Collector) collectContainerLogs(ctx context.Context, logsDir string, podMeta *metav1.ObjectMeta, podCSs []corev1.ContainerStatus, containerName string) error {
 	var err error
 
-	cs, _, found := slices.Find(podCSs, func(s corev1.ContainerStatus) bool {
+	cs, _, found := oslices.Find(podCSs, func(s corev1.ContainerStatus) bool {
 		return s.Name == containerName
 	})
 	if !found {

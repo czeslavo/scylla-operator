@@ -10,7 +10,7 @@ import (
 	scyllav1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1"
 	scyllav1alpha1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1alpha1"
 	"github.com/scylladb/scylla-operator/pkg/controllerhelpers"
-	"github.com/scylladb/scylla-operator/pkg/helpers/slices"
+	oslices "github.com/scylladb/scylla-operator/pkg/helpers/slices"
 	"github.com/scylladb/scylla-operator/pkg/naming"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -232,8 +232,8 @@ func (scmc *Controller) sync(ctx context.Context, key string) error {
 		allowedOwnerUIDs = append(allowedOwnerUIDs, sdc.UID)
 	}
 
-	configMaps = slices.Filter(configMaps, isOwnedByAnyFunc[*corev1.ConfigMap](allowedOwnerUIDs))
-	services = slices.Filter(services, isOwnedByAnyFunc[*corev1.Service](allowedOwnerUIDs))
+	configMaps = oslices.Filter(configMaps, isOwnedByAnyFunc[*corev1.ConfigMap](allowedOwnerUIDs))
+	services = oslices.Filter(services, isOwnedByAnyFunc[*corev1.Service](allowedOwnerUIDs))
 
 	objectErr := utilerrors.NewAggregate(objectErrs)
 	if objectErr != nil {

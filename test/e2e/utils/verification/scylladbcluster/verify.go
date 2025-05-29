@@ -7,7 +7,7 @@ import (
 	scyllav1alpha1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1alpha1"
 	scylladbclustercontroller "github.com/scylladb/scylla-operator/pkg/controller/scylladbcluster"
 	"github.com/scylladb/scylla-operator/pkg/controllerhelpers"
-	"github.com/scylladb/scylla-operator/pkg/helpers/slices"
+	oslices "github.com/scylladb/scylla-operator/pkg/helpers/slices"
 	"github.com/scylladb/scylla-operator/pkg/internalapi"
 	"github.com/scylladb/scylla-operator/pkg/naming"
 	"github.com/scylladb/scylla-operator/pkg/pointer"
@@ -179,7 +179,7 @@ func Verify(ctx context.Context, sc *scyllav1alpha1.ScyllaDBCluster, rkcClusterM
 		cluster := rkcClusterMap[dc.RemoteKubernetesClusterName]
 		o.Expect(cluster).NotTo(o.BeNil())
 
-		dcStatus, _, ok := slices.Find(sc.Status.Datacenters, func(dcStatus scyllav1alpha1.ScyllaDBClusterDatacenterStatus) bool {
+		dcStatus, _, ok := oslices.Find(sc.Status.Datacenters, func(dcStatus scyllav1alpha1.ScyllaDBClusterDatacenterStatus) bool {
 			return dcStatus.Name == dc.Name
 		})
 		o.Expect(ok).To(o.BeTrue())
@@ -210,7 +210,7 @@ func Verify(ctx context.Context, sc *scyllav1alpha1.ScyllaDBCluster, rkcClusterM
 		o.Expect(dcStatus.AvailableNodes).ToNot(o.BeNil())
 		o.Expect(*dcStatus.AvailableNodes).To(o.Equal(dcNodeCount))
 
-		otherDCs := slices.FilterOut(sc.Spec.Datacenters, func(otherDC scyllav1alpha1.ScyllaDBClusterDatacenter) bool {
+		otherDCs := oslices.FilterOut(sc.Spec.Datacenters, func(otherDC scyllav1alpha1.ScyllaDBClusterDatacenter) bool {
 			return dc.Name == otherDC.Name
 		})
 

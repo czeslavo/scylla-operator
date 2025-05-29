@@ -12,7 +12,7 @@ import (
 	"github.com/c9s/goprocinfo/linux"
 	scyllav1alpha1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1alpha1"
 	"github.com/scylladb/scylla-operator/pkg/controllerhelpers"
-	"github.com/scylladb/scylla-operator/pkg/helpers/slices"
+	oslices "github.com/scylladb/scylla-operator/pkg/helpers/slices"
 	"github.com/scylladb/scylla-operator/pkg/naming"
 	"github.com/scylladb/scylla-operator/pkg/resourceapply"
 	"github.com/scylladb/scylla-operator/pkg/semver"
@@ -186,7 +186,7 @@ func (ncdc *Controller) makeJobsForContainers(ctx context.Context) ([]*batchv1.J
 		return nil, fmt.Errorf("can't list local scylla pods: %w", err)
 	}
 
-	localScyllaPods = slices.FilterOut(localScyllaPods, func(pod *corev1.Pod) bool {
+	localScyllaPods = oslices.FilterOut(localScyllaPods, func(pod *corev1.Pod) bool {
 		return pod.DeletionTimestamp != nil
 	})
 

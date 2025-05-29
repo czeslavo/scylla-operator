@@ -22,7 +22,7 @@ import (
 	"github.com/scylladb/scylla-operator/pkg/controllerhelpers"
 	ocrypto "github.com/scylladb/scylla-operator/pkg/crypto"
 	"github.com/scylladb/scylla-operator/pkg/helpers"
-	"github.com/scylladb/scylla-operator/pkg/helpers/slices"
+	oslices "github.com/scylladb/scylla-operator/pkg/helpers/slices"
 	"github.com/scylladb/scylla-operator/pkg/naming"
 	"github.com/scylladb/scylla-operator/pkg/pointer"
 	"github.com/scylladb/scylla-operator/pkg/scyllaclient"
@@ -388,7 +388,7 @@ func GetBroadcastAddresses(ctx context.Context, client corev1client.CoreV1Interf
 	}
 
 	var broadcastAddresses []string
-	for _, svc := range slices.ConvertSlice(serviceList.Items, pointer.Ptr[corev1.Service]) {
+	for _, svc := range oslices.ConvertSlice(serviceList.Items, pointer.Ptr[corev1.Service]) {
 		podName := naming.PodNameFromService(svc)
 		pod, err := client.Pods(sc.Namespace).Get(ctx, podName, metav1.GetOptions{})
 		if err != nil {

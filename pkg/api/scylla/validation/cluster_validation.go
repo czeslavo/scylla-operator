@@ -9,7 +9,7 @@ import (
 
 	"github.com/robfig/cron/v3"
 	scyllav1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1"
-	"github.com/scylladb/scylla-operator/pkg/helpers/slices"
+	oslices "github.com/scylladb/scylla-operator/pkg/helpers/slices"
 	"github.com/scylladb/scylla-operator/pkg/pointer"
 	"github.com/scylladb/scylla-operator/pkg/util/duration"
 	apimachineryvalidation "k8s.io/apimachinery/pkg/api/validation"
@@ -123,7 +123,7 @@ func ValidateAlternatorSpec(alternator *scyllav1.AlternatorSpec, fldPath *field.
 	var allErrs field.ErrorList
 
 	if alternator.WriteIsolation != "" {
-		found := slices.ContainsItem(AlternatorSupportedWriteIsolation, alternator.WriteIsolation)
+		found := oslices.ContainsItem(AlternatorSupportedWriteIsolation, alternator.WriteIsolation)
 		if !found {
 			allErrs = append(
 				allErrs,
@@ -310,8 +310,8 @@ func ValidateNodeBroadcastOptions(options *scyllav1.NodeBroadcastOptions, nodeSe
 func ValidateBroadcastOptions(options scyllav1.BroadcastOptions, nodeService *scyllav1.NodeServiceTemplate, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 
-	if !slices.ContainsItem(SupportedScyllaV1BroadcastAddressTypes, options.Type) {
-		allErrs = append(allErrs, field.NotSupported(fldPath.Child("type"), options.Type, slices.ConvertSlice(SupportedScyllaV1BroadcastAddressTypes, slices.ToString[scyllav1.BroadcastAddressType])))
+	if !oslices.ContainsItem(SupportedScyllaV1BroadcastAddressTypes, options.Type) {
+		allErrs = append(allErrs, field.NotSupported(fldPath.Child("type"), options.Type, oslices.ConvertSlice(SupportedScyllaV1BroadcastAddressTypes, oslices.ToString[scyllav1.BroadcastAddressType])))
 	}
 
 	var allowedNodeServiceTypesByBroadcastAddressType = map[scyllav1.BroadcastAddressType][]scyllav1.NodeServiceType{
@@ -336,7 +336,7 @@ func ValidateBroadcastOptions(options scyllav1.BroadcastOptions, nodeService *sc
 
 	// Skipping an error when chosen option type is unsupported as it won't help anyhow users reading it.
 	allowedNodeServiceTypes, ok := allowedNodeServiceTypesByBroadcastAddressType[options.Type]
-	if ok && !slices.ContainsItem(allowedNodeServiceTypes, nodeServiceType) {
+	if ok && !oslices.ContainsItem(allowedNodeServiceTypes, nodeServiceType) {
 		allErrs = append(allErrs, field.Invalid(fldPath.Child("type"), options.Type, fmt.Sprintf("can't broadcast address unavailable within the selected node service type, allowed types for chosen broadcast address type are: %v", allowedNodeServiceTypes)))
 	}
 
@@ -352,8 +352,8 @@ func ValidateNodeService(nodeService *scyllav1.NodeServiceTemplate, fldPath *fie
 		scyllav1.NodeServiceTypeLoadBalancer,
 	}
 
-	if !slices.ContainsItem(supportedServiceTypes, nodeService.Type) {
-		allErrs = append(allErrs, field.NotSupported(fldPath.Child("type"), nodeService.Type, slices.ConvertSlice(supportedServiceTypes, slices.ToString[scyllav1.NodeServiceType])))
+	if !oslices.ContainsItem(supportedServiceTypes, nodeService.Type) {
+		allErrs = append(allErrs, field.NotSupported(fldPath.Child("type"), nodeService.Type, oslices.ConvertSlice(supportedServiceTypes, oslices.ToString[scyllav1.NodeServiceType])))
 	}
 
 	if nodeService.LoadBalancerClass != nil && len(*nodeService.LoadBalancerClass) != 0 {

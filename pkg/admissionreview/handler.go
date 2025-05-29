@@ -7,7 +7,6 @@ import (
 	"net/http"
 
 	admissionv1 "k8s.io/api/admission/v1"
-	v1 "k8s.io/api/admission/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -27,7 +26,7 @@ func init() {
 	codecs = serializer.NewCodecFactory(scheme)
 }
 
-type HandleFunc func(*v1.AdmissionReview) error
+type HandleFunc func(*admissionv1.AdmissionReview) error
 
 type handler struct {
 	f HandleFunc
@@ -71,8 +70,8 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	var responseObj runtime.Object
 	switch *gvk {
-	case v1.SchemeGroupVersion.WithKind("AdmissionReview"):
-		requestedAdmissionReview, ok := obj.(*v1.AdmissionReview)
+	case admissionv1.SchemeGroupVersion.WithKind("AdmissionReview"):
+		requestedAdmissionReview, ok := obj.(*admissionv1.AdmissionReview)
 		if !ok {
 			msg := fmt.Sprintf("Expected v1.AdmissionReview but got: %T", obj)
 			klog.Error(msg)
@@ -85,9 +84,9 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			klog.V(2).InfoS("Review failed", "Error", err)
 		}
 
-		responseAdmissionReview := &v1.AdmissionReview{}
+		responseAdmissionReview := &admissionv1.AdmissionReview{}
 		responseAdmissionReview.SetGroupVersionKind(*gvk)
-		responseAdmissionReview.Response = &v1.AdmissionResponse{
+		responseAdmissionReview.Response = &admissionv1.AdmissionResponse{
 			UID:     requestedAdmissionReview.Request.UID,
 			Allowed: funcErr == nil,
 			Result: func() *metav1.Status {

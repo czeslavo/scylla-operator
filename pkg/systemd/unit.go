@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 
 	scyllav1alpha1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1alpha1"
-	"github.com/scylladb/scylla-operator/pkg/helpers/slices"
+	oslices "github.com/scylladb/scylla-operator/pkg/helpers/slices"
 	"gopkg.in/yaml.v2"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/util/errors"
@@ -174,17 +174,17 @@ func (m *UnitManager) EnsureUnits(ctx context.Context, nc *scyllav1alpha1.NodeCo
 		)
 	}
 
-	unitStatuses, err := control.GetUnitStatuses(ctx, slices.ConvertSlice(requiredUnits, func(unit *NamedUnit) string {
+	unitStatuses, err := control.GetUnitStatuses(ctx, oslices.ConvertSlice(requiredUnits, func(unit *NamedUnit) string {
 		return unit.FileName
 	}))
 	if err != nil {
 		return progressingMessages, fmt.Errorf("can't get unit statuses: %w", err)
 	}
 
-	foundUnitStatuses := slices.FilterOut(unitStatuses, func(status UnitStatus) bool {
+	foundUnitStatuses := oslices.FilterOut(unitStatuses, func(status UnitStatus) bool {
 		return status.LoadState == loadStateNotFound
 	})
-	existingUnitsSet := sets.New(slices.ConvertSlice(foundUnitStatuses, func(status UnitStatus) string {
+	existingUnitsSet := sets.New(oslices.ConvertSlice(foundUnitStatuses, func(status UnitStatus) string {
 		return status.Name
 	})...)
 
@@ -204,7 +204,7 @@ func (m *UnitManager) EnsureUnits(ctx context.Context, nc *scyllav1alpha1.NodeCo
 
 	// First save the updated list of managed units,
 	// so we can clean up in the next run, if we were interrupted.
-	status.ManagedUnits = slices.ConvertSlice(managedRequiredUnits, func(unit *NamedUnit) string {
+	status.ManagedUnits = oslices.ConvertSlice(managedRequiredUnits, func(unit *NamedUnit) string {
 		return unit.FileName
 	})
 

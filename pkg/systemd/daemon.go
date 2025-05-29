@@ -8,7 +8,7 @@ import (
 
 	"github.com/coreos/go-systemd/v22/dbus"
 	godbus "github.com/godbus/dbus/v5"
-	"github.com/scylladb/scylla-operator/pkg/helpers/slices"
+	oslices "github.com/scylladb/scylla-operator/pkg/helpers/slices"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
@@ -136,11 +136,11 @@ func (c *SystemdControl) GetUnitStatuses(ctx context.Context, unitFiles []string
 	}
 
 	unitNameSet := sets.New(unitFiles...)
-	dbusUnitStatuses = slices.Filter(dbusUnitStatuses, func(us dbus.UnitStatus) bool {
+	dbusUnitStatuses = oslices.Filter(dbusUnitStatuses, func(us dbus.UnitStatus) bool {
 		return unitNameSet.Has(us.Name)
 	})
 
-	unitStatuses := slices.ConvertSlice(dbusUnitStatuses, func(us dbus.UnitStatus) UnitStatus {
+	unitStatuses := oslices.ConvertSlice(dbusUnitStatuses, func(us dbus.UnitStatus) UnitStatus {
 		return UnitStatus{
 			Name:        us.Name,
 			LoadState:   us.LoadState,
@@ -151,7 +151,7 @@ func (c *SystemdControl) GetUnitStatuses(ctx context.Context, unitFiles []string
 	getUnitName := func(us UnitStatus) string {
 		return us.Name
 	}
-	missingUnitNames := unitNameSet.Difference(sets.New(slices.ConvertSlice(unitStatuses, getUnitName)...)).UnsortedList()
+	missingUnitNames := unitNameSet.Difference(sets.New(oslices.ConvertSlice(unitStatuses, getUnitName)...)).UnsortedList()
 
 	var unitPropertiesErrs []error
 	for _, name := range missingUnitNames {
