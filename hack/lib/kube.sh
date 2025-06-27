@@ -29,7 +29,18 @@ function kubectl_cp {
 }
 
 function wait-for-object-creation {
-  kubectl wait --timeout=60s --for=create -n "${1}" "${2}"
+  timeout=60
+  interval=2
+
+  end=$((SECONDS + timeout))
+
+  while (( SECONDS < end )); do
+    if kubectl get -n "${1}" "${2}" &>/dev/null; then
+      echo "Object exists!"
+      exit 0
+    fi
+    sleep $interval
+  done
 }
 
 # $1 - namespace

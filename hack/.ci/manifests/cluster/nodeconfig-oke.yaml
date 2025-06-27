@@ -1,0 +1,28 @@
+apiVersion: scylla.scylladb.com/v1alpha1
+kind: NodeConfig
+metadata:
+  name: scylladb-oke
+spec:
+  localDiskSetup:
+    raids:
+      - name: array
+        type: RAID0
+        RAID0:
+          devices:
+            nameRegex: ^/dev/sdb$
+    filesystems:
+      - device: /dev/md/array
+        type: xfs
+    mounts:
+      - device: /dev/md/array
+        mountPoint: /var/lib/persistent-volumes
+        unsupportedOptions:
+          - prjquota
+  placement:
+    nodeSelector:
+      scylla.scylladb.com/node-type: scylla
+    tolerations:
+      - effect: NoSchedule
+        key: scylla-operator.scylladb.com/dedicated
+        operator: Equal
+        value: scyllaclusters

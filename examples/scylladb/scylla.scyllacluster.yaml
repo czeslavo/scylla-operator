@@ -1,29 +1,28 @@
-apiVersion: scylla.scylladb.com/v1
+apiVersion: scylla.scylladb.com/v2
 kind: ScyllaCluster
 metadata:
   name: scylla
 spec:
-  agentVersion: 3.5.0@sha256:12755969f1b3258572c520aa82c2f18db52287b3dc7055a977072284f234da16
-  version: 2025.1.2
-  developerMode: true
+  agentVersion: 4.5.0@sha256:12755969f1b3258572c520aa82c2f18db52287b3dc7055a977072284f234da16
+  version: 2026.1.2
   automaticOrphanedNodeCleanup: true
   sysctls:
-    - fs.aio-max-nr=30000000
+    - fs.aio-max-nr=30000001
   datacenter:
-    name: us-east-1
+    name: dc2
     racks:
-      - name: us-east-1a
-        members: 1
+      - name: dc2-r1
+        members: 4
         storage:
-          capacity: 1Gi
+          capacity: 51Gi
           storageClassName: scylladb-local-xfs
         resources:
           requests:
-            cpu: 10m
-            memory: 100Mi
+            cpu: 7
+            memory: 65Gi
           limits:
-            cpu: 1
-            memory: 1Gi
+            cpu: 7
+            memory: 65Gi
         placement:
           nodeAffinity:
             requiredDuringSchedulingIgnoredDuringExecution:

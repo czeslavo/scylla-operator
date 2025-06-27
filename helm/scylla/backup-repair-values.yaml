@@ -1,0 +1,35 @@
+backups:
+  - dc: [ dc1 ]
+    name: backup-every-10m
+    cron: "@every 10m"
+    location: [gcs:czeslavo-backup-test]
+repairs:
+  - dc: [ dc1 ]
+    name: repair-every-10m
+    cron: "@every 10m"
+datacenter: dc1
+racks:
+  - name: dc1-rack1
+    volumes:
+      - name: gcs-service-account
+        secret:
+          secretName: gcs-service-account
+          items:
+            - key: gcs-service-account.json
+              path: gcs-service-account.json
+    agentVolumeMounts:
+      - mountPath: /etc/scylla-manager-agent/gcs-service-account.json
+        name: gcs-service-account
+        subPath: gcs-service-account.json
+        readOnly: true
+    members: 1
+    storage:
+      storageClassName: scylladb-local-xfs
+      capacity: 15Gi
+    resources:
+      limits:
+        cpu: 1
+        memory: 4Gi
+      requests:
+        cpu: 1
+        memory: 4Gi

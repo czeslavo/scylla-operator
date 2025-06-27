@@ -226,8 +226,8 @@ function run-e2e {
   kubectl create clusterrolebinding e2e --clusterrole=cluster-admin --serviceaccount=e2e:default --dry-run=client -o=yaml | kubectl_create -f=-
   kubectl create -n=e2e pdb my-pdb --selector='app=e2e' --min-available=1 --dry-run=client -o=yaml | kubectl_create -f=-
 
-  kubectl create -n=e2e secret generic kubeconfigs ${KUBECONFIGS[@]/#/--from-file=} --dry-run=client -o=yaml | kubectl_create -f=-
-  kubeconfigs_in_container_path=$( IFS=','; basenames=( "${KUBECONFIGS[@]##*/}" ) && in_container_paths="${basenames[@]/#//var/run/secrets/kubeconfigs/}" && echo "${in_container_paths[*]}" )
+  kubectl create -n=e2e secret generic kubeconfigs ${PRIVATE_KUBECONFIGS[@]/#/--from-file=} --dry-run=client -o=yaml | kubectl_create -f=-
+  kubeconfigs_in_container_path=$( IFS=','; basenames=( "${PRIVATE_KUBECONFIGS[@]##*/}" ) && in_container_paths="${basenames[@]/#//var/run/secrets/kubeconfigs/}" && echo "${in_container_paths[*]}" )
 
   gcs_sa_in_container_path=""
   if [[ -n "${SO_GCS_SERVICE_ACCOUNT_CREDENTIALS_PATH+x}" ]]; then
