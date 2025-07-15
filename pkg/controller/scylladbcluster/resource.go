@@ -1119,6 +1119,22 @@ func makeMirroredRemoteSecrets(sc *scyllav1alpha1.ScyllaDBCluster, dc *scyllav1a
 		secretsToMirror = append(secretsToMirror, *dc.RackTemplate.ScyllaDBManagerAgent.CustomConfigSecretRef)
 	}
 
+	if dc.RackTemplate != nil && dc.RackTemplate.ScyllaDBManagerAgent != nil {
+		for _, volume := range dc.RackTemplate.ScyllaDBManagerAgent.Volumes {
+			if volume.Secret != nil && volume.Secret.SecretName != "" {
+				secretsToMirror = append(secretsToMirror, volume.Secret.SecretName)
+			}
+		}
+	}
+
+	if dc.ScyllaDBManagerAgent != nil {
+		for _, volume := range dc.ScyllaDBManagerAgent.Volumes {
+			if volume.Secret != nil && volume.Secret.SecretName != "" {
+				secretsToMirror = append(secretsToMirror, volume.Secret.SecretName)
+			}
+		}
+	}
+
 	for _, rack := range dc.Racks {
 		if rack.ScyllaDBManagerAgent != nil && rack.ScyllaDBManagerAgent.CustomConfigSecretRef != nil {
 			secretsToMirror = append(secretsToMirror, *rack.ScyllaDBManagerAgent.CustomConfigSecretRef)
