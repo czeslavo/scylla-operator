@@ -432,6 +432,11 @@ function run-e2e {
     e2e_command_args+=( "--worker-object-storage-buckets=${worker_object_storage_buckets}" )
   fi
 
+  # If SO_FOCUS_TESTS is set, add it to the e2e command arguments.
+  if [[ -n "${SO_FOCUS_TESTS:-}" ]]; then
+    e2e_command_args+=( "--focus=${SO_FOCUS_TESTS}" )
+  fi
+
   kubectl_create -n=e2e -f=- <<EOF
 apiVersion: v1
 kind: Pod
