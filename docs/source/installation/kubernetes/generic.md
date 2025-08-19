@@ -22,3 +22,26 @@ We provide a few examples for the major ones later in this section, otherwise pl
 ### Labels
 
 For the purposes of the installation guides, we assume that the nodes meant to run ScyllaDB (ScyllaClusters) have label `scylla.scylladb.com/node-type=scylla`.
+
+### Packages
+
+#### xfsprogs
+
+{{productName}}'s [NodeConfig](../resources/nodeconfigs.md) controller requires `xfsprogs` to be installed on the Kubernetes
+nodes to format the local disks with XFS file system.
+
+This package may be not installed by default on some Kubernetes platforms, like GKE starting with version `1.32.1-gke.1002000`.
+
+:::::{tabs}
+
+::::{group-tab} GKE
+
+You can install it on your cluster's nodes using a DaemonSet created with the following command:
+:::{code-block} shell
+:substitutions:
+kubectl apply -f https://raw.githubusercontent.com/{{repository}}/{{revision}}/examples/gke/install-xfsprogs.daemonset.yaml
+:::
+
+::::
+
+:::::
