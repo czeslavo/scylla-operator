@@ -27,6 +27,7 @@ import (
 	grafanav1alpha1assets "github.com/scylladb/scylla-operator/assets/monitoring/grafana/v1alpha1"
 	scyllav1alpha1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1alpha1"
 	"github.com/scylladb/scylla-operator/pkg/controllerhelpers"
+	"github.com/scylladb/scylla-operator/pkg/naming"
 	"github.com/scylladb/scylla-operator/pkg/pointer"
 	scyllafixture "github.com/scylladb/scylla-operator/test/e2e/fixture/scylla"
 	"github.com/scylladb/scylla-operator/test/e2e/framework"
@@ -201,7 +202,9 @@ var _ = g.Describe("ScyllaDBMonitoring", func() {
 
 		framework.By("Verifying that Prometheus is configured correctly")
 
-		prometheusServingCABundleConfigMap, err := f.KubeClient().CoreV1().ConfigMaps(f.Namespace()).Get(ctx, fmt.Sprintf("%s-prometheus-serving-ca", sm.Name), metav1.GetOptions{})
+		prometheusServingCABundleConfigMapName, err := naming.ManagedPrometheusServingCAConfigMapName(sm)
+		o.Expect(err).NotTo(o.HaveOccurred())
+		prometheusServingCABundleConfigMap, err := f.KubeClient().CoreV1().ConfigMaps(f.Namespace()).Get(ctx, prometheusServingCABundleConfigMapName, metav1.GetOptions{})
 		o.Expect(err).NotTo(o.HaveOccurred())
 		prometheusServingCACerts, _ := verification.VerifyAndParseCABundle(prometheusServingCABundleConfigMap)
 		o.Expect(prometheusServingCACerts).To(o.HaveLen(1))
@@ -209,7 +212,9 @@ var _ = g.Describe("ScyllaDBMonitoring", func() {
 		prometheusServingCAPool := x509.NewCertPool()
 		prometheusServingCAPool.AddCert(prometheusServingCACerts[0])
 
-		prometheusGrafanaClientSecret, err := f.KubeClient().CoreV1().Secrets(f.Namespace()).Get(ctx, fmt.Sprintf("%s-prometheus-client-grafana", sm.Name), metav1.GetOptions{})
+		prometheusGrafanaClientSecretName, err := naming.ManagedPrometheusClientGrafanaSecretName(sm)
+		o.Expect(err).NotTo(o.HaveOccurred())
+		prometheusGrafanaClientSecret, err := f.KubeClient().CoreV1().Secrets(f.Namespace()).Get(ctx, prometheusGrafanaClientSecretName, metav1.GetOptions{})
 		o.Expect(err).NotTo(o.HaveOccurred())
 		_, prometheusGrafanaClientCertBytes, _, prometheusGrafanaClientKeyBytes := verification.VerifyAndParseTLSCert(prometheusGrafanaClientSecret, verification.TLSCertOptions{
 			IsCA:     pointer.Ptr(false),
