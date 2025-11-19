@@ -31,7 +31,7 @@ function get-url() {
     echo "https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/refs/tags/v${version}/${file}"
 }
 
-version=$( get-metadata ".thirdParty.prometheusOperator.version" )
+version=$( go list -m -f '{{.Version}}' github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring | sed 's/^v//' )
 namespace=$( get-metadata ".thirdParty.prometheusOperator.namespace" )
 
 tmp_dir=$( mktemp -d )
