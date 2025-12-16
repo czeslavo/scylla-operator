@@ -32,8 +32,16 @@ func (c *FakeScyllaV1alpha1) ScyllaDBDatacenters(namespace string) v1alpha1.Scyl
 	return newFakeScyllaDBDatacenters(c, namespace)
 }
 
+func (c *FakeScyllaV1alpha1) ScyllaDBDatacenterNodesStatusReports(namespace string) v1alpha1.ScyllaDBDatacenterNodesStatusReportInterface {
+	return newFakeScyllaDBDatacenterNodesStatusReports(c, namespace)
+}
+
 func (c *FakeScyllaV1alpha1) ScyllaDBManagerClusterRegistrations(namespace string) v1alpha1.ScyllaDBManagerClusterRegistrationInterface {
 	return newFakeScyllaDBManagerClusterRegistrations(c, namespace)
+}
+
+func (c *FakeScyllaV1alpha1) ScyllaDBManagerTasks(namespace string) v1alpha1.ScyllaDBManagerTaskInterface {
+	return newFakeScyllaDBManagerTasks(c, namespace)
 }
 
 func (c *FakeScyllaV1alpha1) ScyllaDBMonitorings(namespace string) v1alpha1.ScyllaDBMonitoringInterface {

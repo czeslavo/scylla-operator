@@ -7,13 +7,13 @@ import (
 	scyllav1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1"
 	scyllav1alpha1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1alpha1"
 	"github.com/scylladb/scylla-operator/pkg/helpers"
-	"github.com/scylladb/scylla-operator/pkg/helpers/slices"
+	oslices "github.com/scylladb/scylla-operator/pkg/helpers/slices"
 	"github.com/scylladb/scylla-operator/pkg/naming"
 	"github.com/scylladb/scylla-operator/pkg/pointer"
 	"github.com/scylladb/scylla-operator/pkg/scyllaclient"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/util/errors"
+	apimachineryutilerrors "k8s.io/apimachinery/pkg/util/errors"
 	corev1listers "k8s.io/client-go/listers/core/v1"
 	corev1schedulinghelpers "k8s.io/component-helpers/scheduling/corev1"
 	"k8s.io/component-helpers/scheduling/corev1/nodeaffinity"
@@ -21,12 +21,21 @@ import (
 
 func GetScyllaHost(sdc *scyllav1alpha1.ScyllaDBDatacenter, svc *corev1.Service, pod *corev1.Pod) (string, error) {
 	// Assume API's default.
-	nodeBroadcastAddressType := scyllav1alpha1.BroadcastAddressTypeServiceClusterIP
+	nodeBroadcastAddressType := scyllav1alpha1.ScyllaDBDatacenterDefaultNodesBroadcastAddressType
 	if sdc.Spec.ExposeOptions != nil && sdc.Spec.ExposeOptions.BroadcastOptions != nil {
 		nodeBroadcastAddressType = sdc.Spec.ExposeOptions.BroadcastOptions.Nodes.Type
 	}
 
 	return GetScyllaBroadcastAddress(nodeBroadcastAddressType, svc, pod)
+}
+
+func GetScyllaClientBroadcastHost(sdc *scyllav1alpha1.ScyllaDBDatacenter, svc *corev1.Service, pod *corev1.Pod) (string, error) {
+	clientsBroadcastAddressType := scyllav1alpha1.ScyllaDBDatacenterDefaultClientsBroadcastAddressType
+	if sdc.Spec.ExposeOptions != nil && sdc.Spec.ExposeOptions.BroadcastOptions != nil {
+		clientsBroadcastAddressType = sdc.Spec.ExposeOptions.BroadcastOptions.Clients.Type
+	}
+
+	return GetScyllaBroadcastAddress(clientsBroadcastAddressType, svc, pod)
 }
 
 func GetScyllaHostForScyllaCluster(sc *scyllav1.ScyllaCluster, svc *corev1.Service, pod *corev1.Pod) (string, error) {
@@ -108,7 +117,7 @@ func GetRequiredScyllaHosts(sdc *scyllav1alpha1.ScyllaDBDatacenter, services map
 			hosts = append(hosts, host)
 		}
 	}
-	var err error = errors.NewAggregate(errs)
+	var err error = apimachineryutilerrors.NewAggregate(errs)
 	if err != nil {
 		return nil, err
 	}
@@ -243,23 +252,12 @@ func IsPodTunable(pod *corev1.Pod) bool {
 	return pod.Status.QOSClass == corev1.PodQOSGuaranteed
 }
 
-func IsNodeTuned(ncnss []scyllav1alpha1.NodeConfigNodeStatus, nodeName string) bool {
-	ns := FindNodeStatus(ncnss, nodeName)
-	return ns != nil && ns.TunedNode
-}
-
 func IsScyllaPod(pod *corev1.Pod) bool {
-	// TODO: use a better label, verify the container
 	if pod.Labels == nil {
 		return false
 	}
 
-	if !labels.SelectorFromSet(naming.ScyllaLabels()).Matches(labels.Set(pod.Labels)) {
-		return false
-	}
-
-	_, ok := pod.Labels[naming.ClusterNameLabel]
-	if !ok {
+	if !labels.SelectorFromSet(naming.ScyllaDBNodePodLabels()).Matches(labels.Set(pod.Labels)) {
 		return false
 	}
 
@@ -267,7 +265,7 @@ func IsScyllaPod(pod *corev1.Pod) bool {
 }
 
 func GetRackNodeCount(sdc *scyllav1alpha1.ScyllaDBDatacenter, rackName string) (*int32, error) {
-	rackSpec, _, ok := slices.Find(sdc.Spec.Racks, func(spec scyllav1alpha1.RackSpec) bool {
+	rackSpec, _, ok := oslices.Find(sdc.Spec.Racks, func(spec scyllav1alpha1.RackSpec) bool {
 		return spec.Name == rackName
 	})
 	if !ok {

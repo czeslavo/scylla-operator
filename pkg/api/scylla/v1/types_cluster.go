@@ -80,6 +80,8 @@ type ScyllaClusterSpec struct {
 
 	// sysctls holds the sysctl properties to be applied during initialization given as a list of key=value pairs.
 	// Example: fs.aio-max-nr=232323
+	// Deprecated: `sysctls` is deprecated. Use NodeConfig to configure sysctls instead.
+	// See NodeConfig resource reference for details.
 	// +optional
 	Sysctls []string `json:"sysctls,omitempty"`
 
@@ -342,6 +344,12 @@ type SchedulerTaskSpec struct {
 	// +optional
 	NumRetries *int64 `json:"numRetries,omitempty"`
 
+	// retryWait specifies the initial exponential backoff duration for task retries.
+	// For instance, if set to 10 minutes, the first retry will be attempted after 10 minutes, the second after 20 minutes, the third after 40 minutes, and so on, up to the number of retries specified in `numRetries`.
+	// If not set, the default values is left to ScyllaDB Manager to decide.
+	// +optional
+	RetryWait *metav1.Duration `json:"retryWait,omitempty"`
+
 	// cron specifies the task schedule as a cron expression. It supports an extended syntax including @monthly, @weekly, @daily, @midnight, @hourly, @every X[h|m|s].
 	// +optional
 	Cron *string `json:"cron,omitempty"`
@@ -400,6 +408,10 @@ type RepairTaskSpec struct {
 
 	// host specifies a host to repair. If empty, all hosts are repaired.
 	Host *string `json:"host,omitempty"`
+
+	// ignoreDownHosts indicates that the nodes in down state should be ignored during repair.
+	// +optional
+	IgnoreDownHosts *bool `json:"ignoreDownHosts,omitempty"`
 }
 
 type BackupTaskSpec struct {
@@ -629,6 +641,10 @@ type SchedulerTaskStatus struct {
 	// +optional
 	NumRetries *int64 `json:"numRetries,omitempty"`
 
+	// retryWait reflects the initial exponential backoff duration for task retries.
+	// +optional
+	RetryWait *metav1.Duration `json:"retryWait,omitempty"`
+
 	// cron reflects the task schedule as a cron expression.
 	// +optional
 	Cron *string `json:"cron,omitempty"`
@@ -687,6 +703,10 @@ type RepairTaskStatus struct {
 
 	// host reflects a host to repair.
 	Host *string `json:"host,omitempty" mapstructure:"host,omitempty"`
+
+	// ignoreDownHosts reflects whether the nodes in down state are ignored during repair.
+	// +optional
+	IgnoreDownHosts *bool `json:"ignoreDownHosts,omitempty" mapstructure:"ignore_down_hosts,omitempty"`
 }
 
 type BackupTaskStatus struct {

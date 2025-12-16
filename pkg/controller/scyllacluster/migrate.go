@@ -12,13 +12,15 @@ import (
 	scyllav1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1"
 	scyllav1alpha1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1alpha1"
 	"github.com/scylladb/scylla-operator/pkg/controllerhelpers"
-	"github.com/scylladb/scylla-operator/pkg/helpers/slices"
+	oslices "github.com/scylladb/scylla-operator/pkg/helpers/slices"
 	"github.com/scylladb/scylla-operator/pkg/internalapi"
 	"github.com/scylladb/scylla-operator/pkg/naming"
 	"github.com/scylladb/scylla-operator/pkg/pointer"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/errors"
+	apimachineryutilerrors "k8s.io/apimachinery/pkg/util/errors"
+	apimachineryutilvalidation "k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/klog/v2"
 )
 
@@ -219,8 +221,8 @@ func MigrateV1ScyllaClusterSpecToV1Alpha1ScyllaDBDatacenterSpec(scName string, s
 								}
 								return nil
 							}(),
-							Volumes: slices.Filter(rack.Volumes, func(v corev1.Volume) bool {
-								return slices.Contains(rack.VolumeMounts, func(vm corev1.VolumeMount) bool {
+							Volumes: oslices.Filter(rack.Volumes, func(v corev1.Volume) bool {
+								return oslices.Contains(rack.VolumeMounts, func(vm corev1.VolumeMount) bool {
 									return vm.Name == v.Name
 								})
 							}),
@@ -234,8 +236,8 @@ func MigrateV1ScyllaClusterSpecToV1Alpha1ScyllaDBDatacenterSpec(scName string, s
 								}
 								return nil
 							}(),
-							Volumes: slices.Filter(rack.Volumes, func(v corev1.Volume) bool {
-								return slices.Contains(rack.AgentVolumeMounts, func(vm corev1.VolumeMount) bool {
+							Volumes: oslices.Filter(rack.Volumes, func(v corev1.Volume) bool {
+								return oslices.Contains(rack.AgentVolumeMounts, func(vm corev1.VolumeMount) bool {
 									return vm.Name == v.Name
 								})
 							}),
@@ -271,7 +273,7 @@ func MigrateV1ScyllaClusterSpecToV1Alpha1ScyllaDBDatacenterSpec(scName string, s
 		MinTerminationGracePeriodSeconds:        scSpec.MinTerminationGracePeriodSeconds,
 		MinReadySeconds:                         scSpec.MinReadySeconds,
 		ReadinessGates:                          scSpec.ReadinessGates,
-	}, errors.NewAggregate(migrateErrs)
+	}, apimachineryutilerrors.NewAggregate(migrateErrs)
 }
 
 func MigrateV1ScyllaClusterToV1Alpha1ScyllaDBDatacenter(sc *scyllav1.ScyllaCluster) (*scyllav1alpha1.ScyllaDBDatacenter, *internalapi.DatacenterUpgradeContext, error) {
@@ -321,6 +323,16 @@ func MigrateV1ScyllaClusterToV1Alpha1ScyllaDBDatacenter(sc *scyllav1.ScyllaClust
 				}
 			}
 
+			if isGlobalScyllaDBManagerIntegrationDisabled(sc) {
+				objectMeta.Labels[naming.GlobalScyllaDBManagerRegistrationLabel] = naming.LabelValueFalse
+			} else {
+				// If the ScyllaDBManager integration is not disabled explicitly, we set the label to true to keep backward compatibility.
+				objectMeta.Labels[naming.GlobalScyllaDBManagerRegistrationLabel] = naming.LabelValueTrue
+			}
+
+			// Override the ScyllaDB Manager cluster name for backward compatibility.
+			objectMeta.Annotations[naming.ScyllaDBManagerClusterRegistrationNameOverrideAnnotation] = naming.ManagerClusterName(sc)
+
 			return objectMeta
 
 		}(),
@@ -355,7 +367,7 @@ func MigrateV1ScyllaClusterToV1Alpha1ScyllaDBDatacenter(sc *scyllav1.ScyllaClust
 		}
 	}
 
-	return sdc, upgradeContext, errors.NewAggregate(migrateErrs)
+	return sdc, upgradeContext, apimachineryutilerrors.NewAggregate(migrateErrs)
 }
 
 func migrateV1Alpha1ScyllaDBDatacenterStatusToV1ScyllaClusterStatus(sdc *scyllav1alpha1.ScyllaDBDatacenter, configMaps []*corev1.ConfigMap, services []*corev1.Service) scyllav1.ScyllaClusterStatus {
@@ -389,18 +401,18 @@ func migrateV1Alpha1ScyllaDBDatacenterStatusToV1ScyllaClusterStatus(sdc *scyllav
 					Conditions:       nil,
 				}
 
-				rackServices := slices.Filter(services, func(svc *corev1.Service) bool {
+				rackServices := oslices.Filter(services, func(svc *corev1.Service) bool {
 					return svc.Labels[naming.RackNameLabel] == rackStatus.Name
 				})
 
-				anyIsDecommissioning := slices.Contains(rackServices, func(svc *corev1.Service) bool {
+				anyIsDecommissioning := oslices.Contains(rackServices, func(svc *corev1.Service) bool {
 					return svc.Labels[naming.DecommissionedLabel] == naming.LabelValueFalse
 				})
 				if anyIsDecommissioning {
 					controllerhelpers.SetRackCondition(&migratedRackStatus, scyllav1.RackConditionTypeMemberDecommissioning)
 				}
 
-				anyIsReplacing := slices.Contains(rackServices, func(svc *corev1.Service) bool {
+				anyIsReplacing := oslices.Contains(rackServices, func(svc *corev1.Service) bool {
 					_, ok := svc.Labels[naming.ReplaceLabel]
 					return ok
 				})
@@ -409,7 +421,7 @@ func migrateV1Alpha1ScyllaDBDatacenterStatusToV1ScyllaClusterStatus(sdc *scyllav
 					controllerhelpers.SetRackCondition(&migratedRackStatus, scyllav1.RackConditionTypeMemberReplacing)
 				}
 
-				anyIsLeaving := slices.Contains(rackServices, func(svc *corev1.Service) bool {
+				anyIsLeaving := oslices.Contains(rackServices, func(svc *corev1.Service) bool {
 					_, ok := svc.Labels[naming.DecommissionedLabel]
 					return ok
 				})
@@ -429,7 +441,7 @@ func migrateV1Alpha1ScyllaDBDatacenterStatusToV1ScyllaClusterStatus(sdc *scyllav
 		Upgrade: func() *scyllav1.UpgradeStatus {
 			cmName := naming.UpgradeContextConfigMapName(sdc)
 
-			cm, _, ok := slices.Find(configMaps, func(cm *corev1.ConfigMap) bool {
+			cm, _, ok := oslices.Find(configMaps, func(cm *corev1.ConfigMap) bool {
 				return cm.Name == cmName
 			})
 			if !ok {
@@ -463,4 +475,246 @@ func migrateV1Alpha1ScyllaDBDatacenterStatusToV1ScyllaClusterStatus(sdc *scyllav
 		Backups:   nil,
 		ManagerID: nil,
 	}
+}
+
+func MigrateV1ScyllaClusterToV1Alpha1ScyllaDBManagerTasks(sc *scyllav1.ScyllaCluster) ([]*scyllav1alpha1.ScyllaDBManagerTask, error) {
+	var scyllaDBManagerTasks []*scyllav1alpha1.ScyllaDBManagerTask
+	var errs []error
+
+	// If the annotation disabling global manager integration is set to true, we skip migration of tasks.
+	if sc.Annotations != nil && sc.Annotations[naming.DisableGlobalScyllaDBManagerIntegrationAnnotation] == naming.LabelValueTrue {
+		return scyllaDBManagerTasks, nil
+	}
+
+	for i := range sc.Spec.Backups {
+		smt, err := migrateV1BackupTaskSpecToV1Alpha1ScyllaDBManagerTask(sc, &sc.Spec.Backups[i])
+		if err != nil {
+			errs = append(errs, fmt.Errorf("can't migrate v1.BackupTaskSpec to v1alpha1.ScyllaDBManagerTask: %w", err))
+			continue
+		}
+
+		scyllaDBManagerTasks = append(scyllaDBManagerTasks, smt)
+	}
+
+	for i := range sc.Spec.Repairs {
+		smt, err := migrateV1RepairTaskSpecToV1Alpha1ScyllaDBManagerTask(sc, &sc.Spec.Repairs[i])
+		if err != nil {
+			errs = append(errs, fmt.Errorf("can't migrate v1.RepairTaskSpec to v1alpha1.ScyllaDBManagerTask: %w", err))
+			continue
+		}
+
+		scyllaDBManagerTasks = append(scyllaDBManagerTasks, smt)
+	}
+
+	return scyllaDBManagerTasks, apimachineryutilerrors.NewAggregate(errs)
+}
+
+type v1TaskSpecToV1Alpha1ScyllaDBManagerTaskMigrationOptions func(*scyllav1alpha1.ScyllaDBManagerTask)
+
+func withExtraAnnotations(extraAnnotations map[string]string) v1TaskSpecToV1Alpha1ScyllaDBManagerTaskMigrationOptions {
+	return func(smt *scyllav1alpha1.ScyllaDBManagerTask) {
+		if smt.Annotations == nil {
+			smt.Annotations = make(map[string]string)
+		}
+		maps.Copy(smt.Annotations, extraAnnotations)
+	}
+}
+
+func withScyllaDBManagerTaskType(taskType scyllav1alpha1.ScyllaDBManagerTaskType) v1TaskSpecToV1Alpha1ScyllaDBManagerTaskMigrationOptions {
+	return func(smt *scyllav1alpha1.ScyllaDBManagerTask) {
+		smt.Spec.Type = taskType
+	}
+}
+
+func migrateV1BackupTaskSpecToV1Alpha1ScyllaDBManagerTask(sc *scyllav1.ScyllaCluster, backupTaskSpec *scyllav1.BackupTaskSpec) (*scyllav1alpha1.ScyllaDBManagerTask, error) {
+	name, err := scyllaDBManagerTaskName(sc.Name, scyllav1alpha1.ScyllaDBManagerTaskTypeBackup, backupTaskSpec.Name)
+	if err != nil {
+		return nil, fmt.Errorf("can't generate ScyllaDBManagerTask name: %w", err)
+	}
+
+	extraAnnotations := map[string]string{
+		naming.ScyllaDBManagerTaskBackupDCNoValidateAnnotation:               "",
+		naming.ScyllaDBManagerTaskBackupKeyspaceNoValidateAnnotation:         "",
+		naming.ScyllaDBManagerTaskBackupLocationNoValidateAnnotation:         "",
+		naming.ScyllaDBManagerTaskBackupRateLimitNoValidateAnnotation:        "",
+		naming.ScyllaDBManagerTaskBackupRetentionNoValidateAnnotation:        "",
+		naming.ScyllaDBManagerTaskBackupSnapshotParallelNoValidateAnnotation: "",
+		naming.ScyllaDBManagerTaskBackupUploadParallelNoValidateAnnotation:   "",
+	}
+
+	withBackupOptions := func(smt *scyllav1alpha1.ScyllaDBManagerTask) {
+		smt.Spec.Backup = &scyllav1alpha1.ScyllaDBManagerBackupTaskOptions{
+			ScyllaDBManagerTaskSchedule: scyllav1alpha1.ScyllaDBManagerTaskSchedule{
+				Cron:       backupTaskSpec.TaskSpec.SchedulerTaskSpec.Cron,
+				NumRetries: backupTaskSpec.TaskSpec.SchedulerTaskSpec.NumRetries,
+				RetryWait:  backupTaskSpec.TaskSpec.SchedulerTaskSpec.RetryWait,
+			},
+			DC:               backupTaskSpec.DC,
+			Keyspace:         backupTaskSpec.Keyspace,
+			Location:         backupTaskSpec.Location,
+			RateLimit:        backupTaskSpec.RateLimit,
+			Retention:        pointer.Ptr(backupTaskSpec.Retention),
+			SnapshotParallel: backupTaskSpec.SnapshotParallel,
+			UploadParallel:   backupTaskSpec.UploadParallel,
+		}
+	}
+
+	return migrateV1TaskSpecToV1Alpha1ScyllaDBManagerTask(name, sc, &backupTaskSpec.TaskSpec, []v1TaskSpecToV1Alpha1ScyllaDBManagerTaskMigrationOptions{
+		withExtraAnnotations(extraAnnotations),
+		withScyllaDBManagerTaskType(scyllav1alpha1.ScyllaDBManagerTaskTypeBackup),
+		withBackupOptions,
+	}...), nil
+}
+
+func migrateV1RepairTaskSpecToV1Alpha1ScyllaDBManagerTask(sc *scyllav1.ScyllaCluster, repairTaskSpec *scyllav1.RepairTaskSpec) (*scyllav1alpha1.ScyllaDBManagerTask, error) {
+	name, err := scyllaDBManagerTaskName(sc.Name, scyllav1alpha1.ScyllaDBManagerTaskTypeRepair, repairTaskSpec.Name)
+	if err != nil {
+		return nil, fmt.Errorf("can't generate ScyllaDBManagerTask name: %w", err)
+	}
+
+	extraAnnotations := map[string]string{
+		naming.ScyllaDBManagerTaskRepairDCNoValidateAnnotation:                "",
+		naming.ScyllaDBManagerTaskRepairKeyspaceNoValidateAnnotation:          "",
+		naming.ScyllaDBManagerTaskRepairIntensityOverrideAnnotation:           repairTaskSpec.Intensity,
+		naming.ScyllaDBManagerTaskRepairParallelNoValidateAnnotation:          "",
+		naming.ScyllaDBManagerTaskRepairSmallTableThresholdOverrideAnnotation: repairTaskSpec.SmallTableThreshold,
+	}
+
+	withRepairOptions := func(smt *scyllav1alpha1.ScyllaDBManagerTask) {
+		smt.Spec.Repair = &scyllav1alpha1.ScyllaDBManagerRepairTaskOptions{
+			ScyllaDBManagerTaskSchedule: scyllav1alpha1.ScyllaDBManagerTaskSchedule{
+				Cron:       repairTaskSpec.TaskSpec.SchedulerTaskSpec.Cron,
+				NumRetries: repairTaskSpec.TaskSpec.SchedulerTaskSpec.NumRetries,
+				RetryWait:  repairTaskSpec.TaskSpec.SchedulerTaskSpec.RetryWait,
+			},
+			DC:              repairTaskSpec.DC,
+			Keyspace:        repairTaskSpec.Keyspace,
+			FailFast:        pointer.Ptr(repairTaskSpec.FailFast),
+			Host:            repairTaskSpec.Host,
+			IgnoreDownHosts: repairTaskSpec.IgnoreDownHosts,
+			Parallel:        pointer.Ptr(repairTaskSpec.Parallel),
+		}
+	}
+
+	return migrateV1TaskSpecToV1Alpha1ScyllaDBManagerTask(name, sc, &repairTaskSpec.TaskSpec, []v1TaskSpecToV1Alpha1ScyllaDBManagerTaskMigrationOptions{
+		withExtraAnnotations(extraAnnotations),
+		withScyllaDBManagerTaskType(scyllav1alpha1.ScyllaDBManagerTaskTypeRepair),
+		withRepairOptions,
+	}...), nil
+}
+
+func migrateV1TaskSpecToV1Alpha1ScyllaDBManagerTask(name string, sc *scyllav1.ScyllaCluster, taskSpec *scyllav1.TaskSpec, options ...v1TaskSpecToV1Alpha1ScyllaDBManagerTaskMigrationOptions) *scyllav1alpha1.ScyllaDBManagerTask {
+	smt := &scyllav1alpha1.ScyllaDBManagerTask{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: sc.Namespace,
+			Labels:    naming.ClusterLabelsForScyllaCluster(sc),
+			Annotations: func() map[string]string {
+				annotations := map[string]string{
+					// Override the task name in ScyllaDB Manager state for backward compatibility.
+					naming.ScyllaDBManagerTaskNameOverrideAnnotation: taskSpec.Name,
+
+					// Force adoption of the task existing in ScyllaDB Manager state for state retention.
+					naming.ScyllaDBManagerTaskMissingOwnerUIDForceAdoptAnnotation: "",
+				}
+
+				if taskSpec.SchedulerTaskSpec.StartDate != nil {
+					annotations[naming.ScyllaDBManagerTaskScheduleStartDateOverrideAnnotation] = *taskSpec.SchedulerTaskSpec.StartDate
+				}
+				if taskSpec.SchedulerTaskSpec.Interval != nil {
+					annotations[naming.ScyllaDBManagerTaskScheduleIntervalOverrideAnnotation] = *taskSpec.SchedulerTaskSpec.Interval
+				}
+				if taskSpec.SchedulerTaskSpec.Timezone != nil {
+					annotations[naming.ScyllaDBManagerTaskScheduleTimezoneOverrideAnnotation] = *taskSpec.SchedulerTaskSpec.Timezone
+				}
+
+				return annotations
+			}(),
+			OwnerReferences: []metav1.OwnerReference{
+				*metav1.NewControllerRef(sc, scyllaClusterControllerGVK),
+			},
+		},
+		Spec: scyllav1alpha1.ScyllaDBManagerTaskSpec{
+			ScyllaDBClusterRef: scyllav1alpha1.LocalScyllaDBReference{
+				Name: sc.Name,
+				Kind: scyllav1alpha1.ScyllaDBDatacenterGVK.Kind,
+			},
+		},
+	}
+
+	for _, o := range options {
+		o(smt)
+	}
+
+	return smt
+}
+
+func scyllaDBManagerTaskName(scyllaClusterName string, taskType scyllav1alpha1.ScyllaDBManagerTaskType, taskName string) (string, error) {
+	nameSuffix, err := naming.GenerateNameHash(scyllaClusterName, string(taskType), taskName)
+	if err != nil {
+		return "", fmt.Errorf("can't generate name hash: %w", err)
+	}
+
+	fullName := strings.ToLower(fmt.Sprintf("%s-%s-%s", scyllaClusterName, taskType, taskName))
+	fullNameWithSuffix := fmt.Sprintf("%s-%s", fullName[:min(len(fullName), apimachineryutilvalidation.DNS1123SubdomainMaxLength-len(nameSuffix)-1)], nameSuffix)
+	return fullNameWithSuffix, nil
+}
+
+func migrateV1Alpha1ScyllaDBManagerTaskStatusToV1BackupTaskStatus(smt *scyllav1alpha1.ScyllaDBManagerTask, taskName string) (scyllav1.BackupTaskStatus, bool, error) {
+	return migrateV1Alpha1ScyllaDBManagerTaskStatusToV1TaskStatus[scyllav1.BackupTaskStatus](smt, func(taskStatus scyllav1.TaskStatus) scyllav1.BackupTaskStatus {
+		taskStatus.Name = taskName
+		return scyllav1.BackupTaskStatus{
+			TaskStatus: taskStatus,
+		}
+	})
+}
+
+func migrateV1Alpha1ScyllaDBManagerTaskStatusToV1RepairTaskStatus(smt *scyllav1alpha1.ScyllaDBManagerTask, taskName string) (scyllav1.RepairTaskStatus, bool, error) {
+	return migrateV1Alpha1ScyllaDBManagerTaskStatusToV1TaskStatus[scyllav1.RepairTaskStatus](smt, func(taskStatus scyllav1.TaskStatus) scyllav1.RepairTaskStatus {
+		taskStatus.Name = taskName
+		return scyllav1.RepairTaskStatus{
+			TaskStatus: taskStatus,
+		}
+	})
+}
+
+func migrateV1Alpha1ScyllaDBManagerTaskStatusToV1TaskStatus[T scyllav1.BackupTaskStatus | scyllav1.RepairTaskStatus](
+	smt *scyllav1alpha1.ScyllaDBManagerTask,
+	newTaskStatusFunc func(scyllav1.TaskStatus) T,
+) (T, bool, error) {
+	var taskStatusErr *string
+
+	degradedCondition := meta.FindStatusCondition(smt.Status.Conditions, scyllav1alpha1.DegradedCondition)
+	if degradedCondition != nil && degradedCondition.Status == metav1.ConditionTrue {
+		taskStatusErr = pointer.Ptr(degradedCondition.Message)
+	}
+
+	taskStatus := newTaskStatusFunc(scyllav1.TaskStatus{
+		ID:    smt.Status.TaskID,
+		Error: taskStatusErr,
+	})
+
+	scyllaV1TaskStatusAnnotation, ok := smt.Annotations[naming.ScyllaDBManagerTaskStatusAnnotation]
+	if ok {
+		// Use the existing TaskStatus instance to retain the potential error.
+		err := json.NewDecoder(strings.NewReader(scyllaV1TaskStatusAnnotation)).Decode(&taskStatus)
+		if err != nil {
+			return *new(T), false, fmt.Errorf("can't decode ScyllaDBManagerTask status annotation: %w", err)
+		}
+	} else if taskStatusErr == nil {
+		// Neither task's status nor error have been propagated yet.
+		return *new(T), false, nil
+	}
+
+	return taskStatus, true, nil
+}
+
+func isGlobalScyllaDBManagerIntegrationDisabled(sc *scyllav1.ScyllaCluster) bool {
+	if sc.Annotations == nil {
+		// If there are no annotations, the default behavior is to enable global ScyllaDB Manager integration.
+		return false
+	}
+
+	// If the annotation disabling global manager integration is set to true, we skip migration of tasks.
+	return sc.Annotations[naming.DisableGlobalScyllaDBManagerIntegrationAnnotation] == naming.LabelValueTrue
 }

@@ -10,7 +10,7 @@ import (
 	"github.com/scylladb/scylla-operator/pkg/controllerhelpers"
 	"github.com/scylladb/scylla-operator/pkg/controllertools"
 	"github.com/scylladb/scylla-operator/pkg/helpers"
-	"github.com/scylladb/scylla-operator/pkg/helpers/slices"
+	oslices "github.com/scylladb/scylla-operator/pkg/helpers/slices"
 	"github.com/scylladb/scylla-operator/pkg/internalapi"
 	"github.com/scylladb/scylla-operator/pkg/naming"
 	corev1 "k8s.io/api/core/v1"
@@ -18,7 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	apimachineryutilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
@@ -51,20 +51,105 @@ func (scc *Controller) sync(ctx context.Context, key string) error {
 		return fmt.Errorf("can't get ScyllaOperatorConfig %q: %w", naming.SingletonName, err)
 	}
 
-	scRemoteSelector := naming.ScyllaDBClusterSelector(sc)
+	scLocalSelector := naming.ScyllaDBClusterLocalSelector(sc)
+
+	// Kubernetes' controller-manager copies Service's labels into managed Endpoints.
+	// As a result, we can't distinguish Endpoints managed by us from these managed by Kubernetes.
+	// To overcome this, the selector we use for Endpoints is a superset of the selector of other managed objects.
+	scLocalEndpointsSelector := naming.ScyllaDBClusterEndpointsSelector(sc)
+
+	type localCT = *scyllav1alpha1.ScyllaDBCluster
+	var localObjectErrs []error
+
+	localServiceMap, err := controllerhelpers.GetObjects[localCT, *corev1.Service](
+		ctx,
+		sc,
+		scyllav1alpha1.ScyllaDBClusterGVK,
+		scLocalSelector,
+		controllerhelpers.ControlleeManagerGetObjectsFuncs[localCT, *corev1.Service]{
+			GetControllerUncachedFunc: scc.scyllaClient.ScyllaV1alpha1().ScyllaDBClusters(sc.Namespace).Get,
+			ListObjectsFunc:           scc.serviceLister.Services(sc.Namespace).List,
+			PatchObjectFunc:           scc.kubeClient.CoreV1().Services(sc.Namespace).Patch,
+		},
+	)
+	if err != nil {
+		localObjectErrs = append(localObjectErrs, fmt.Errorf("can't get local services: %w", err))
+	}
+
+	localEndpointSlicesMap, err := controllerhelpers.GetObjects[localCT, *discoveryv1.EndpointSlice](
+		ctx,
+		sc,
+		scyllav1alpha1.ScyllaDBClusterGVK,
+		scLocalEndpointsSelector,
+		controllerhelpers.ControlleeManagerGetObjectsFuncs[localCT, *discoveryv1.EndpointSlice]{
+			GetControllerUncachedFunc: scc.scyllaClient.ScyllaV1alpha1().ScyllaDBClusters(sc.Namespace).Get,
+			ListObjectsFunc:           scc.endpointSliceLister.EndpointSlices(sc.Namespace).List,
+			PatchObjectFunc:           scc.kubeClient.DiscoveryV1().EndpointSlices(sc.Namespace).Patch,
+		},
+	)
+	if err != nil {
+		localObjectErrs = append(localObjectErrs, fmt.Errorf("can't get local endpointslices: %w", err))
+	}
+
+	localEndpointsMap, err := controllerhelpers.GetObjects[localCT, *corev1.Endpoints](
+		ctx,
+		sc,
+		scyllav1alpha1.ScyllaDBClusterGVK,
+		scLocalEndpointsSelector,
+		controllerhelpers.ControlleeManagerGetObjectsFuncs[localCT, *corev1.Endpoints]{
+			GetControllerUncachedFunc: scc.scyllaClient.ScyllaV1alpha1().ScyllaDBClusters(sc.Namespace).Get,
+			ListObjectsFunc:           scc.endpointsLister.Endpoints(sc.Namespace).List,
+			PatchObjectFunc:           scc.kubeClient.CoreV1().Endpoints(sc.Namespace).Patch,
+		},
+	)
+	if err != nil {
+		localObjectErrs = append(localObjectErrs, fmt.Errorf("can't get local endpoints: %w", err))
+	}
+
+	if err = apimachineryutilerrors.NewAggregate(localObjectErrs); err != nil {
+		return err
+	}
+
+	localSecretMap, err := controllerhelpers.GetObjects[localCT, *corev1.Secret](
+		ctx,
+		sc,
+		scyllav1alpha1.ScyllaDBClusterGVK,
+		scLocalSelector,
+		controllerhelpers.ControlleeManagerGetObjectsFuncs[localCT, *corev1.Secret]{
+			GetControllerUncachedFunc: scc.scyllaClient.ScyllaV1alpha1().ScyllaDBClusters(sc.Namespace).Get,
+			ListObjectsFunc:           scc.secretLister.Secrets(sc.Namespace).List,
+			PatchObjectFunc:           scc.kubeClient.CoreV1().Secrets(sc.Namespace).Patch,
+		},
+	)
+	if err != nil {
+		localObjectErrs = append(localObjectErrs, fmt.Errorf("can't get local secrets: %w", err))
+	}
+
+	localObjectErr := apimachineryutilerrors.NewAggregate(localObjectErrs)
+	if localObjectErr != nil {
+		return localObjectErr
+	}
+
+	scRemoteSelector := naming.ScyllaDBClusterRemoteSelector(sc)
 
 	// OS Operator rewrites ScyllaDBDatacenter labels into managed Service objects, and
 	// Kubernetes controller reconciling Endpoints for Services rewrites them to Endpoints.
 	// As a result, we can't distinguish Endpoints managed by us from these managed by Kubernetes.
 	// To overcome this, the selector we use for Endpoints is a superset of the selector of other managed objects.
-	scRemoteEndpointsSelector := naming.ScyllaDBClusterEndpointsSelector(sc)
+	scRemoteEndpointsSelector := naming.ScyllaDBClusterRemoteEndpointsSelector(sc)
+
+	// Operator instances running in remote clusters propagate ScyllaDBDatacenter's labels into their managed ScyllaDBDatacenterNodesStatusReports.
+	// As a result, we can't distinguish ScyllaDBDatacenterNodesStatusReports managed by us from these managed by remote operators.
+	// To overcome this, the selector we use for ScyllaDBDatacenterNodesStatusReports is a superset of the selector of other managed objects.
+	scRemoteScyllaDBDatacenterNodesStatusReportsSelector := naming.ScyllaDBClusterRemoteScyllaDBDatacenterNodesStatusReportSelector(sc)
 
 	// Operator reconciles objects in remote Kubernetes clusters, hence we can't set up a OwnerReference to ScyllaDBCluster
 	// because it's not there. Instead, we will manage dependent object ownership via a RemoteOwner.
 	type remoteCT = *scyllav1alpha1.RemoteOwner
-	var objectErrMaps map[string][]error
 
-	remoteClusterNames := slices.ConvertSlice(sc.Spec.Datacenters, func(dc scyllav1alpha1.ScyllaDBClusterDatacenter) string {
+	objectErrMaps := map[string][]error{}
+
+	remoteClusterNames := oslices.ConvertSlice(sc.Spec.Datacenters, func(dc scyllav1alpha1.ScyllaDBClusterDatacenter) string {
 		return dc.RemoteKubernetesClusterName
 	})
 
@@ -222,6 +307,29 @@ func (scc *Controller) sync(ctx context.Context, key string) error {
 		objectErrMaps[remoteClusterName] = append(objectErrMaps[remoteClusterName], fmt.Errorf("can't get remote scylladbdatacenters for %q remote cluster: %w", remoteClusterName, err))
 	}
 
+	remoteScyllaDBDatacenterNodesStatusReportMap, errMap := controllerhelpers.GetRemoteObjects[remoteCT, *scyllav1alpha1.ScyllaDBDatacenterNodesStatusReport](ctx, remoteClusterNames, remoteControllers, remoteControllerGVK, scRemoteScyllaDBDatacenterNodesStatusReportsSelector, &controllerhelpers.ClusterControlleeManagerGetObjectsFuncs[remoteCT, *scyllav1alpha1.ScyllaDBDatacenterNodesStatusReport]{
+		ClusterFunc: func(clusterName string) (controllerhelpers.ControlleeManagerGetObjectsInterface[remoteCT, *scyllav1alpha1.ScyllaDBDatacenterNodesStatusReport], error) {
+			ns, ok := remoteNamespaces[clusterName]
+			if !ok {
+				return nil, nil
+			}
+
+			_, scyllaClusterClient, err := scc.getClusterClients(clusterName)
+			if err != nil {
+				return nil, fmt.Errorf("can't get cluster %q clients: %w", clusterName, err)
+			}
+
+			return &controllerhelpers.ControlleeManagerGetObjectsFuncs[remoteCT, *scyllav1alpha1.ScyllaDBDatacenterNodesStatusReport]{
+				GetControllerUncachedFunc: scyllaClusterClient.ScyllaV1alpha1().RemoteOwners(ns.Name).Get,
+				ListObjectsFunc:           scc.remoteScyllaDBDatacenterNodesStatusReportLister.Cluster(clusterName).ScyllaDBDatacenterNodesStatusReports(ns.Name).List,
+				PatchObjectFunc:           scyllaClusterClient.ScyllaV1alpha1().ScyllaDBDatacenterNodesStatusReports(ns.Name).Patch,
+			}, nil
+		},
+	})
+	for remoteClusterName, err := range errMap {
+		objectErrMaps[remoteClusterName] = append(objectErrMaps[remoteClusterName], fmt.Errorf("can't get remote scyllaDBDatacenterNodesStatusReports for %q remote cluster: %w", remoteClusterName, err))
+	}
+
 	status := scc.calculateStatus(sc, remoteScyllaDBDatacenterMap)
 
 	if sc.DeletionTimestamp != nil {
@@ -267,7 +375,7 @@ func (scc *Controller) sync(ctx context.Context, key string) error {
 		objectErrs := objectErrMaps[dc.RemoteKubernetesClusterName]
 
 		var err error
-		err = utilerrors.NewAggregate(objectErrs)
+		err = apimachineryutilerrors.NewAggregate(objectErrs)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("can't sync remote datacenter %q: %w", dc.RemoteKubernetesClusterName, err))
 			continue
@@ -356,11 +464,19 @@ func (scc *Controller) sync(ctx context.Context, key string) error {
 				},
 			},
 			{
+				kind:                 "ScyllaDBDatacenterNodesStatusReport",
+				progressingCondition: makeRemoteScyllaDBDatacenterNodesStatusReportControllerDatacenterProgressingCondition(dc.Name),
+				degradedCondition:    makeRemoteScyllaDBDatacenterNodesStatusReportControllerDatacenterDegradedCondition(dc.Name),
+				syncFn: func(remoteNamespace *corev1.Namespace, remoteController metav1.Object) ([]metav1.Condition, error) {
+					return scc.syncRemoteScyllaDBDatacenterNodesStatusReports(ctx, sc, &dc, remoteNamespace, remoteController, remoteScyllaDBDatacenterNodesStatusReportMap[dc.RemoteKubernetesClusterName], remoteNamespaces, remoteScyllaDBDatacenterMap, managingClusterDomain)
+				},
+			},
+			{
 				kind:                 "ScyllaDBDatacenter",
 				progressingCondition: makeRemoteScyllaDBDatacenterControllerDatacenterProgressingCondition(dc.Name),
 				degradedCondition:    makeRemoteScyllaDBDatacenterControllerDatacenterDegradedCondition(dc.Name),
 				syncFn: func(remoteNamespace *corev1.Namespace, remoteController metav1.Object) ([]metav1.Condition, error) {
-					return scc.syncRemoteScyllaDBDatacenters(ctx, sc, &dc, remoteNamespace, remoteController, remoteScyllaDBDatacenterMap, managingClusterDomain)
+					return scc.syncRemoteScyllaDBDatacenters(ctx, sc, &dc, status, remoteNamespace, remoteController, remoteScyllaDBDatacenterMap, managingClusterDomain)
 				},
 			},
 		}
@@ -394,6 +510,59 @@ func (scc *Controller) sync(ctx context.Context, key string) error {
 		}
 	}
 
+	localSyncParameters := []struct {
+		kind                 string
+		progressingCondition string
+		degradedCondition    string
+		syncFn               func() ([]metav1.Condition, error)
+	}{
+		{
+			kind:                 "Service",
+			progressingCondition: serviceControllerProgressingCondition,
+			degradedCondition:    serviceControllerDegradedCondition,
+			syncFn: func() ([]metav1.Condition, error) {
+				return scc.syncLocalServices(ctx, sc, localServiceMap)
+			},
+		},
+		{
+			kind:                 "EndpointSlice",
+			progressingCondition: endpointSliceControllerProgressingCondition,
+			degradedCondition:    endpointSliceControllerDegradedCondition,
+			syncFn: func() ([]metav1.Condition, error) {
+				return scc.syncLocalEndpointSlices(ctx, sc, localEndpointSlicesMap, remoteNamespaces)
+			},
+		},
+		{
+			kind:                 "Endpoints",
+			progressingCondition: endpointsControllerProgressingCondition,
+			degradedCondition:    endpointsControllerDegradedCondition,
+			syncFn: func() ([]metav1.Condition, error) {
+				return scc.syncLocalEndpoints(ctx, sc, localEndpointsMap, remoteNamespaces)
+			},
+		},
+		{
+			kind:                 "Secret",
+			progressingCondition: secretControllerProgressingCondition,
+			degradedCondition:    secretControllerDegradedCondition,
+			syncFn: func() ([]metav1.Condition, error) {
+				return scc.syncLocalSecrets(ctx, sc, localSecretMap)
+			},
+		},
+	}
+
+	for _, syncParams := range localSyncParameters {
+		err = controllerhelpers.RunSync(
+			&status.Conditions,
+			syncParams.progressingCondition,
+			syncParams.degradedCondition,
+			sc.Generation,
+			syncParams.syncFn,
+		)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("can't sync local %s: %w", syncParams.kind, err))
+		}
+	}
+
 	// Aggregate conditions.
 	err = controllerhelpers.SetAggregatedWorkloadConditions(&status.Conditions, sc.Generation)
 	if err != nil {
@@ -403,7 +572,7 @@ func (scc *Controller) sync(ctx context.Context, key string) error {
 		errs = append(errs, err)
 	}
 
-	return utilerrors.NewAggregate(errs)
+	return apimachineryutilerrors.NewAggregate(errs)
 }
 
 func (scc *Controller) chooseRemoteControllers(sc *scyllav1alpha1.ScyllaDBCluster, remoteRemoteOwnersMap map[string]map[string]*scyllav1alpha1.RemoteOwner) map[string]metav1.Object {

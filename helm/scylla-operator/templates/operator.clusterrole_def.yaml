@@ -51,6 +51,8 @@ rules:
   - get
   - list
   - watch
+  - patch
+  - update
 - apiGroups:
   - ""
   resources:
@@ -60,18 +62,12 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - configmaps
+  - endpoints
+  - endpoints/restricted
+  - namespaces
   - secrets
-  verbs:
-  - get
-  - list
-  - watch
-  - create
-  - delete
-  - update
-  - patch
-- apiGroups:
-  - ""
-  resources:
+  - serviceaccounts
   - services
   verbs:
   - create
@@ -110,6 +106,8 @@ rules:
   - remotekubernetesclusters
   - scylladbclusters
   - scylladbmanagerclusterregistrations
+  - scylladbmanagertasks
+  - scylladbdatacenternodesstatusreports
   verbs:
   - create
   - delete
@@ -127,19 +125,8 @@ rules:
   - remotekubernetesclusters/status
   - scylladbclusters/status
   - scylladbmanagerclusterregistrations/status
+  - scylladbmanagertasks/status
   verbs:
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - configmaps
-  verbs:
-  - create
-  - delete
   - get
   - list
   - patch
@@ -182,18 +169,6 @@ rules:
   - update
   - watch
 - apiGroups:
-  - ""
-  resources:
-  - serviceaccounts
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
   - rbac.authorization.k8s.io
   resources:
   - clusterroles
@@ -224,18 +199,6 @@ rules:
   - batch
   resources:
   - jobs
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - namespaces
   verbs:
   - create
   - delete
@@ -301,9 +264,13 @@ rules:
   - scylla.scylladb.com
   resources:
   - scyllaclusters/finalizers
+  - scylladbclusters/finalizers
+  - remotekubernetesclusters/finalizers
   - scylladbdatacenters/finalizers
   - scylladbmonitorings/finalizers
   - scylladbmanagerclusterregistrations/finalizers
+  - scylladbmanagertasks/finalizers
+  - scylladbdatacenternodesstatusreports/finalizers
   verbs:
   - update
 - apiGroups:
@@ -338,4 +305,16 @@ rules:
   - poddisruptionbudgets/finalizers
   verbs:
   - update
-
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  - endpointslices/restricted
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch

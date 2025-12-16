@@ -46,6 +46,9 @@ const (
 
 	// CleanupJobTokenRingHashAnnotation reflects which version of token ring cleanup Job is cleaning.
 	CleanupJobTokenRingHashAnnotation = "internal.scylla-operator.scylladb.com/cleanup-token-ring-hash"
+
+	// NodeStatusReportAnnotation reflects the current status report from the ScyllaDB node.
+	NodeStatusReportAnnotation = "internal.scylla.scylladb.com/scylladb-node-status-report"
 )
 
 // Annotations used for feature backward compatibility between v1.ScyllaCluster and v1alpha1.ScyllaDBDatacenter
@@ -64,11 +67,39 @@ const (
 	ScyllaServiceTypeMember   ScyllaServiceType = "member"
 )
 
+type ScyllaDBClusterLocalServiceType string
+
+const (
+	ScyllaDBClusterLocalServiceTypeIdentity ScyllaDBClusterLocalServiceType = "identity"
+)
+
 type ScyllaIngressType string
 
 const (
 	ScyllaIngressTypeNode    ScyllaIngressType = "Node"
 	ScyllaIngressTypeAnyNode ScyllaIngressType = "AnyNode"
+)
+
+type PodType string
+
+const (
+	// PodTypeScyllaDBNode indicates that the pod is a ScyllaDB node pod.
+	PodTypeScyllaDBNode PodType = "scylladb-node"
+
+	// PodTypeCleanupJob indicates that the pod is a cleanup job pod.
+	PodTypeCleanupJob PodType = "cleanup-job"
+
+	// PodTypeNodePerftuneJob indicates that the pod is a node perftune job pod.
+	PodTypeNodePerftuneJob PodType = "node-perftune-job"
+
+	// PodTypeNodeSysctlsJob indicates that the pod is a node sysctls job pod.
+	PodTypeNodeSysctlsJob PodType = "node-sysctls-job"
+
+	// PodTypeContainerPerftuneJob indicates that the pod is a container perftune job pod.
+	PodTypeContainerPerftuneJob PodType = "container-perftune-job"
+
+	// PodTypeContainerRLimitsJob indicates that the pod is a container resource limits job pod.
+	PodTypeContainerRLimitsJob PodType = "container-rlimits-job"
 )
 
 // Generic Labels used on objects created by the operator.
@@ -94,6 +125,8 @@ const (
 	ControllerNameLabel          = "scylla-operator.scylladb.com/controller-name"
 	NodeJobLabel                 = "scylla-operator.scylladb.com/node-job"
 	NodeJobTypeLabel             = "scylla-operator.scylladb.com/node-job-type"
+	// PodTypeLabel specifies the type of the pod (e.g., ScyllaDB node). It's assigned to pods managed by the operator.
+	PodTypeLabel = "scylla-operator.scylladb.com/pod-type"
 
 	AppName           = "scylla"
 	OperatorAppName   = "scylla-operator"
@@ -118,6 +151,7 @@ const (
 	ScyllaManagerAgentContainerName = "scylla-manager-agent"
 	SidecarInjectorContainerName    = "sidecar-injection"
 	PerftuneContainerName           = "perftune"
+	SysctlsContainerName            = "sysctls"
 	CleanupContainerName            = "cleanup"
 	RLimitsContainerName            = "rlimits"
 
@@ -141,6 +175,8 @@ const (
 
 	ScyllaDBIgnitionDonePath = SharedDirName + "/ignition.done"
 
+	ScyllaDBSSTableBootstrapQueryResultPath = SharedDirName + "/sstable-bootstrap-query-result.json"
+
 	DataDir = "/var/lib/scylla"
 
 	ReadinessProbePath         = "/readyz"
@@ -153,9 +189,9 @@ const (
 )
 
 const (
-	ScyllaManagerNamespace      = "scylla-manager"
-	ScyllaManagerServiceName    = "scylla-manager"
-	ScyllaManagerDeploymentName = "scylla-manager"
+	ScyllaManagerNamespace                  = "scylla-manager"
+	ScyllaManagerServiceName                = "scylla-manager"
+	StandaloneScyllaDBManagerControllerName = "scylla-manager-controller"
 
 	ScyllaOperatorNodeTuningNamespace = "scylla-operator-node-tuning"
 
@@ -165,13 +201,17 @@ const (
 
 	PerftuneJobPrefixName        = "perftune"
 	PerftuneServiceAccountName   = "perftune"
+	SysctlsServiceAccountName    = "sysctls"
 	RlimitsJobServiceAccountName = "rlimits"
+
+	SysctlConfigFileName = "99-override_scylla-operator_scylladb_com.conf"
 )
 
 type NodeConfigJobType string
 
 const (
-	NodeConfigJobTypeNode                    NodeConfigJobType = "Node"
+	NodeConfigJobTypeNodePerftune            NodeConfigJobType = "NodePerftune"
+	NodeConfigJobTypeNodeSysctls             NodeConfigJobType = "NodeSysctls"
 	NodeConfigJobTypeContainerPerftune       NodeConfigJobType = "ContainerPerftune"
 	NodeConfigJobTypeContainerResourceLimits NodeConfigJobType = "ContainerResourceLimits"
 )
@@ -211,9 +251,12 @@ const (
 )
 
 const (
+	ScyllaDBClusterNameLabel         = "scylla-operator.scylladb.com/scylladbcluster-name"
 	ParentClusterNameLabel           = "scylla-operator.scylladb.com/parent-scylladbcluster-name"
 	ParentClusterNamespaceLabel      = "scylla-operator.scylladb.com/parent-scylladbcluster-namespace"
 	ParentClusterDatacenterNameLabel = "scylla-operator.scylladb.com/parent-scylladbcluster-datacenter-name"
+
+	ScyllaDBClusterLocalServiceTypeLabel = "scylla-operator.scylladb.com/scylladbcluster-local-service-type"
 )
 
 const (
@@ -224,7 +267,12 @@ const (
 )
 
 const (
-	ClusterEndpointsLabel = "scylla-operator.scylladb.com/cluster-endpoints"
+	ClusterEndpointsLabel       = "scylla-operator.scylladb.com/cluster-endpoints"
+	RemoteClusterEndpointsLabel = "scylla-operator.scylladb.com/remote-cluster-endpoints"
+)
+
+const (
+	RemoteClusterScyllaDBDatacenterNodesStatusReportLabel = "scylla-operator.scylladb.com/remote-cluster-scylladb-datacenter-nodes-status-report"
 )
 
 const (
@@ -232,6 +280,8 @@ const (
 )
 
 const (
+	AppNameWithDomain = "scylla.scylladb.com"
+
 	OperatorAppNameWithDomain       = "scylla-operator.scylladb.com"
 	RemoteOperatorAppNameWithDomain = "remote.scylla-operator.scylladb.com"
 )
@@ -242,6 +292,7 @@ const (
 )
 
 const (
+	KubernetesNameLabel      = "app.kubernetes.io/name"
 	KubernetesManagedByLabel = "app.kubernetes.io/managed-by"
 )
 
@@ -249,6 +300,44 @@ const (
 	GlobalScyllaDBManagerRegistrationLabel = "scylla-operator.scylladb.com/register-with-global-scylladb-manager"
 	GlobalScyllaDBManagerLabel             = "internal.scylla-operator.scylladb.com/global-scylladb-manager"
 
+	// DisableGlobalScyllaDBManagerIntegrationAnnotation can be set to `true` to disable v1.ScyllaCluster integration with the global ScyllaDB Manager which is enabled by default.
+	DisableGlobalScyllaDBManagerIntegrationAnnotation = "scylla-operator.scylladb.com/disable-global-scylladb-manager-integration"
+
+	// ScyllaDBManagerAgentAuthTokenOverrideSecretRefAnnotation is used to override the auth tokens generated for specific ScyllaDBDatacenters with a shared one, common for the entire ScyllaDBCluster.
+	ScyllaDBManagerAgentAuthTokenOverrideSecretRefAnnotation = "internal.scylla-operator.scylladb.com/scylladb-manager-agent-auth-token-override-secret-ref"
+
 	ScyllaDBManagerClusterRegistrationFinalizer              = "scylla-operator.scylladb.com/scylladbmanagerclusterregistration-deletion"
 	ScyllaDBManagerClusterRegistrationNameOverrideAnnotation = "internal.scylla-operator.scylladb.com/scylladb-manager-cluster-name-override"
+
+	ScyllaDBManagerTaskFinalizer = "scylla-operator.scylladb.com/scylladbmanagertask-deletion"
+	// ScyllaDBManagerTaskMissingOwnerUIDForceAdoptAnnotation is used to annotate a ScyllaDBManagerTask to force adoption of a matching task in ScyllaDB Manager state that is missing an owner UID label.
+	ScyllaDBManagerTaskMissingOwnerUIDForceAdoptAnnotation         = "internal.scylla-operator.scylladb.com/scylladb-manager-task-missing-owner-uid-force-adopt"
+	ScyllaDBManagerTaskNameOverrideAnnotation                      = "internal.scylla-operator.scylladb.com/scylladb-manager-task-name-override"
+	ScyllaDBManagerTaskScheduleIntervalOverrideAnnotation          = "internal.scylla-operator.scylladb.com/scylladb-manager-task-schedule-interval-override"
+	ScyllaDBManagerTaskScheduleStartDateOverrideAnnotation         = "internal.scylla-operator.scylladb.com/scylladb-manager-task-schedule-start-date-override"
+	ScyllaDBManagerTaskScheduleTimezoneOverrideAnnotation          = "internal.scylla-operator.scylladb.com/scylladb-manager-task-schedule-timezone-override"
+	ScyllaDBManagerTaskBackupDCNoValidateAnnotation                = "internal.scylla-operator.scylladb.com/scylladb-manager-task-backup-dc-no-validate"
+	ScyllaDBManagerTaskBackupKeyspaceNoValidateAnnotation          = "internal.scylla-operator.scylladb.com/scylladb-manager-task-backup-keyspace-no-validate"
+	ScyllaDBManagerTaskBackupLocationNoValidateAnnotation          = "internal.scylla-operator.scylladb.com/scylladb-manager-task-backup-location-no-validate"
+	ScyllaDBManagerTaskBackupRateLimitNoValidateAnnotation         = "internal.scylla-operator.scylladb.com/scylladb-manager-task-backup-rate-limit-no-validate"
+	ScyllaDBManagerTaskBackupRetentionNoValidateAnnotation         = "internal.scylla-operator.scylladb.com/scylladb-manager-task-backup-retention-no-validate"
+	ScyllaDBManagerTaskBackupSnapshotParallelNoValidateAnnotation  = "internal.scylla-operator.scylladb.com/scylladb-manager-task-backup-snapshot-parallel-no-validate"
+	ScyllaDBManagerTaskBackupUploadParallelNoValidateAnnotation    = "internal.scylla-operator.scylladb.com/scylladb-manager-task-backup-upload-parallel-no-validate"
+	ScyllaDBManagerTaskRepairParallelNoValidateAnnotation          = "internal.scylla-operator.scylladb.com/scylladb-manager-task-repair-parallel-no-validate"
+	ScyllaDBManagerTaskRepairDCNoValidateAnnotation                = "internal.scylla-operator.scylladb.com/scylladb-manager-task-repair-dc-no-validate"
+	ScyllaDBManagerTaskRepairKeyspaceNoValidateAnnotation          = "internal.scylla-operator.scylladb.com/scylladb-manager-task-repair-keyspace-no-validate"
+	ScyllaDBManagerTaskRepairIntensityOverrideAnnotation           = "internal.scylla-operator.scylladb.com/scylladb-manager-task-repair-intensity-override"
+	ScyllaDBManagerTaskRepairSmallTableThresholdOverrideAnnotation = "internal.scylla-operator.scylladb.com/scylladb-manager-task-repair-small-table-threshold-override"
+	ScyllaDBManagerTaskStatusAnnotation                            = "internal.scylla-operator.scylladb.com/scylladb-manager-task-status"
+)
+
+const (
+	// ScyllaDBDatacenterNodesStatusReportSelectorLabel is used to uniformly label nodes status reports created for a ScyllaDB cluster.
+	// It allows easy selection of all datacenter reports for a given cluster.
+	ScyllaDBDatacenterNodesStatusReportSelectorLabel = "scylla-operator.scylladb.com/scylladb-datacenter-nodes-status-report-selector"
+
+	// ForceProceedToBootstrapAnnotation allows to force the bootstrap barrier to proceed without waiting for normal preconditions to be satisfied.
+	// If set to "true", bootstrap barrier will proceed to bootstrap immediately.
+	// This can be used on a particular member Service to override the normal bootstrap precondition checks, or on the entire ScyllaDBDatacenter to override the default behavior for all members.
+	ForceProceedToBootstrapAnnotation = "scylla-operator.scylladb.com/force-proceed-to-bootstrap"
 )

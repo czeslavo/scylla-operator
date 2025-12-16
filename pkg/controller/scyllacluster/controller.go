@@ -17,6 +17,7 @@ import (
 	scyllav1alpha1listers "github.com/scylladb/scylla-operator/pkg/client/scylla/listers/scylla/v1alpha1"
 	"github.com/scylladb/scylla-operator/pkg/controllerhelpers"
 	"github.com/scylladb/scylla-operator/pkg/kubeinterfaces"
+	"github.com/scylladb/scylla-operator/pkg/naming"
 	"github.com/scylladb/scylla-operator/pkg/scheme"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -26,9 +27,9 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
+	apimachineryutilerrors "k8s.io/apimachinery/pkg/util/errors"
+	apimachineryutilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	apimachineryutilwait "k8s.io/apimachinery/pkg/util/wait"
 	appsv1informers "k8s.io/client-go/informers/apps/v1"
 	batchv1informers "k8s.io/client-go/informers/batch/v1"
 	corev1informers "k8s.io/client-go/informers/core/v1"
@@ -62,23 +63,25 @@ type Controller struct {
 	kubeClient   kubernetes.Interface
 	scyllaClient scyllaclient.Interface
 
-	serviceLister            corev1listers.ServiceLister
-	secretLister             corev1listers.SecretLister
-	configMapLister          corev1listers.ConfigMapLister
-	serviceAccountLister     corev1listers.ServiceAccountLister
-	roleBindingLister        rbacv1listers.RoleBindingLister
-	statefulSetLister        appsv1listers.StatefulSetLister
-	pdbLister                policyv1listers.PodDisruptionBudgetLister
-	ingressLister            networkingv1listers.IngressLister
-	jobLister                batchv1listers.JobLister
-	scyllaClusterLister      scyllav1listers.ScyllaClusterLister
-	scyllaDBDatacenterLister scyllav1alpha1listers.ScyllaDBDatacenterLister
+	serviceLister                            corev1listers.ServiceLister
+	secretLister                             corev1listers.SecretLister
+	configMapLister                          corev1listers.ConfigMapLister
+	serviceAccountLister                     corev1listers.ServiceAccountLister
+	roleBindingLister                        rbacv1listers.RoleBindingLister
+	statefulSetLister                        appsv1listers.StatefulSetLister
+	pdbLister                                policyv1listers.PodDisruptionBudgetLister
+	ingressLister                            networkingv1listers.IngressLister
+	jobLister                                batchv1listers.JobLister
+	scyllaClusterLister                      scyllav1listers.ScyllaClusterLister
+	scyllaDBDatacenterLister                 scyllav1alpha1listers.ScyllaDBDatacenterLister
+	scyllaDBManagerClusterRegistrationLister scyllav1alpha1listers.ScyllaDBManagerClusterRegistrationLister
+	scyllaDBManagerTaskLister                scyllav1alpha1listers.ScyllaDBManagerTaskLister
 
 	cachesToSync []cache.InformerSynced
 
 	eventRecorder record.EventRecorder
 
-	queue    workqueue.RateLimitingInterface
+	queue    workqueue.TypedRateLimitingInterface[string]
 	handlers *controllerhelpers.Handlers[*scyllav1.ScyllaCluster]
 }
 
@@ -96,6 +99,8 @@ func NewController(
 	jobInformer batchv1informers.JobInformer,
 	scyllaClusterInformer scyllav1informers.ScyllaClusterInformer,
 	scyllaDBDatacenterInformer scyllav1alpha1informers.ScyllaDBDatacenterInformer,
+	scyllaDBManagerClusterRegistration scyllav1alpha1informers.ScyllaDBManagerClusterRegistrationInformer,
+	scyllaDBManagerTaskInformer scyllav1alpha1informers.ScyllaDBManagerTaskInformer,
 ) (*Controller, error) {
 	eventBroadcaster := record.NewBroadcaster()
 	eventBroadcaster.StartStructuredLogging(0)
@@ -105,17 +110,19 @@ func NewController(
 		kubeClient:   kubeClient,
 		scyllaClient: scyllaClient,
 
-		serviceLister:            serviceInformer.Lister(),
-		secretLister:             secretInformer.Lister(),
-		configMapLister:          configMapInformer.Lister(),
-		serviceAccountLister:     serviceAccountInformer.Lister(),
-		roleBindingLister:        roleBindingInformer.Lister(),
-		statefulSetLister:        statefulSetInformer.Lister(),
-		pdbLister:                pdbInformer.Lister(),
-		ingressLister:            ingressInformer.Lister(),
-		scyllaClusterLister:      scyllaClusterInformer.Lister(),
-		scyllaDBDatacenterLister: scyllaDBDatacenterInformer.Lister(),
-		jobLister:                jobInformer.Lister(),
+		serviceLister:                            serviceInformer.Lister(),
+		secretLister:                             secretInformer.Lister(),
+		configMapLister:                          configMapInformer.Lister(),
+		serviceAccountLister:                     serviceAccountInformer.Lister(),
+		roleBindingLister:                        roleBindingInformer.Lister(),
+		statefulSetLister:                        statefulSetInformer.Lister(),
+		pdbLister:                                pdbInformer.Lister(),
+		ingressLister:                            ingressInformer.Lister(),
+		scyllaClusterLister:                      scyllaClusterInformer.Lister(),
+		scyllaDBDatacenterLister:                 scyllaDBDatacenterInformer.Lister(),
+		jobLister:                                jobInformer.Lister(),
+		scyllaDBManagerClusterRegistrationLister: scyllaDBManagerClusterRegistration.Lister(),
+		scyllaDBManagerTaskLister:                scyllaDBManagerTaskInformer.Lister(),
 
 		cachesToSync: []cache.InformerSynced{
 			serviceInformer.Informer().HasSynced,
@@ -129,11 +136,18 @@ func NewController(
 			jobInformer.Informer().HasSynced,
 			scyllaClusterInformer.Informer().HasSynced,
 			scyllaDBDatacenterInformer.Informer().HasSynced,
+			scyllaDBManagerClusterRegistration.Informer().HasSynced,
+			scyllaDBManagerTaskInformer.Informer().HasSynced,
 		},
 
 		eventRecorder: eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: "scyllaclustermigration-controller"}),
 
-		queue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "scyllaclustermigration"),
+		queue: workqueue.NewTypedRateLimitingQueueWithConfig(
+			workqueue.DefaultTypedControllerRateLimiter[string](),
+			workqueue.TypedRateLimitingQueueConfig[string]{
+				Name: "scyllaclustermigration",
+			},
+		),
 	}
 
 	var err error
@@ -221,6 +235,18 @@ func NewController(
 		DeleteFunc: scc.deleteJob,
 	})
 
+	scyllaDBManagerClusterRegistration.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    scc.addScyllaDBManagerClusterRegistration,
+		UpdateFunc: scc.updateScyllaDBManagerClusterRegistration,
+		DeleteFunc: scc.deleteScyllaDBManagerClusterRegistration,
+	})
+
+	scyllaDBManagerTaskInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    scc.addScyllaDBManagerTask,
+		UpdateFunc: scc.updateScyllaDBManagerTask,
+		DeleteFunc: scc.deleteScyllaDBManagerTask,
+	})
+
 	return scc, nil
 }
 
@@ -231,9 +257,9 @@ func (scmc *Controller) processNextItem(ctx context.Context) bool {
 	}
 	defer scmc.queue.Done(key)
 
-	err := scmc.sync(ctx, key.(string))
+	err := scmc.sync(ctx, key)
 	// TODO: Do smarter filtering then just Reduce to handle cases like 2 conflict errors.
-	err = utilerrors.Reduce(err)
+	err = apimachineryutilerrors.Reduce(err)
 	switch {
 	case err == nil:
 		scmc.queue.Forget(key)
@@ -246,7 +272,7 @@ func (scmc *Controller) processNextItem(ctx context.Context) bool {
 		klog.V(2).InfoS("Hit already exists, will retry in a bit", "Key", key, "Error", err)
 
 	default:
-		utilruntime.HandleError(fmt.Errorf("syncing key '%v' failed: %v", key, err))
+		apimachineryutilruntime.HandleError(fmt.Errorf("syncing key '%v' failed: %v", key, err))
 	}
 
 	scmc.queue.AddRateLimited(key)
@@ -260,7 +286,7 @@ func (scmc *Controller) runWorker(ctx context.Context) {
 }
 
 func (scmc *Controller) Run(ctx context.Context, workers int) {
-	defer utilruntime.HandleCrash()
+	defer apimachineryutilruntime.HandleCrash()
 
 	klog.InfoS("Starting controller", "controller", ControllerName)
 
@@ -280,7 +306,7 @@ func (scmc *Controller) Run(ctx context.Context, workers int) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			wait.UntilWithContext(ctx, scmc.runWorker, time.Second)
+			apimachineryutilwait.UntilWithContext(ctx, scmc.runWorker, time.Second)
 		}()
 	}
 
@@ -538,4 +564,68 @@ func (scmc *Controller) deleteJob(obj interface{}) {
 		obj,
 		scmc.handlers.EnqueueOwner,
 	)
+}
+
+func (scmc *Controller) addScyllaDBManagerClusterRegistration(obj interface{}) {
+	scmc.handlers.HandleAdd(
+		obj.(*scyllav1alpha1.ScyllaDBManagerClusterRegistration),
+		scmc.enqueueThroughScyllaDBManagerClusterRegistration(obj.(*scyllav1alpha1.ScyllaDBManagerClusterRegistration)),
+	)
+}
+
+func (scmc *Controller) updateScyllaDBManagerClusterRegistration(old, cur interface{}) {
+	scmc.handlers.HandleUpdate(
+		cur.(*scyllav1alpha1.ScyllaDBManagerClusterRegistration),
+		old.(*scyllav1alpha1.ScyllaDBManagerClusterRegistration),
+		scmc.enqueueThroughScyllaDBManagerClusterRegistration(cur.(*scyllav1alpha1.ScyllaDBManagerClusterRegistration)),
+		scmc.deleteScyllaDBManagerClusterRegistration,
+	)
+}
+
+func (scmc *Controller) deleteScyllaDBManagerClusterRegistration(obj interface{}) {
+	scmc.handlers.HandleDelete(
+		obj,
+		scmc.enqueueThroughScyllaDBManagerClusterRegistration(obj.(*scyllav1alpha1.ScyllaDBManagerClusterRegistration)),
+	)
+}
+
+func (scmc *Controller) addScyllaDBManagerTask(obj interface{}) {
+	scmc.handlers.HandleAdd(
+		obj.(*scyllav1alpha1.ScyllaDBManagerTask),
+		scmc.handlers.EnqueueOwner,
+	)
+}
+
+func (scmc *Controller) updateScyllaDBManagerTask(old, cur interface{}) {
+	scmc.handlers.HandleUpdate(
+		old.(*scyllav1alpha1.ScyllaDBManagerTask),
+		cur.(*scyllav1alpha1.ScyllaDBManagerTask),
+		scmc.handlers.EnqueueOwner,
+		scmc.deleteScyllaDBManagerTask,
+	)
+}
+
+func (scmc *Controller) deleteScyllaDBManagerTask(obj interface{}) {
+	scmc.handlers.HandleDelete(
+		obj,
+		scmc.handlers.EnqueueOwner,
+	)
+}
+
+func (scmc *Controller) enqueueThroughScyllaDBManagerClusterRegistration(smcr *scyllav1alpha1.ScyllaDBManagerClusterRegistration) controllerhelpers.EnqueueFuncType {
+	return scmc.handlers.EnqueueAllFunc(scmc.handlers.EnqueueWithFilterFunc(func(sc *scyllav1.ScyllaCluster) bool {
+		sdc, err := scmc.scyllaDBDatacenterLister.ScyllaDBDatacenters(sc.Namespace).Get(sc.Name)
+		if err != nil {
+			apimachineryutilruntime.HandleError(err)
+			return false
+		}
+
+		smcrName, err := naming.ScyllaDBManagerClusterRegistrationNameForScyllaDBDatacenter(sdc)
+		if err != nil {
+			apimachineryutilruntime.HandleError(err)
+			return false
+		}
+
+		return smcr.Name == smcrName
+	}))
 }

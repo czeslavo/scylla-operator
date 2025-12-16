@@ -8,10 +8,13 @@ import (
 	"sync"
 	"time"
 
+	monitoringinformers "github.com/prometheus-operator/prometheus-operator/pkg/client/informers/externalversions"
+	monitoringversionedclient "github.com/prometheus-operator/prometheus-operator/pkg/client/versioned"
 	scyllav1alpha1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1alpha1"
 	scyllaversionedclient "github.com/scylladb/scylla-operator/pkg/client/scylla/clientset/versioned"
 	scyllainformers "github.com/scylladb/scylla-operator/pkg/client/scylla/informers/externalversions"
 	"github.com/scylladb/scylla-operator/pkg/clusterdomain"
+	"github.com/scylladb/scylla-operator/pkg/cmdutil"
 	"github.com/scylladb/scylla-operator/pkg/controller/globalscylladbmanager"
 	"github.com/scylladb/scylla-operator/pkg/controller/nodeconfig"
 	"github.com/scylladb/scylla-operator/pkg/controller/nodeconfigpod"
@@ -21,34 +24,33 @@ import (
 	"github.com/scylladb/scylla-operator/pkg/controller/scylladbcluster"
 	"github.com/scylladb/scylla-operator/pkg/controller/scylladbdatacenter"
 	"github.com/scylladb/scylla-operator/pkg/controller/scylladbmanagerclusterregistration"
+	"github.com/scylladb/scylla-operator/pkg/controller/scylladbmanagertask"
 	"github.com/scylladb/scylla-operator/pkg/controller/scylladbmonitoring"
 	"github.com/scylladb/scylla-operator/pkg/controller/scyllaoperatorconfig"
 	"github.com/scylladb/scylla-operator/pkg/crypto"
-	monitoringversionedclient "github.com/scylladb/scylla-operator/pkg/externalclient/monitoring/clientset/versioned"
-	monitoringinformers "github.com/scylladb/scylla-operator/pkg/externalclient/monitoring/informers/externalversions"
 	"github.com/scylladb/scylla-operator/pkg/genericclioptions"
 	"github.com/scylladb/scylla-operator/pkg/leaderelection"
 	"github.com/scylladb/scylla-operator/pkg/naming"
 	remoteclient "github.com/scylladb/scylla-operator/pkg/remoteclient/client"
 	remoteinformers "github.com/scylladb/scylla-operator/pkg/remoteclient/informers"
 	"github.com/scylladb/scylla-operator/pkg/signals"
-	"github.com/scylladb/scylla-operator/pkg/version"
 	"github.com/spf13/cobra"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
-	apierrors "k8s.io/apimachinery/pkg/util/errors"
-	"k8s.io/apimachinery/pkg/util/validation"
+	apimachineryutilerrors "k8s.io/apimachinery/pkg/util/errors"
+	apimachineryutilvalidation "k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
+	appsv1client "k8s.io/client-go/kubernetes/typed/apps/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 	cliflag "k8s.io/component-base/cli/flag"
-	"k8s.io/klog/v2"
 )
 
 const (
@@ -188,12 +190,12 @@ func (o *OperatorOptions) Validate() error {
 		))
 	}
 
-	msg := validation.IsInRange(o.CQLSIngressPort, 0, 65535)
+	msg := apimachineryutilvalidation.IsInRange(o.CQLSIngressPort, 0, 65535)
 	if len(msg) != 0 {
 		errs = append(errs, fmt.Errorf("invalid secure cql ingress port %d: %s", o.CQLSIngressPort, msg))
 	}
 
-	return apierrors.NewAggregate(errs)
+	return apimachineryutilerrors.NewAggregate(errs)
 }
 
 func (o *OperatorOptions) Complete(cmd *cobra.Command) error {
@@ -266,7 +268,7 @@ func (o *OperatorOptions) Complete(cmd *cobra.Command) error {
 }
 
 func (o *OperatorOptions) Run(streams genericclioptions.IOStreams, cmd *cobra.Command) error {
-	klog.Infof("%s version %s", cmd.Name(), version.Get())
+	cmdutil.LogCommandStarting(cmd)
 	cliflag.PrintFlags(cmd.Flags())
 
 	stopCh := signals.StopChannel()
@@ -300,6 +302,12 @@ func (o *OperatorOptions) Execute(ctx context.Context, streams genericclioptions
 }
 
 func (o *OperatorOptions) run(ctx context.Context, streams genericclioptions.IOStreams) error {
+	if ok, err := isStandaloneScyllaDBManagerControllerDeployed(ctx, o.kubeClient.AppsV1()); err != nil {
+		return fmt.Errorf("can't check for standalone ScyllaDB Manager controller presence: %w", err)
+	} else if ok {
+		return fmt.Errorf("Standalone ScyllaDB Manager controller Deployment %q should not be running alongside Scylla Operator. Delete it before starting Scylla Operator.", naming.ManualRef(naming.ScyllaManagerNamespace, naming.StandaloneScyllaDBManagerControllerName))
+	}
+
 	rsaKeyGenerator, err := crypto.NewRSAKeyGenerator(
 		o.CryptoKeyBufferSizeMin,
 		o.CryptoKeyBufferSizeMax,
@@ -361,6 +369,7 @@ func (o *OperatorOptions) run(ctx context.Context, streams genericclioptions.IOS
 		kubeInformers.Networking().V1().Ingresses(),
 		kubeInformers.Batch().V1().Jobs(),
 		scyllaInformers.Scylla().V1alpha1().ScyllaDBDatacenters(),
+		scyllaInformers.Scylla().V1alpha1().ScyllaDBDatacenterNodesStatusReports(),
 		o.OperatorImage,
 		o.CQLSIngressPort,
 		rsaKeyGenerator,
@@ -383,6 +392,8 @@ func (o *OperatorOptions) run(ctx context.Context, streams genericclioptions.IOS
 		kubeInformers.Batch().V1().Jobs(),
 		scyllaInformers.Scylla().V1().ScyllaClusters(),
 		scyllaInformers.Scylla().V1alpha1().ScyllaDBDatacenters(),
+		scyllaInformers.Scylla().V1alpha1().ScyllaDBManagerClusterRegistrations(),
+		scyllaInformers.Scylla().V1alpha1().ScyllaDBManagerTasks(),
 	)
 	if err != nil {
 		return fmt.Errorf("can't create scyllacluster controller: %w", err)
@@ -412,6 +423,7 @@ func (o *OperatorOptions) run(ctx context.Context, streams genericclioptions.IOS
 		kubeInformers.Core().V1().Namespaces(),
 		kubeInformers.Core().V1().Nodes(),
 		kubeInformers.Core().V1().ServiceAccounts(),
+		kubeInformers.Core().V1().ConfigMaps(),
 		o.OperatorImage,
 	)
 	if err != nil {
@@ -492,6 +504,9 @@ func (o *OperatorOptions) run(ctx context.Context, streams genericclioptions.IOS
 		scyllaInformers.Scylla().V1alpha1().ScyllaOperatorConfigs(),
 		kubeInformers.Core().V1().ConfigMaps(),
 		kubeInformers.Core().V1().Secrets(),
+		kubeInformers.Core().V1().Services(),
+		kubeInformers.Discovery().V1().EndpointSlices(),
+		kubeInformers.Core().V1().Endpoints(),
 		remoteScyllaInformer.ForResource(&scyllav1alpha1.RemoteOwner{}, remoteinformers.ClusterListWatch[scyllaversionedclient.Interface]{
 			ListFunc: func(client remoteclient.ClusterClientInterface[scyllaversionedclient.Interface], cluster, ns string) cache.ListFunc {
 				return func(options metav1.ListOptions) (runtime.Object, error) {
@@ -672,6 +687,26 @@ func (o *OperatorOptions) run(ctx context.Context, streams genericclioptions.IOS
 				}
 			},
 		}),
+		remoteScyllaInformer.ForResource(&scyllav1alpha1.ScyllaDBDatacenterNodesStatusReport{}, remoteinformers.ClusterListWatch[scyllaversionedclient.Interface]{
+			ListFunc: func(client remoteclient.ClusterClientInterface[scyllaversionedclient.Interface], cluster, ns string) cache.ListFunc {
+				return func(options metav1.ListOptions) (runtime.Object, error) {
+					clusterClient, err := client.Cluster(cluster)
+					if err != nil {
+						return nil, err
+					}
+					return clusterClient.ScyllaV1alpha1().ScyllaDBDatacenterNodesStatusReports(ns).List(ctx, options)
+				}
+			},
+			WatchFunc: func(client remoteclient.ClusterClientInterface[scyllaversionedclient.Interface], cluster, ns string) cache.WatchFunc {
+				return func(options metav1.ListOptions) (watch.Interface, error) {
+					clusterClient, err := client.Cluster(cluster)
+					if err != nil {
+						return nil, err
+					}
+					return clusterClient.ScyllaV1alpha1().ScyllaDBDatacenterNodesStatusReports(ns).Watch(ctx, options)
+				}
+			},
+		}),
 	)
 	if err != nil {
 		return fmt.Errorf("can't create ScyllaDBCluster controller: %w", err)
@@ -682,6 +717,7 @@ func (o *OperatorOptions) run(ctx context.Context, streams genericclioptions.IOS
 		o.scyllaClient,
 		scyllaInformers.Scylla().V1alpha1().ScyllaDBManagerClusterRegistrations(),
 		scyllaInformers.Scylla().V1alpha1().ScyllaDBDatacenters(),
+		scyllaInformers.Scylla().V1alpha1().ScyllaDBClusters(),
 		kubeInformers.Core().V1().Namespaces(),
 	)
 	if err != nil {
@@ -693,11 +729,22 @@ func (o *OperatorOptions) run(ctx context.Context, streams genericclioptions.IOS
 		o.scyllaClient,
 		scyllaInformers.Scylla().V1alpha1().ScyllaDBManagerClusterRegistrations(),
 		scyllaInformers.Scylla().V1alpha1().ScyllaDBDatacenters(),
+		scyllaInformers.Scylla().V1alpha1().ScyllaDBClusters(),
 		kubeInformers.Core().V1().Secrets(),
 		kubeInformers.Core().V1().Namespaces(),
 	)
 	if err != nil {
 		return fmt.Errorf("can't create ScyllaDBManagerClusterRegistration controller: %w", err)
+	}
+
+	smtc, err := scylladbmanagertask.NewController(
+		o.kubeClient,
+		o.scyllaClient.ScyllaV1alpha1(),
+		scyllaInformers.Scylla().V1alpha1().ScyllaDBManagerTasks(),
+		scyllaInformers.Scylla().V1alpha1().ScyllaDBManagerClusterRegistrations(),
+	)
+	if err != nil {
+		return fmt.Errorf("can't create ScyllaDBManagerTask controller: %w", err)
 	}
 
 	var wg sync.WaitGroup
@@ -823,7 +870,26 @@ func (o *OperatorOptions) run(ctx context.Context, streams genericclioptions.IOS
 		smcrc.Run(ctx, o.ConcurrentSyncs)
 	}()
 
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		smtc.Run(ctx, o.ConcurrentSyncs)
+	}()
+
 	<-ctx.Done()
 
 	return nil
+}
+
+func isStandaloneScyllaDBManagerControllerDeployed(ctx context.Context, appsV1Client appsv1client.AppsV1Interface) (bool, error) {
+	_, err := appsV1Client.Deployments(naming.ScyllaManagerNamespace).Get(ctx, naming.StandaloneScyllaDBManagerControllerName, metav1.GetOptions{})
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			return false, fmt.Errorf("can't get Deployment %q: %w", naming.ManualRef(naming.ScyllaManagerNamespace, naming.StandaloneScyllaDBManagerControllerName), err)
+		}
+
+		return false, nil
+	}
+
+	return true, nil
 }

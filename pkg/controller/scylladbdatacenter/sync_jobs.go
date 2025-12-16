@@ -17,7 +17,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	apimachineryutilerrors "k8s.io/apimachinery/pkg/util/errors"
 )
 
 func (sdcc *Controller) syncJobs(
@@ -26,7 +26,7 @@ func (sdcc *Controller) syncJobs(
 	services map[string]*corev1.Service,
 	jobs map[string]*batchv1.Job,
 ) ([]metav1.Condition, error) {
-	requiredJobs, progressingConditions, err := MakeJobs(sdc, services, sdcc.operatorImage)
+	requiredJobs, progressingConditions, err := MakeJobs(sdc, services, sdcc.podLister, sdcc.operatorImage)
 	if err != nil {
 		return progressingConditions, fmt.Errorf("can't make jobs: %w", err)
 	}
@@ -91,7 +91,7 @@ func (sdcc *Controller) syncJobs(
 			})
 		}
 	}
-	err = utilerrors.NewAggregate(errs)
+	err = apimachineryutilerrors.NewAggregate(errs)
 	if err != nil {
 		return progressingConditions, err
 	}

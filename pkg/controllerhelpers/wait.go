@@ -18,7 +18,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
+	apimachineryutilwait "k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
 	appsv1client "k8s.io/client-go/kubernetes/typed/apps/v1"
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -136,7 +136,7 @@ func WaitForObjectState[Object, ListObject runtime.Object](ctx context.Context, 
 		}
 	})
 	if err != nil {
-		if wait.Interrupted(err) {
+		if apimachineryutilwait.Interrupted(err) {
 			err = fmt.Errorf("waiting has been interupted (%s): %w", acs.GetStateString(), err)
 		}
 		return *new(Object), err
@@ -203,4 +203,8 @@ func WaitForScyllaDBDatacenterState(ctx context.Context, client scyllav1alpha1cl
 
 func WaitForScyllaDBManagerClusterRegistrationState(ctx context.Context, client scyllav1alpha1client.ScyllaDBManagerClusterRegistrationInterface, name string, options WaitForStateOptions, condition func(cluster *scyllav1alpha1.ScyllaDBManagerClusterRegistration) (bool, error), additionalConditions ...func(*scyllav1alpha1.ScyllaDBManagerClusterRegistration) (bool, error)) (*scyllav1alpha1.ScyllaDBManagerClusterRegistration, error) {
 	return WaitForObjectState[*scyllav1alpha1.ScyllaDBManagerClusterRegistration, *scyllav1alpha1.ScyllaDBManagerClusterRegistrationList](ctx, client, name, options, condition, additionalConditions...)
+}
+
+func WaitForScyllaDBManagerTaskState(ctx context.Context, client scyllav1alpha1client.ScyllaDBManagerTaskInterface, name string, options WaitForStateOptions, condition func(*scyllav1alpha1.ScyllaDBManagerTask) (bool, error), additionalConditions ...func(task *scyllav1alpha1.ScyllaDBManagerTask) (bool, error)) (*scyllav1alpha1.ScyllaDBManagerTask, error) {
+	return WaitForObjectState[*scyllav1alpha1.ScyllaDBManagerTask, *scyllav1alpha1.ScyllaDBManagerTaskList](ctx, client, name, options, condition, additionalConditions...)
 }

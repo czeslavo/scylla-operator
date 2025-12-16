@@ -12,9 +12,16 @@ import (
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
+	"k8s.io/client-go/rest"
 )
 
-func DumpResource(ctx context.Context, discoveryClient discovery.DiscoveryInterface, dynamicClient dynamic.Interface, corev1Client corev1client.CoreV1Interface, artifactsDir string, resourceInfo *collect.ResourceInfo, namespace string, name string) error {
+func DumpResource(ctx context.Context, restConfig *rest.Config, discoveryClient discovery.DiscoveryInterface, dynamicClient dynamic.Interface, corev1Client corev1client.CoreV1Interface, artifactsDir string, resourceInfo *collect.ResourceInfo, namespace string, name string) error {
+	discoverer := collect.NewResourceDiscoverer(true, discoveryClient)
+	discoveredResources, err := discoverer.DiscoverResources()
+	if err != nil {
+		return fmt.Errorf("can't discover resources: %w", err)
+	}
+
 	collector := collect.NewCollector(
 		artifactsDir,
 		[]collect.ResourcePrinterInterface{
@@ -22,29 +29,30 @@ func DumpResource(ctx context.Context, discoveryClient discovery.DiscoveryInterf
 				Delegate: &collect.YAMLPrinter{},
 			},
 		},
-		discoveryClient,
+		restConfig,
+		discoveredResources,
 		corev1Client,
 		dynamicClient,
 		true,
 		true,
 		0,
 	)
-	err := collector.CollectResource(
+	if err := collector.CollectResourceObject(
 		ctx,
 		resourceInfo,
 		namespace,
 		name,
-	)
-	if err != nil {
+	); err != nil {
 		return fmt.Errorf("can't collect object %q (%s): %w", naming.ManualRef(namespace, name), resourceInfo.Resource.String(), err)
 	}
 
 	return nil
 }
 
-func DumpNamespace(ctx context.Context, discoveryClient discovery.DiscoveryInterface, dynamicClient dynamic.Interface, corev1Client corev1client.CoreV1Interface, artifactsDir string, name string) error {
+func DumpNamespace(ctx context.Context, restConfig *rest.Config, discoveryClient discovery.DiscoveryInterface, dynamicClient dynamic.Interface, corev1Client corev1client.CoreV1Interface, artifactsDir string, name string) error {
 	return DumpResource(
 		ctx,
+		restConfig,
 		discoveryClient,
 		dynamicClient,
 		corev1Client,

@@ -6,16 +6,15 @@ comma :=,
 
 IMAGE_TAG ?= latest
 IMAGE_REF ?= docker.io/scylladb/scylla-operator:$(IMAGE_TAG)
+BUNDLE_IMAGE_REF ?= docker.io/scylladb/scylla-operator-bundle:$(IMAGE_TAG)
 
 MAKE_REQUIRED_MIN_VERSION:=4.2 # for SHELLSTATUS
 
 # Support container build from git worktrees where the parent git folder isn't available.
 GIT ?=git
 
-GIT_TAG ?=$(shell [ ! -d ".git/" ] || $(GIT) describe --long --tags --abbrev=7 --match 'v[0-9]*')$(if $(filter $(.SHELLSTATUS),0),,$(error $(GIT) describe failed))
 GIT_TAG_SHORT ?=$(shell [ ! -d ".git/" ] || $(GIT) describe --tags --abbrev=7 --match 'v[0-9]*')$(if $(filter $(.SHELLSTATUS),0),,$(error $(GIT) describe failed))
 GIT_COMMIT ?=$(shell [ ! -d ".git/" ] || $(GIT) rev-parse --short "HEAD^{commit}" 2>/dev/null)$(if $(filter $(.SHELLSTATUS),0),,$(error $(GIT) rev-parse failed))
-GIT_TREE_STATE ?=$(shell ( ( [ ! -d ".git/" ] || $(GIT) diff --quiet ) && echo 'clean' ) || echo 'dirty')
 
 GO ?=go
 GO_MODULE ?=$(shell $(GO) list -m)$(if $(filter $(.SHELLSTATUS),0),,$(error failed to list go module name))
@@ -50,11 +49,12 @@ GOLANGCI_LINT ?=golangci-lint
 CODEGEN_PKG ?=./vendor/k8s.io/code-generator
 CODEGEN_HEADER_FILE ?=/dev/null
 
+OPERATOR_SDK ?=operator-sdk
+
 api_groups :=$(patsubst %/,%,$(wildcard ./pkg/api/*/))
-external_api_groups :=$(patsubst %/.,%,$(wildcard ./pkg/externalapi/*/.))
 nonrest_api_groups :=$(patsubst %/.,%,$(wildcard ./pkg/scylla/api/*/.))
 
-api_package_dirs :=$(api_groups) $(external_api_groups)
+api_package_dirs :=$(api_groups)
 api_packages =$(call expand_go_packages_with_spaces,$(addsuffix /...,$(api_package_dirs)))
 
 HELM ?=helm
@@ -77,13 +77,12 @@ CRD_FILES ?=$(shell find ./pkg/api/ -name '*.yaml')$(if $(filter $(.SHELLSTATUS)
 MONITORING_DASHBOARDS_DIR :=./submodules/github.com/scylladb/scylla-monitoring/grafana/build
 MONITORING_RULES_DIR :=./submodules/github.com/scylladb/scylla-monitoring/prometheus/prom_rules
 
+DOCS_API_REFERENCE_DIR :=./docs/source/reference/api
+
 define version-ldflags
--X $(1).versionFromGit="$(GIT_TAG)" \
--X $(1).commitFromGit="$(GIT_COMMIT)" \
--X $(1).gitTreeState="$(GIT_TREE_STATE)" \
--X $(1).buildDate="$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')"
+-X $(1).commitFromGit="$(GIT_COMMIT)"
 endef
-GO_LD_FLAGS ?=-ldflags '$(strip $(call version-ldflags,$(GO_PACKAGE)/pkg/version) $(GO_LD_EXTRA_FLAGS))'
+GO_LD_FLAGS ?=-ldflags '$(strip $(call version-ldflags,$(GO_PACKAGE)/pkg/build) $(GO_LD_EXTRA_FLAGS))'
 
 # TODO: look into how to make these local to the targets
 export DOCKER_BUILDKIT :=1
@@ -164,62 +163,59 @@ submodules:
 
 verify-lint:
 	@$(GOLANGCI_LINT) run || \
-		(echo "$(GOLANGCI_LINT) run failed. You can run \`make update-lint\` to auto-fix some of the issues (e.g., formatting)." && \
+		(echo "$(GOLANGCI_LINT) run failed. You can run \`make lint\` to automatically apply fixes for some of the issues (e.g., formatting)." && \
 		exit 1)
 .PHONY: verify-lint
 
-update-lint:
+lint:
 	$(GOLANGCI_LINT) run --fix
-.PHONY: update-lint
+.PHONY: lint
 
 verify-gofmt:
 	$(info Running $(GOLANGCI_LINT) fmt --diff)
 	@output=$$( $(GOLANGCI_LINT) fmt --diff ); \
 	if [ -n "$${output}" ]; then \
-		echo "$@ failed - please run \`make update-gofmt\` to fix following files:"; \
+		echo "$@ failed - please run \`make gofmt\` to fix following files:"; \
 		echo "$${output}"; \
 		exit 1; \
 	fi;
 .PHONY: verify-gofmt
 
-update-gofmt:
+gofmt:
 	$(info Running $(GOLANGCI_LINT) fmt)
 	@$(GOLANGCI_LINT) fmt
-.PHONY: update-gofmt
+.PHONY: gofmt
 
 # We need to force locale so different envs sort files the same way for recursive traversals
 diff :=LC_COLLATE=C diff --no-dereference -N
 
+# setup-deps-verification sets up two copies of the project for dependency verification:
+# 1. A symbolic link to the current directory (as-is)
+# 2. A copy with freshly processed dependencies (updated go.mod replace directives, tidied go.mod and go.sum, and recreated vendor/)
+# This allows comparing go.mod, go.sum, and vendor/ contents to ensure they are correct.
 # $1 - temporary directory
-define restore-deps
+define setup-deps-verification
 	ln -s $(abspath ./) "$(1)"/current
 	cp -R -H ./ "$(1)"/updated
 	$(RM) -r "$(1)"/updated/vendor
-	cd "$(1)"/updated && $(GO) mod tidy && $(GO) mod vendor && $(GO) mod verify
-	cd "$(1)" && $(diff) -r {current,updated}/vendor/ > updated/deps.diff || true
+	cd "$(1)"/updated && \
+		./hack/update-go-mod-replace.sh && \
+		$(GO) mod tidy && \
+		$(GO) mod vendor && \
+		$(GO) mod verify
 endef
 
 verify-deps: tmp_dir:=$(shell mktemp -d)
 verify-deps:
-	$(call restore-deps,$(tmp_dir))
+	$(call setup-deps-verification,$(tmp_dir))
 	@echo $(diff) "$(tmp_dir)"/{current,updated}/go.mod
-	@     $(diff) "$(tmp_dir)"/{current,updated}/go.mod || ( echo '`go.mod` content is incorrect - did you run `go mod tidy`?' && false )
+	@     $(diff) "$(tmp_dir)"/{current,updated}/go.mod || ( echo '`go.mod` content is incorrect - did you run `make update-go-mod-replace` and `go mod tidy`?' && false )
 	@echo $(diff) "$(tmp_dir)"/{current,updated}/go.sum
 	@     $(diff) "$(tmp_dir)"/{current,updated}/go.sum || ( echo '`go.sum` content is incorrect - did you run `go mod tidy`?' && false )
-	@echo $(diff) '$(tmp_dir)'/{current,updated}/deps.diff
-	@     $(diff) '$(tmp_dir)'/{current,updated}/deps.diff || ( \
-		echo "ERROR: Content of 'vendor/' directory doesn't match 'go.mod' configuration and the overrides in 'deps.diff'!" && \
-		echo 'Did you run `go mod vendor`?' && \
-		echo "If this is an intentional change (a carry patch) please update the 'deps.diff' using 'make update-deps-overrides'." && \
-		false \
-	)
+	@echo $(diff) -r "$(tmp_dir)"/{current,updated}/vendor
+	@     $(diff) -r "$(tmp_dir)"/{current,updated}/vendor || ( echo '`vendor/` content is incorrect - did you run `go mod vendor`?' && false )
+	$(RM) -r "$(tmp_dir)"
 .PHONY: verify-deps
-
-update-deps-overrides: tmp_dir:=$(shell mktemp -d)
-update-deps-overrides:
-	$(call restore-deps,$(tmp_dir))
-	cp "$(tmp_dir)"/{updated,current}/deps.diff
-.PHONY: update-deps-overrides
 
 verify-helm-lint:
 	@$(foreach chart,$(HELM_CHARTS),$(call lint-helm,$(chart)))
@@ -282,9 +278,8 @@ define run-client-generators
 endef
 
 define run-update-codegen
-	$(call run-deepcopy-gen,$(addsuffix /...,$(api_groups) $(nonrest_api_groups) $(external_api_groups)))
+	$(call run-deepcopy-gen,$(addsuffix /...,$(api_groups) $(nonrest_api_groups)))
 	$(foreach group,$(api_groups),$(call run-client-generators,$(notdir $(group)),$(call expand_go_packages_with_spaces,$(group)/...),pkg/client))
-	$(foreach group,$(external_api_groups),$(call run-client-generators,$(notdir $(group)),$(call expand_go_packages_with_spaces,$(group)/...),pkg/externalclient))
 
 endef
 
@@ -304,15 +299,13 @@ verify-codegen:
 	cp -R -H ./ "$(tmp_dir)/original"
 
 	cp -R -H ./ "$(tmp_dir)/generated"
-	find $(foreach group,$(api_groups) $(nonrest_api_groups) $(external_api_groups),"$(tmp_dir)/generated/$(group)") -name 'zz_generated.deepcopy.go' -delete
+	find $(foreach group,$(api_groups) $(nonrest_api_groups),"$(tmp_dir)/generated/$(group)") -name 'zz_generated.deepcopy.go' -delete
 	$(RM) -r "$(tmp_dir)/generated/pkg/client"
-	$(RM) -r "$(tmp_dir)/generated/pkg/externalclient"
 
 	+$(MAKE) -C "$(tmp_dir)/generated" update-codegen
 
-	$(foreach group,$(api_groups) $(nonrest_api_groups) $(external_api_groups),$(call verify-group-deepcopy-gen,"$(tmp_dir)/original/$(group)","$(tmp_dir)/generated/$(group)"))
+	$(foreach group,$(api_groups) $(nonrest_api_groups),$(call verify-group-deepcopy-gen,"$(tmp_dir)/original/$(group)","$(tmp_dir)/generated/$(group)"))
 	$(diff) -r "$(tmp_dir)/"{original,generated}/pkg/client
-	$(diff) -r "$(tmp_dir)/"{original,generated}/pkg/externalclient
 
 .PHONY: verify-codegen
 
@@ -433,20 +426,12 @@ endef
 define generate-manager-manifests-prod
 	$(call generate-manifests-from-helm,scylla-manager,helm/scylla-manager,$(1),$(3))
 
-	mv '$(3)'/scylla-manager/templates/controller_clusterrole.yaml '$(2)'/00_controller_clusterrole.yaml
-	mv '$(3)'/scylla-manager/templates/controller_clusterrole_def.yaml '$(2)'/00_controller_clusterrole_def.yaml
-
-	mv '$(3)'/scylla-manager/templates/controller_serviceaccount.yaml '$(2)'/10_controller_serviceaccount.yaml
-	mv '$(3)'/scylla-manager/templates/controller_pdb.yaml '$(2)'/10_controller_pdb.yaml
 	mv '$(3)'/scylla-manager/templates/manager_service.yaml '$(2)'/10_manager_service.yaml
 	mv '$(3)'/scylla-manager/templates/manager_serviceaccount.yaml '$(2)'/10_manager_serviceaccount.yaml
 	mv '$(3)'/scylla-manager/templates/manager_configmap.yaml '$(2)'/10_manager_configmap.yaml
 	mv '$(3)'/scylla-manager/templates/manager_networkpolicy.yaml '$(2)'/10_manager_networkpolicy.yaml
 
-	mv '$(3)'/scylla-manager/templates/controller_clusterrolebinding.yaml '$(2)'/20_controller_clusterrolebinding.yaml
-
 	mv '$(3)'/scylla-manager/charts/scylla/templates/scyllacluster.yaml '$(2)'/50_scyllacluster.yaml
-	mv '$(3)'/scylla-manager/templates/controller_deployment.yaml '$(2)'/50_controller_deployment.yaml
 	mv '$(3)'/scylla-manager/templates/manager_deployment.yaml '$(2)'/50_manager_deployment.yaml
 
 	@leftovers=$$( find '$(3)'/scylla-manager/ -mindepth 1 -type f ) && [[ "$${leftovers}" == "" ]] || \
@@ -558,24 +543,22 @@ endef
 
 update-examples:
 update-examples:
-	$(call update-scylla-helm-versions,./examples/helm/values.cluster.yaml)
-	$(call update-scylla-manager-helm-versions,./examples/helm/values.manager.yaml)
 	$(call replace-scyllacluster-versions,./examples/scylladb/scylla.scyllacluster.yaml,0)
 
 	$(call concat-manifests,$(sort $(wildcard ./examples/third-party/haproxy-ingress/*.yaml)),./examples/third-party/haproxy-ingress.yaml)
-	$(call concat-manifests,$(sort $(wildcard ./examples/third-party/prometheus-operator/*.yaml)),./examples/third-party/prometheus-operator.yaml)
+
+	./hack/third-party/build-prometheus-operator-manifest.sh "./examples/third-party/prometheus-operator.yaml"
 .PHONY: update-examples
 
 verify-examples: tmp_dir :=$(shell mktemp -d)
 verify-examples:
 	cp -r ./examples/. $(tmp_dir)/
 
-	$(call update-scylla-helm-versions,$(tmp_dir)/helm/values.cluster.yaml)
-	$(call update-scylla-manager-helm-versions,$(tmp_dir)/helm/values.manager.yaml)
 	$(call replace-scyllacluster-versions,$(tmp_dir)/scylladb/scylla.scyllacluster.yaml,0)
 
 	$(call concat-manifests,$(sort $(wildcard ./examples/third-party/haproxy-ingress/*.yaml)),$(tmp_dir)/third-party/haproxy-ingress.yaml)
-	$(call concat-manifests,$(sort $(wildcard ./examples/third-party/prometheus-operator/*.yaml)),$(tmp_dir)/third-party/prometheus-operator.yaml)
+
+	./hack/third-party/build-prometheus-operator-manifest.sh "$(tmp_dir)/third-party/prometheus-operator.yaml"
 
 	$(diff) -r '$(tmp_dir)'/ ./examples
 .PHONY: verify-examples
@@ -628,18 +611,18 @@ verify-monitoring: submodules
 
 # $1 - extra flags
 define run-update-docs
-	$(GO) run ./cmd/gen-api-reference/ --templates-dir ./docs/source/api-reference/templates $(1) $(CRD_FILES)
+	$(GO) run ./cmd/gen-api-reference/ --templates-dir '$(DOCS_API_REFERENCE_DIR)'/templates $(1) $(CRD_FILES)
 
 endef
 
 update-docs-api:
-	$(call run-update-docs,--output-dir=./docs/source/api-reference/groups --overwrite)
+	$(call run-update-docs,--output-dir='$(DOCS_API_REFERENCE_DIR)'/groups --overwrite)
 .PHONY: update-docs-api
 
 verify-docs-api: tmp_dir :=$(shell mktemp -d)
 verify-docs-api:
 	$(call run-update-docs,--output-dir="$(tmp_dir)")
-	$(diff) -r '$(tmp_dir)' ./docs/source/api-reference/groups || (echo 'Generated API docs are not up-to date. Please run `make update-docs-api` to update it or remove the extra files.' && false)
+	$(diff) -r '$(tmp_dir)' '$(DOCS_API_REFERENCE_DIR)'/groups || (echo 'Generated API docs are not up-to date. Please run `make update-docs-api` to update it or remove the extra files.' && false)
 .PHONY: verify-docs-api
 
 verify-links:
@@ -651,33 +634,119 @@ verify-links:
 	fi;
 .PHONY: verify-links
 
-verify: verify-codegen verify-crds verify-helm-schemas verify-helm-charts verify-deploy verify-lint verify-helm-lint verify-links verify-examples verify-docs-api verify-monitoring
+# patch-bundle applies patches matching the glob pattern to the target file. It strips any head comments from the patch files.
+# $1 - path to the target being patched
+# $2 - glob pattern for patch files
+define patch-bundle
+	for f in $(2); do \
+		$(YQ) -i -e '. *= (load("'"$$f"'") | ... head_comment="")' $(1); \
+	done
+endef
+
+# $1 - path to manifests directory
+define fix-bundle-manifests-filenames
+	find $(1) -type f -name '*:*' | while read file; do \
+		newfile=$$(echo "$$file" | sed 's/:/-/g'); \
+		mv "$$file" "$$newfile"; \
+	done
+endef
+
+# $1 - path to clusterserviceversion
+define fix-bundle-webhook-certificate-volume
+	$(YQ) -i e 'del( .spec.install.spec.deployments.[] | select( .name == "webhook-server" ) | .spec.template.spec.volumes.[] | select( .name == "cert" ) )' $(1)
+	$(YQ) -i e 'del( .spec.install.spec.deployments.[] | select( .name == "webhook-server" ) | .spec.template.spec.containers.[] | select( .name == "webhook-server" ) | .volumeMounts.[] | select( .name == "cert"  ) )' $(1)
+endef
+
+# $1 - logo path
+# $2 - logo patch path
+define update-bundle-patches-manifests-logo
+	$(YQ) -i ".spec.icon[0].base64data = \"$$( base64 -w 0 '$(1)' )\"" '$(2)'
+	$(YQ) -i ".spec.icon[0].mediatype = \"$$( file --mime-type -b '$(1)' )\"" '$(2)'
+endef
+
+# $1 - metadata file
+# $2 - patch file
+define update-bundle-patches-manifests-versions
+	$(YQ) eval-all -i -P '\
+	select(fi==0).spec.minKubeVersion = ( select(fi==1) | .operator.minKubernetesVersion ) | \
+	select(fi==0)' \
+	'$(2)' '$(1)'
+endef
+
+# $1 - metadata file
+# $2 - bundle metadata annotations file
+define update-bundle-patches-metadata-versions
+	$(YQ) eval-all -i -P '\
+	select(fi==0).annotations."com.redhat.openshift.versions" = ( select(fi==1) | "v" + .operator.minOpenShiftVersion + "-v" + .operator.maxOpenShiftVersion ) | \
+	select(fi==0)' \
+	'$(2)' '$(1)'
+endef
+
+# $1 - bundle path
+define update-bundle-patches
+	$(call update-bundle-patches-manifests-logo,./logo.svg,$(1)/patches/manifests/logo.clusterserviceversion.yaml)
+	$(call update-bundle-patches-manifests-versions,assets/metadata/metadata.yaml,$(1)/patches/manifests/versions.clusterserviceversion.yaml)
+	$(call update-bundle-patches-metadata-versions,assets/metadata/metadata.yaml,$(1)/patches/metadata/versions.annotations.yaml)
+endef
+
+# $1 - path to bundle
+define apply-bundle-fixes
+	$(call patch-bundle,$(1)/manifests/scylladb-operator.clusterserviceversion.yaml,$(1)/patches/manifests/*.clusterserviceversion.yaml)
+	$(call patch-bundle,$(1)/metadata/annotations.yaml,$(1)/patches/metadata/*.annotations.yaml)
+
+	# Workaround for https://github.com/operator-framework/operator-registry/issues/1741
+	$(call fix-bundle-manifests-filenames, $(1)/manifests)
+
+	# OLM Bundles enforces their certificate, we cannot use custom source of it
+	# https://olm.operatorframework.io/docs/advanced-tasks/adding-admission-and-conversion-webhooks/#deploying-an-operator-with-webhooks-using-olm
+	# Hence we cannot require our own copy coming from secret in webhook-server deployment.
+	# Delete volume and related volume mount and use only what OLM provides.
+	$(call fix-bundle-webhook-certificate-volume, $(1)/manifests/scylladb-operator.clusterserviceversion.yaml)
+endef
+
+# $1 - bundle path
+define generate-bundle
+	$(call update-bundle-patches,$(1))
+	$(OPERATOR_SDK) generate bundle --package scylladb-operator --deploy-dir deploy/operator/ --manifests --output-dir $(1) --overwrite
+	$(call apply-bundle-fixes,$(1))
+endef
+
+update-bundle:
+	$(call generate-bundle,./bundle)
+.PHONY: update-bundle
+
+verify-bundle: tmp_dir :=$(shell mktemp -d)
+verify-bundle:
+	cp -r ./bundle/. $(tmp_dir)/
+	$(call generate-bundle,$(tmp_dir))
+	$(diff) -r '$(tmp_dir)'/ ./bundle
+.PHONY: verify-bundle
+
+update-go-mod-replace:
+	./hack/update-go-mod-replace.sh
+.PHONY: update-go-mod-replace
+
+verify: verify-codegen verify-crds verify-helm-schemas verify-helm-charts verify-deploy verify-lint verify-helm-lint verify-links verify-examples verify-docs-api verify-monitoring verify-bundle
 .PHONY: verify
 
-update: update-lint update-codegen update-crds update-helm-schemas update-helm-charts update-deploy update-examples update-docs-api update-monitoring
+update: update-codegen update-crds update-helm-schemas update-helm-charts update-deploy update-examples update-docs-api update-monitoring update-bundle update-go-mod-replace
 .PHONY: update
 
 test-unit:
 	$(GO) test $(GO_TEST_COUNT) $(GO_TEST_FLAGS) $(GO_TEST_EXTRA_FLAGS) $(GO_TEST_PACKAGES) $(if $(GO_TEST_ARGS)$(GO_TEST_EXTRA_ARGS),-args $(GO_TEST_ARGS) $(GO_TEST_EXTRA_ARGS))
 .PHONY: test-unit
 
-test-integration: GO_TEST_PACKAGES :=./test/integration/...
-test-integration: GO_TEST_COUNT :=-count=1
-test-integration: GO_TEST_FLAGS += -p=1 -timeout 30m -v
-test-integration: GO_TEST_ARGS += -ginkgo.progress
-test-integration: test-unit
-.PHONY: test-integration
-
 test-e2e:
 	$(GO) run ./cmd/scylla-operator-tests run $(GO_TEST_E2E_EXTRA_ARGS)
 .PHONY: test-e2e
 
-test-scripts:
-	./hack/lib/tag-from-gh-ref.sh
-.PHONY: test-scripts
-
-test: test-unit test-scripts
+test: test-unit test-binary
 .PHONY: test
+
+test-binary: build
+	# Verify that the built binary runs and prints the expected output (including the exact commit hash):
+	@ test "$$(./scylla-operator version)" = 'GitCommit="$(GIT_COMMIT)"' || (echo "Built binary version output does not match the expected commit hash." && false)
+.PHONY: test-binary
 
 help:
 	$(info The following make targets are available:)

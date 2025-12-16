@@ -22,13 +22,12 @@ import (
 	gomegaformat "github.com/onsi/gomega/format"
 	"github.com/scylladb/scylla-operator/pkg/cmdutil"
 	"github.com/scylladb/scylla-operator/pkg/genericclioptions"
-	"github.com/scylladb/scylla-operator/pkg/helpers/slices"
+	oslices "github.com/scylladb/scylla-operator/pkg/helpers/slices"
 	"github.com/scylladb/scylla-operator/pkg/signals"
 	ginkgotest "github.com/scylladb/scylla-operator/pkg/test/ginkgo"
 	"github.com/scylladb/scylla-operator/pkg/thirdparty/github.com/onsi/ginkgo/v2/exposedinternal/parallel_support"
-	"github.com/scylladb/scylla-operator/pkg/version"
 	"github.com/spf13/cobra"
-	apierrors "k8s.io/apimachinery/pkg/util/errors"
+	apimachineryutilerrors "k8s.io/apimachinery/pkg/util/errors"
 	cliflag "k8s.io/component-base/cli/flag"
 	"k8s.io/klog/v2"
 	"k8s.io/kubectl/pkg/util/templates"
@@ -91,7 +90,7 @@ func NewRunOptions(streams genericclioptions.IOStreams, testSuites ginkgotest.Te
 func NewRunCommand(streams genericclioptions.IOStreams, testSuites ginkgotest.TestSuites, userAgent string) *cobra.Command {
 	o := NewRunOptions(streams, testSuites, userAgent)
 
-	testSuiteNames := slices.ConvertSlice(testSuites, func(ts *ginkgotest.TestSuite) string {
+	testSuiteNames := oslices.ConvertSlice(testSuites, func(ts *ginkgotest.TestSuite) string {
 		return ts.Name
 	})
 
@@ -196,7 +195,7 @@ func (o *RunOptions) Validate(args []string) error {
 		errs = append(errs, fmt.Errorf("can't select more then 1 suite"))
 	}
 
-	return apierrors.NewAggregate(errs)
+	return apimachineryutilerrors.NewAggregate(errs)
 }
 
 func (o *RunOptions) Complete(args []string) error {
@@ -207,11 +206,11 @@ func (o *RunOptions) Complete(args []string) error {
 		errs = append(errs, err)
 	}
 
-	return apierrors.NewAggregate(errs)
+	return apimachineryutilerrors.NewAggregate(errs)
 }
 
 func (o *RunOptions) Run(streams genericclioptions.IOStreams, cmd *cobra.Command) error {
-	klog.V(1).Infof("%q version %q", cmd.CommandPath(), version.Get())
+	cmdutil.LogCommandStarting(cmd)
 	cliflag.PrintFlags(cmd.Flags())
 
 	stopCh := signals.StopChannel()
@@ -326,7 +325,7 @@ func (o *RunOptions) run(ctx context.Context, streams genericclioptions.IOStream
 	commonArgs = append(commonArgs, fmt.Sprintf("--%s=%v", cmdutil.FlagLogLevelKey, o.ParallelLogLevel))
 
 	// Propagate random seed to child processes.
-	if !slices.Contains(commonArgs, func(arg string) bool {
+	if !oslices.Contains(commonArgs, func(arg string) bool {
 		return strings.HasPrefix(arg, fmt.Sprintf("--%s", randomSeedFlagKey))
 	}) {
 		commonArgs = append(commonArgs, fmt.Sprintf("--%s=%v", randomSeedFlagKey, suiteConfig.RandomSeed))
@@ -367,7 +366,7 @@ func (o *RunOptions) run(ctx context.Context, streams genericclioptions.IOStream
 		server.RegisterAlive(e.id, func() bool { return e.cmd.ProcessState == nil || !e.cmd.ProcessState.Exited() })
 	}
 	if len(errs) != 0 {
-		return apierrors.NewAggregate(errs)
+		return apimachineryutilerrors.NewAggregate(errs)
 	}
 
 	// We need to wait for all the processes in parallel so the Alive function can read the status,
@@ -395,7 +394,7 @@ func (o *RunOptions) run(ctx context.Context, streams genericclioptions.IOStream
 
 	wg.Wait()
 
-	err = apierrors.NewAggregate(errs)
+	err = apimachineryutilerrors.NewAggregate(errs)
 	if err != nil {
 		return fmt.Errorf("can't wait for processes: %w", err)
 	}

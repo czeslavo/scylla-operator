@@ -8,7 +8,7 @@ NodeConfig is an API object that helps you set up and tune the nodes.
 apiVersion: scylla.scylladb.com/v1alpha1
 kind: NodeConfig
 metadata:
-  name: scylladb-pool-1
+  name: scylladb-nodepool-1
 spec:
   localDiskSetup:
     raids:
@@ -53,19 +53,16 @@ Given NodeConfig specification needs to reference local disk by names or that th
 NodeConfig have the standard aggregated conditions to easily check whether everything went fine:
 
 :::{code-block} bash
-kubectl get nodeconfigs.scylla.scylladb.com/scylladb-pool-1
+kubectl get nodeconfigs.scylla.scylladb.com/scylladb-nodepool-1
 :::
 :::{code-block} console
 NAME              AVAILABLE   PROGRESSING   DEGRADED   AGE
-scylladb-pool-1   True        False         False      37d
+scylladb-nodepool-1   True        False         False      37d
 :::
 
 or programmatically wait for it:
 
-:::{code-block}
-kubectl wait --timeout=10m --for='condition=Progressing=False' nodeconfigs.scylla.scylladb.com/scylladb-pool-1
-kubectl wait --timeout=10m --for='condition=Degraded=False' nodeconfigs.scylla.scylladb.com/scylladb-pool-1
-kubectl wait --timeout=10m --for='condition=Available=True' nodeconfigs.scylla.scylladb.com/scylladb-pool-1
+:::{include} ./../.internal/wait-for-status-conditions.nodeconfig.code-block.md
 :::
 
 If the NodeConfig doesn't reach the expected state, look at the fine-grained conditions in its status to find the cause.

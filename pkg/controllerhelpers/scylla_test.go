@@ -6,11 +6,12 @@ import (
 	"testing"
 
 	scyllav1alpha1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1alpha1"
+	"github.com/scylladb/scylla-operator/pkg/naming"
 	"github.com/scylladb/scylla-operator/pkg/pointer"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	apimachineryutilerrors "k8s.io/apimachinery/pkg/util/errors"
 	corev1listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 )
@@ -511,7 +512,7 @@ func TestGetRequiredScyllaHosts(t *testing.T) {
 				secondPod,
 			},
 			expected: nil,
-			expectedError: utilerrors.NewAggregate([]error{
+			expectedError: apimachineryutilerrors.NewAggregate([]error{
 				fmt.Errorf(`service "test/simple-cluster-us-east1-us-east1-b-1" does not exist`),
 			}),
 		},
@@ -526,7 +527,7 @@ func TestGetRequiredScyllaHosts(t *testing.T) {
 				firstPod,
 			},
 			expected: nil,
-			expectedError: utilerrors.NewAggregate([]error{
+			expectedError: apimachineryutilerrors.NewAggregate([]error{
 				fmt.Errorf(`can't get pod "test/simple-cluster-us-east1-us-east1-b-1": %w`, apierrors.NewNotFound(corev1.Resource("pod"), "simple-cluster-us-east1-us-east1-b-1")),
 			}),
 		},
@@ -594,7 +595,7 @@ func TestGetRequiredScyllaHosts(t *testing.T) {
 				secondPod,
 			},
 			expected: nil,
-			expectedError: utilerrors.NewAggregate([]error{
+			expectedError: apimachineryutilerrors.NewAggregate([]error{
 				fmt.Errorf(`can't get scylla host for service "test/simple-cluster-us-east1-us-east1-b-1": %w`, fmt.Errorf(`service "test/simple-cluster-us-east1-us-east1-b-1" does not have a ClusterIP address`)),
 			}),
 		},
@@ -1001,6 +1002,49 @@ func TestGetNodeCount(t *testing.T) {
 			gotNodeCount := GetScyllaDBClusterNodeCount(tc.cluster)
 			if gotNodeCount != tc.expectedNodeCount {
 				t.Errorf("expected node count to be %d, got %d", tc.expectedNodeCount, gotNodeCount)
+			}
+		})
+	}
+}
+
+func TestIsScyllaPod(t *testing.T) {
+	t.Parallel()
+
+	tt := []struct {
+		name     string
+		pod      *corev1.Pod
+		expected bool
+	}{
+		{
+			name: "pod with required pod-type label",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						naming.PodTypeLabel: string(naming.PodTypeScyllaDBNode),
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "pod without required pod-type label",
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"some-other-label": "some-value",
+					},
+				},
+			},
+			expected: false,
+		},
+	}
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := IsScyllaPod(tc.pod)
+			if got != tc.expected {
+				t.Errorf("expected %v, got %v", tc.expected, got)
 			}
 		})
 	}

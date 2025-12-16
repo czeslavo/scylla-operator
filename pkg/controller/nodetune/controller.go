@@ -23,9 +23,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
+	apimachineryutilerrors "k8s.io/apimachinery/pkg/util/errors"
+	apimachineryutilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	apimachineryutilwait "k8s.io/apimachinery/pkg/util/wait"
 	appsv1informers "k8s.io/client-go/informers/apps/v1"
 	batchv1informers "k8s.io/client-go/informers/batch/v1"
 	corev1informers "k8s.io/client-go/informers/core/v1"
@@ -66,6 +66,7 @@ type Controller struct {
 	namespacedDaemonSetLister appsv1listers.DaemonSetLister
 	namespacedJobLister       batchv1listers.JobLister
 	selfPodLister             corev1listers.PodLister
+	namespacedConfigMapLister corev1listers.ConfigMapLister
 
 	namespace      string
 	podName        string
@@ -80,7 +81,7 @@ type Controller struct {
 
 	eventRecorder record.EventRecorder
 
-	queue workqueue.RateLimitingInterface
+	queue workqueue.TypedRateLimitingInterface[string]
 }
 
 func NewController(
@@ -92,6 +93,7 @@ func NewController(
 	localScyllaPodsInformer corev1informers.PodInformer,
 	namespacedDaemonSetInformer appsv1informers.DaemonSetInformer,
 	namespacedJobInformer batchv1informers.JobInformer,
+	namespacedConfigMapInformer corev1informers.ConfigMapInformer,
 	selfPodInformer corev1informers.PodInformer,
 	namespace string,
 	podName string,
@@ -116,6 +118,7 @@ func NewController(
 		localScyllaPodsLister:     localScyllaPodsInformer.Lister(),
 		namespacedDaemonSetLister: namespacedDaemonSetInformer.Lister(),
 		namespacedJobLister:       namespacedJobInformer.Lister(),
+		namespacedConfigMapLister: namespacedConfigMapInformer.Lister(),
 		selfPodLister:             selfPodInformer.Lister(),
 
 		namespace:      namespace,
@@ -132,12 +135,18 @@ func NewController(
 			localScyllaPodsInformer.Informer().HasSynced,
 			namespacedDaemonSetInformer.Informer().HasSynced,
 			namespacedJobInformer.Informer().HasSynced,
+			namespacedConfigMapInformer.Informer().HasSynced,
 			selfPodInformer.Informer().HasSynced,
 		},
 
 		eventRecorder: eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: "nodeconfigdaemon-controller"}),
 
-		queue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "nodeconfigdaemon"),
+		queue: workqueue.NewTypedRateLimitingQueueWithConfig(
+			workqueue.DefaultTypedControllerRateLimiter[string](),
+			workqueue.TypedRateLimitingQueueConfig[string]{
+				Name: "nodeconfigdaemon",
+			},
+		),
 	}
 
 	nodeConfigInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -157,6 +166,12 @@ func NewController(
 		DeleteFunc: snc.deleteJob,
 	})
 
+	namespacedConfigMapInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    snc.addConfigMap,
+		UpdateFunc: snc.updateConfigMap,
+		DeleteFunc: snc.deleteConfigMap,
+	})
+
 	// Start right away, Scylla might not be scheduled yet, but Node can already be tuned.
 	snc.enqueue()
 
@@ -174,13 +189,13 @@ func (ncdc *Controller) processNextItem(ctx context.Context) bool {
 	defer cancel()
 	err := ncdc.sync(ctx)
 	// TODO: Do smarter filtering then just Reduce to handle cases like 2 conflict errors.
-	err = utilerrors.Reduce(err)
+	err = apimachineryutilerrors.Reduce(err)
 	switch {
 	case err == nil:
 		ncdc.queue.Forget(key)
 		return true
 	default:
-		utilruntime.HandleError(fmt.Errorf("syncing key '%v' failed: %v", key, err))
+		apimachineryutilruntime.HandleError(fmt.Errorf("syncing key '%v' failed: %v", key, err))
 	}
 
 	ncdc.queue.AddRateLimited(key)
@@ -194,7 +209,7 @@ func (ncdc *Controller) runWorker(ctx context.Context) {
 }
 
 func (ncdc *Controller) Run(ctx context.Context) {
-	defer utilruntime.HandleCrash()
+	defer apimachineryutilruntime.HandleCrash()
 
 	klog.InfoS("Starting controller", "controller", ControllerName)
 
@@ -213,7 +228,7 @@ func (ncdc *Controller) Run(ctx context.Context) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		wait.UntilWithContext(ctx, ncdc.runWorker, time.Second)
+		apimachineryutilwait.UntilWithContext(ctx, ncdc.runWorker, time.Second)
 	}()
 
 	<-ctx.Done()
@@ -242,7 +257,7 @@ func (ncdc *Controller) updateNodeConfig(old, cur interface{}) {
 	if currentNC.UID != oldNC.UID {
 		key, err := keyFunc(oldNC)
 		if err != nil {
-			utilruntime.HandleError(fmt.Errorf("couldn't get key for object %#v: %v", oldNC, err))
+			apimachineryutilruntime.HandleError(fmt.Errorf("couldn't get key for object %#v: %v", oldNC, err))
 			return
 		}
 		ncdc.deleteNodeConfig(cache.DeletedFinalStateUnknown{
@@ -271,12 +286,12 @@ func (ncdc *Controller) deleteNodeConfig(obj interface{}) {
 	if !ok {
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 		if !ok {
-			utilruntime.HandleError(fmt.Errorf("couldn't get object from tombstone %#v", obj))
+			apimachineryutilruntime.HandleError(fmt.Errorf("couldn't get object from tombstone %#v", obj))
 			return
 		}
 		nc, ok = tombstone.Obj.(*scyllav1alpha1.NodeConfig)
 		if !ok {
-			utilruntime.HandleError(fmt.Errorf("tombstone contained object that is not a NodeConfig %#v", obj))
+			apimachineryutilruntime.HandleError(fmt.Errorf("tombstone contained object that is not a NodeConfig %#v", obj))
 			return
 		}
 	}
@@ -328,7 +343,7 @@ func (ncdc *Controller) addJob(obj interface{}) {
 
 	owned, err := ncdc.ownsObject(job)
 	if err != nil {
-		utilruntime.HandleError(err)
+		apimachineryutilruntime.HandleError(err)
 		return
 	}
 
@@ -348,7 +363,7 @@ func (ncdc *Controller) updateJob(old, cur interface{}) {
 	if currentJob.UID != oldJob.UID {
 		key, err := keyFunc(oldJob)
 		if err != nil {
-			utilruntime.HandleError(fmt.Errorf("couldn't get key for object %#v: %v", oldJob, err))
+			apimachineryutilruntime.HandleError(fmt.Errorf("couldn't get key for object %#v: %v", oldJob, err))
 			return
 		}
 		ncdc.deleteJob(cache.DeletedFinalStateUnknown{
@@ -359,7 +374,7 @@ func (ncdc *Controller) updateJob(old, cur interface{}) {
 
 	owned, err := ncdc.ownsObject(currentJob)
 	if err != nil {
-		utilruntime.HandleError(err)
+		apimachineryutilruntime.HandleError(err)
 		return
 	}
 
@@ -382,19 +397,19 @@ func (ncdc *Controller) deleteJob(obj interface{}) {
 	if !ok {
 		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 		if !ok {
-			utilruntime.HandleError(fmt.Errorf("couldn't get object from tombstone %#v", obj))
+			apimachineryutilruntime.HandleError(fmt.Errorf("couldn't get object from tombstone %#v", obj))
 			return
 		}
 		job, ok = tombstone.Obj.(*batchv1.Job)
 		if !ok {
-			utilruntime.HandleError(fmt.Errorf("tombstone contained object that is not a Job %#v", obj))
+			apimachineryutilruntime.HandleError(fmt.Errorf("tombstone contained object that is not a Job %#v", obj))
 			return
 		}
 	}
 
 	owned, err := ncdc.ownsObject(job)
 	if err != nil {
-		utilruntime.HandleError(err)
+		apimachineryutilruntime.HandleError(err)
 		return
 	}
 
@@ -404,6 +419,72 @@ func (ncdc *Controller) deleteJob(obj interface{}) {
 	}
 
 	klog.V(4).InfoS("Observed deletion of Job", "Job", klog.KObj(job), "RV", job.ResourceVersion)
+	ncdc.enqueue()
+}
+
+func (ncdc *Controller) addConfigMap(obj interface{}) {
+	cm, ok := obj.(*corev1.ConfigMap)
+	if !ok {
+		return
+	}
+
+	if !ncdc.isControlledByNodeConfig(cm) {
+		return
+	}
+
+	klog.V(4).InfoS("Observed addition of ConfigMap", "ConfigMap", klog.KObj(cm), "RV", cm.ResourceVersion)
+	ncdc.enqueue()
+}
+
+func (ncdc *Controller) updateConfigMap(old, cur interface{}) {
+	oldCM := old.(*corev1.ConfigMap)
+	currentCM := cur.(*corev1.ConfigMap)
+
+	if currentCM.UID != oldCM.UID {
+		key, err := keyFunc(oldCM)
+		if err != nil {
+			apimachineryutilruntime.HandleError(fmt.Errorf("couldn't get key for object %#v: %v", oldCM, err))
+			return
+		}
+		ncdc.deleteConfigMap(cache.DeletedFinalStateUnknown{
+			Key: key,
+			Obj: oldCM,
+		})
+	}
+
+	if !ncdc.isControlledByNodeConfig(currentCM) {
+		return
+	}
+
+	klog.V(4).InfoS(
+		"Observed update of ConfigMap",
+		"ConfigMap", klog.KObj(currentCM),
+		"RV", fmt.Sprintf("%s->%s", oldCM.ResourceVersion, currentCM.ResourceVersion),
+		"UID", fmt.Sprintf("%s->%s", oldCM.UID, currentCM.UID),
+	)
+	ncdc.enqueue()
+}
+
+func (ncdc *Controller) deleteConfigMap(obj interface{}) {
+	cm, ok := obj.(*corev1.ConfigMap)
+	if !ok {
+		tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
+		if !ok {
+			apimachineryutilruntime.HandleError(fmt.Errorf("couldn't get object from tombstone %#v", obj))
+			return
+		}
+		cm, ok = tombstone.Obj.(*corev1.ConfigMap)
+		if !ok {
+			apimachineryutilruntime.HandleError(fmt.Errorf("tombstone contained object that is not a ConfigMap %#v", obj))
+			return
+		}
+	}
+
+	if !ncdc.isControlledByNodeConfig(cm) {
+		return
+	}
+
+	klog.V(4).InfoS("Observed deletion of ConfigMap", "ConfigMap", klog.KObj(cm), "RV", cm.ResourceVersion)
 	ncdc.enqueue()
 }
 
@@ -447,4 +528,12 @@ func (ncdc *Controller) newNodeConfigObjectRef() *corev1.ObjectReference {
 
 func (ncdc *Controller) isNodeConfigControlled(nc *scyllav1alpha1.NodeConfig) bool {
 	return nc.Name == ncdc.nodeConfigName && nc.UID == ncdc.nodeConfigUID
+}
+
+func (ncdc *Controller) isControlledByNodeConfig(obj metav1.Object) bool {
+	ref := metav1.GetControllerOfNoCopy(obj)
+	if ref == nil {
+		return false
+	}
+	return ref.UID == ncdc.nodeConfigUID
 }

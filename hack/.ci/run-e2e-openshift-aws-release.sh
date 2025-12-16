@@ -21,30 +21,21 @@ parent_dir="$( dirname "${BASH_SOURCE[0]}" )"
 trap gather-artifacts-on-exit EXIT
 trap gracefully-shutdown-e2es INT
 
-REENTRANT="${REENTRANT=false}"
-export REENTRANT
-
-# Test cases including $test_disable_tag in their name will be skipped.
-# TODO: Get rid of this tagging method in favor of defined test suites, and mapping
-# specific test suites to specific runtime configurations.
-test_disable_tag="TESTCASE_DISABLED_ON_OPENSHIFT"
-SO_SKIPPED_TESTS="${SO_SKIPPED_TESTS:-$test_disable_tag}"
-export SO_SKIPPED_TESTS
-
 SO_NODECONFIG_PATH="${SO_NODECONFIG_PATH=${parent_dir}/manifests/cluster/nodeconfig-openshift-aws.yaml}"
 export SO_NODECONFIG_PATH
 
-SO_SCYLLACLUSTER_STORAGECLASS_NAME="${SO_SCYLLACLUSTER_STORAGECLASS_NAME=scylladb-local-xfs}"
-export SO_SCYLLACLUSTER_STORAGECLASS_NAME
+# TODO: When https://github.com/scylladb/scylla-operator/issues/2490 is completed,
+# we should make sure we have all required CRDs in the OpenShift cluster.
+SO_DISABLE_PROMETHEUS_OPERATOR="${SO_DISABLE_PROMETHEUS_OPERATOR:-true}"
+export SO_DISABLE_PROMETHEUS_OPERATOR
 
-for i in "${!KUBECONFIGS[@]}"; do
-  KUBECONFIG="${KUBECONFIGS[$i]}" DEPLOY_DIR="${ARTIFACTS}/deploy/${i}" timeout --foreground -v 10m "${parent_dir}/../ci-deploy-release.sh" "${SO_IMAGE}" &
-  ci_deploy_bg_pids["${i}"]=$!
-done
+SO_ENABLE_OPENSHIFT_USER_WORKLOAD_MONITORING="${SO_ENABLE_OPENSHIFT_USER_WORKLOAD_MONITORING:-true}"
+export SO_ENABLE_OPENSHIFT_USER_WORKLOAD_MONITORING
 
-for pid in "${ci_deploy_bg_pids[@]}"; do
-  wait "${pid}"
-done
+SO_SCYLLA_OPERATOR_INSTALL_MODE="${SO_SCYLLA_OPERATOR_INSTALL_MODE:-manifests}"
+export SO_SCYLLA_OPERATOR_INSTALL_MODE
 
-KUBECONFIG="${KUBECONFIGS[0]}" apply-e2e-workarounds
-KUBECONFIG="${KUBECONFIGS[0]}" run-e2e
+run-deploy-script-in-all-clusters "${parent_dir}/../ci-deploy-release.sh"
+
+apply-e2e-workarounds-in-all-clusters
+run-e2e

@@ -17,7 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"github.com/scylladb/scylla-operator/pkg/helpers/slices"
+	oslices "github.com/scylladb/scylla-operator/pkg/helpers/slices"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -88,13 +88,13 @@ type NodeConfigNodeStatus struct {
 }
 
 func (c NodeConfigConditions) ToMetaV1Conditions() []metav1.Condition {
-	return slices.ConvertSlice(c, func(from NodeConfigCondition) metav1.Condition {
+	return oslices.ConvertSlice(c, func(from NodeConfigCondition) metav1.Condition {
 		return from.ToMetaV1Condition()
 	})
 }
 
 func NewNodeConfigConditions(cs []metav1.Condition) NodeConfigConditions {
-	return slices.ConvertSlice(cs, func(from metav1.Condition) NodeConfigCondition {
+	return oslices.ConvertSlice(cs, func(from metav1.Condition) NodeConfigCondition {
 		return NewNodeConfigCondition(from)
 	})
 }
@@ -229,14 +229,20 @@ type NodeConfigSpec struct {
 	// +kubebuilder:validation:Required
 	Placement NodeConfigPlacement `json:"placement"`
 
-	// disableOptimizations controls if nodes matching placement requirements
-	// are going to be optimized. Turning off optimizations on already optimized
-	// Nodes does not revert changes.
+	// TODO(rzetelskik): rename this field to indicate that this only affects ScyllaDB-specific performance tuning (e.g. DisablePerftune) in the next API version.
+	// disableOptimizations controls if nodes matching placement requirements are going to be optimized for performance.
+	// Turning off optimizations on already optimized Nodes does not revert changes.
+	// See https://operator.docs.scylladb.com/stable/architecture/tuning.html for details.
 	DisableOptimizations bool `json:"disableOptimizations"`
 
 	// localDiskSetup contains options of automatic local disk setup.
 	// +optional
 	LocalDiskSetup *LocalDiskSetup `json:"localDiskSetup"`
+
+	// sysctls specifies a list of sysctls to configure on the node.
+	// Removing parameters from this list does not revert already applied configurations.
+	// +optional
+	Sysctls []corev1.Sysctl `json:"sysctls,omitempty"`
 }
 
 // +kubebuilder:object:root=true

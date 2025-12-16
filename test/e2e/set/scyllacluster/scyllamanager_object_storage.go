@@ -14,7 +14,7 @@ import (
 	g "github.com/onsi/ginkgo/v2"
 	o "github.com/onsi/gomega"
 	"github.com/scylladb/scylla-manager/v3/pkg/managerclient"
-	configassests "github.com/scylladb/scylla-operator/assets/config"
+	configassets "github.com/scylladb/scylla-operator/assets/config"
 	scyllav1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1"
 	"github.com/scylladb/scylla-operator/pkg/controllerhelpers"
 	"github.com/scylladb/scylla-operator/pkg/naming"
@@ -26,7 +26,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 )
 
@@ -40,10 +39,7 @@ var _ = g.Describe("Scylla Manager integration", framework.RequiresObjectStorage
 		postSchemaRestoreHook      func(context.Context, *framework.Framework, *scyllav1.ScyllaCluster)
 	}
 
-	g.DescribeTable("should register cluster, sync backup tasks and support manual restore procedure", func(e entry) {
-		ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
-		defer cancel()
-
+	g.DescribeTable("should register cluster, sync backup tasks and support manual restore procedure", func(ctx g.SpecContext, e entry) {
 		sourceSC := f.GetDefaultScyllaCluster()
 		sourceSC.Spec.Datacenter.Racks[0].Members = 1
 
@@ -54,32 +50,21 @@ var _ = g.Describe("Scylla Manager integration", framework.RequiresObjectStorage
 			sourceSC.Spec.Version = e.scyllaVersion
 		}
 
-		objectStorageType := f.GetObjectStorageType()
-		switch objectStorageType {
-		case framework.ObjectStorageTypeGCS:
-			gcServiceAccountKey := f.GetGCSServiceAccountKey()
-			o.Expect(gcServiceAccountKey).NotTo(o.BeEmpty())
+		objectStorageSettings, ok := f.GetClusterObjectStorageSettings()
+		o.Expect(ok).To(o.BeTrue(), "cluster object storage settings must be configured for this test")
 
-			sourceSC = setUpGCSCredentials(ctx, f.KubeClient().CoreV1(), sourceSC, f.Namespace(), gcServiceAccountKey)
-		case framework.ObjectStorageTypeS3:
-			s3CredentialsFile := f.GetS3CredentialsFile()
-			o.Expect(s3CredentialsFile).NotTo(o.BeEmpty())
+		setUpObjectStorageCredentials(ctx, f.Namespace(), f.Client, sourceSC, objectStorageSettings)
 
-			sourceSC = setUpS3Credentials(ctx, f.KubeClient().CoreV1(), sourceSC, f.Namespace(), s3CredentialsFile)
-		default:
-			g.Fail("unsupported object storage type")
-		}
-
-		objectStorageLocation := fmt.Sprintf("%s:%s", f.GetObjectStorageProvider(), f.GetObjectStorageBucket())
+		objectStorageLocation := utils.LocationForScyllaManager(objectStorageSettings)
 
 		framework.By("Creating source ScyllaCluster")
 		sourceSC, err := f.ScyllaClient().ScyllaV1().ScyllaClusters(f.Namespace()).Create(ctx, sourceSC, metav1.CreateOptions{})
 		o.Expect(err).NotTo(o.HaveOccurred())
 
 		framework.By("Waiting for source ScyllaCluster to roll out (RV=%s)", sourceSC.ResourceVersion)
-		waitCtx1, waitCtx1Cancel := utils.ContextForRollout(ctx, sourceSC)
-		defer waitCtx1Cancel()
-		sourceSC, err = controllerhelpers.WaitForScyllaClusterState(waitCtx1, f.ScyllaClient().ScyllaV1().ScyllaClusters(sourceSC.Namespace), sourceSC.Name, controllerhelpers.WaitForStateOptions{}, utils.IsScyllaClusterRolledOut)
+		sourceScyllaClusterRolloutCtx, sourceScyllaClusterRolloutCtxCancel := utils.ContextForRollout(ctx, sourceSC)
+		defer sourceScyllaClusterRolloutCtxCancel()
+		sourceSC, err = controllerhelpers.WaitForScyllaClusterState(sourceScyllaClusterRolloutCtx, f.ScyllaClient().ScyllaV1().ScyllaClusters(sourceSC.Namespace), sourceSC.Name, controllerhelpers.WaitForStateOptions{}, utils.IsScyllaClusterRolledOut)
 		o.Expect(err).NotTo(o.HaveOccurred())
 
 		scyllaclusterverification.Verify(ctx, f.KubeClient(), f.ScyllaClient(), sourceSC)
@@ -91,18 +76,16 @@ var _ = g.Describe("Scylla Manager integration", framework.RequiresObjectStorage
 		di := verification.InsertAndVerifyCQLData(ctx, sourceHosts)
 		defer di.Close()
 
-		framework.By("Waiting for source ScyllaCluster to register with Scylla Manager")
-		waitCtx2, waitCtx2Cancel := utils.ContextForManagerSync(ctx, sourceSC)
-		defer waitCtx2Cancel()
-		sourceSC, err = controllerhelpers.WaitForScyllaClusterState(waitCtx2, f.ScyllaClient().ScyllaV1().ScyllaClusters(sourceSC.Namespace), sourceSC.Name, controllerhelpers.WaitForStateOptions{}, utils.IsScyllaClusterRegisteredWithManager)
-		o.Expect(err).NotTo(o.HaveOccurred())
-		o.Expect(sourceSC.Status.ManagerID).NotTo(o.BeNil())
-		o.Expect(*sourceSC.Status.ManagerID).NotTo(o.BeEmpty())
-
 		framework.By("Scheduling a backup for source ScyllaCluster")
 		sourceSCCopy := sourceSC.DeepCopy()
 		sourceSCCopy.Spec.Backups = append(sourceSCCopy.Spec.Backups, scyllav1.BackupTaskSpec{
 			TaskSpec: scyllav1.TaskSpec{
+				SchedulerTaskSpec: scyllav1.SchedulerTaskSpec{
+					NumRetries: pointer.Ptr[int64](utils.ScyllaDBManagerTaskNumRetries),
+					RetryWait: &metav1.Duration{
+						Duration: utils.ScyllaDBManagerTaskRetryWait,
+					},
+				},
 				Name: "backup",
 			},
 			Location:  []string{objectStorageLocation},
@@ -139,9 +122,9 @@ var _ = g.Describe("Scylla Manager integration", framework.RequiresObjectStorage
 			return false, nil
 		}
 
-		waitCtx3, waitCtx3Cancel := utils.ContextForManagerSync(ctx, sourceSC)
-		defer waitCtx3Cancel()
-		sourceSC, err = controllerhelpers.WaitForScyllaClusterState(waitCtx3, f.ScyllaClient().ScyllaV1().ScyllaClusters(sourceSC.Namespace), sourceSC.Name, controllerhelpers.WaitForStateOptions{}, backupTaskScheduledCond)
+		taskSchedulingCtx, taskSchedulingCtxCancel := utils.ContextForManagerSync(ctx, sourceSC)
+		defer taskSchedulingCtxCancel()
+		sourceSC, err = controllerhelpers.WaitForScyllaClusterState(taskSchedulingCtx, f.ScyllaClient().ScyllaV1().ScyllaClusters(sourceSC.Namespace), sourceSC.Name, controllerhelpers.WaitForStateOptions{}, backupTaskScheduledCond)
 		o.Expect(err).NotTo(o.HaveOccurred())
 		o.Expect(sourceSC.Status.Repairs).To(o.BeEmpty())
 		o.Expect(sourceSC.Status.Backups).To(o.HaveLen(1))
@@ -193,9 +176,9 @@ var _ = g.Describe("Scylla Manager integration", framework.RequiresObjectStorage
 			return false, nil
 		}
 
-		waitCtx4, waitCtx4Cancel := utils.ContextForManagerSync(ctx, sourceSC)
-		defer waitCtx4Cancel()
-		sourceSC, err = controllerhelpers.WaitForScyllaClusterState(waitCtx4, f.ScyllaClient().ScyllaV1().ScyllaClusters(sourceSC.Namespace), sourceSC.Name, controllerhelpers.WaitForStateOptions{}, backupTaskUpdatedCond)
+		taskUpdateCtx, taskUpdateCtxCancel := utils.ContextForManagerSync(ctx, sourceSC)
+		defer taskUpdateCtxCancel()
+		sourceSC, err = controllerhelpers.WaitForScyllaClusterState(taskUpdateCtx, f.ScyllaClient().ScyllaV1().ScyllaClusters(sourceSC.Namespace), sourceSC.Name, controllerhelpers.WaitForStateOptions{}, backupTaskUpdatedCond)
 		o.Expect(err).NotTo(o.HaveOccurred())
 
 		o.Expect(sourceSC.Status.Backups).To(o.HaveLen(1))
@@ -215,21 +198,23 @@ var _ = g.Describe("Scylla Manager integration", framework.RequiresObjectStorage
 		o.Expect(backupTask.Properties.(map[string]interface{})["location"]).To(o.ConsistOf(sourceSC.Status.Backups[0].Location))
 		o.Expect(backupTask.Properties.(map[string]interface{})["retention"].(json.Number).Int64()).To(o.Equal(*sourceSC.Status.Backups[0].Retention))
 
-		// Sanity check to avoid panics in the polling func.
+		// Sanity check to avoid panics.
 		o.Expect(sourceSC.Status.ManagerID).NotTo(o.BeNil())
+		sourceManagerClusterID := *sourceSC.Status.ManagerID
+		o.Expect(sourceManagerClusterID).NotTo(o.BeEmpty())
 
-		var backupProgress managerclient.BackupProgress
-		framework.By("Waiting for backup to finish")
-		err = wait.PollUntilContextTimeout(ctx, 5*time.Second, 10*time.Minute, true, func(context.Context) (done bool, err error) {
-			backupProgress, err = managerClient.BackupProgress(ctx, *sourceSC.Status.ManagerID, backupTask.ID, "latest")
-			if err != nil {
-				return false, err
-			}
+		framework.By("Waiting for the backup task to finish")
+		o.Eventually(verification.VerifyScyllaDBManagerBackupTaskCompleted).
+			WithContext(ctx).
+			WithTimeout(utils.ScyllaDBManagerTaskCompletionTimeout).
+			WithPolling(5*time.Second).
+			WithArguments(managerClient, sourceManagerClusterID, backupTask.ID).
+			Should(o.Succeed())
 
-			return backupProgress.Run.Status == managerclient.TaskStatusDone, nil
-		})
+		backupProgress, err := managerClient.BackupProgress(ctx, sourceManagerClusterID, backupTask.ID, "latest")
 		o.Expect(err).NotTo(o.HaveOccurred())
-		o.Expect(backupProgress.Progress.SnapshotTag).NotTo(o.BeEmpty())
+		snapshotTag := backupProgress.Progress.SnapshotTag
+		o.Expect(snapshotTag).NotTo(o.BeEmpty())
 
 		framework.By("Deleting the backup task for source ScyllaCluster")
 		sourceSC, err = f.ScyllaClient().ScyllaV1().ScyllaClusters(f.Namespace()).Patch(
@@ -247,15 +232,24 @@ var _ = g.Describe("Scylla Manager integration", framework.RequiresObjectStorage
 			return len(cluster.Status.Backups) == 0, nil
 		}
 
-		waitCtx5, waitCtx5Cancel := utils.ContextForManagerSync(ctx, sourceSC)
-		defer waitCtx5Cancel()
-		sourceSC, err = controllerhelpers.WaitForScyllaClusterState(waitCtx5, f.ScyllaClient().ScyllaV1().ScyllaClusters(sourceSC.Namespace), sourceSC.Name, controllerhelpers.WaitForStateOptions{}, backupTaskDeletedCond)
+		taskDeletionCtx, taskDeletionCtxCancel := utils.ContextForManagerSync(ctx, sourceSC)
+		defer taskDeletionCtxCancel()
+		sourceSC, err = controllerhelpers.WaitForScyllaClusterState(taskDeletionCtx, f.ScyllaClient().ScyllaV1().ScyllaClusters(sourceSC.Namespace), sourceSC.Name, controllerhelpers.WaitForStateOptions{}, backupTaskDeletedCond)
 		o.Expect(err).NotTo(o.HaveOccurred())
 
 		framework.By("Verifying that backup task deletion was synchronized")
-		tasks, err = managerClient.ListTasks(ctx, *sourceSC.Status.ManagerID, "backup", false, "", "")
-		o.Expect(err).NotTo(o.HaveOccurred())
-		o.Expect(tasks.TaskListItemSlice).To(o.BeEmpty())
+		// Progressing conditions of the underlying ScyllaDBManagerTasks are not propagated to ScyllaClusters by the migration controller,
+		// neither does the controller await the deletion of ScyllaDBManagerTasks.
+		// Task deletion from ScyllaDB Manager state is asynchronous to ScyllaCluster state update.
+		o.Eventually(func(eo o.Gomega, ctx context.Context) {
+			tasks, err = managerClient.ListTasks(ctx, sourceManagerClusterID, "backup", false, "", "")
+			eo.Expect(err).NotTo(o.HaveOccurred())
+			eo.Expect(tasks.TaskListItemSlice).To(o.BeEmpty())
+		}).
+			WithContext(ctx).
+			WithTimeout(utils.SyncTimeout).
+			WithPolling(5 * time.Second).
+			Should(o.Succeed())
 
 		// Close the existing session to avoid polluting the logs.
 		di.Close()
@@ -270,10 +264,11 @@ var _ = g.Describe("Scylla Manager integration", framework.RequiresObjectStorage
 		})
 		o.Expect(err).NotTo(o.HaveOccurred())
 
-		waitCtx6, waitCtx6Cancel := context.WithCancel(ctx)
-		defer waitCtx6Cancel()
+		framework.By("Waiting for source ScyllaCluster to be deleted")
+		sourceScyllaClusterDeletionCtx, sourceScyllaClusterDeletionCtxCancel := context.WithCancel(ctx)
+		defer sourceScyllaClusterDeletionCtxCancel()
 		err = framework.WaitForObjectDeletion(
-			waitCtx6,
+			sourceScyllaClusterDeletionCtx,
 			f.DynamicClient(),
 			scyllav1.GroupVersion.WithResource("scyllaclusters"),
 			sourceSC.Namespace,
@@ -291,29 +286,16 @@ var _ = g.Describe("Scylla Manager integration", framework.RequiresObjectStorage
 			e.preTargetClusterCreateHook(targetSC)
 		}
 
-		switch objectStorageType {
-		case framework.ObjectStorageTypeGCS:
-			gcServiceAccountKey := f.GetGCSServiceAccountKey()
-			o.Expect(gcServiceAccountKey).NotTo(o.BeEmpty())
-
-			targetSC = setUpGCSCredentials(ctx, f.KubeClient().CoreV1(), targetSC, f.Namespace(), gcServiceAccountKey)
-		case framework.ObjectStorageTypeS3:
-			s3CredentialsFile := f.GetS3CredentialsFile()
-			o.Expect(s3CredentialsFile).NotTo(o.BeEmpty())
-
-			targetSC = setUpS3Credentials(ctx, f.KubeClient().CoreV1(), targetSC, f.Namespace(), s3CredentialsFile)
-		default:
-			g.Fail("unsupported object storage type")
-		}
+		setUpObjectStorageCredentials(ctx, f.Namespace(), f.Client, targetSC, objectStorageSettings)
 
 		framework.By("Creating target ScyllaCluster")
 		targetSC, err = f.ScyllaClient().ScyllaV1().ScyllaClusters(f.Namespace()).Create(ctx, targetSC, metav1.CreateOptions{})
 		o.Expect(err).NotTo(o.HaveOccurred())
 
 		framework.By("Waiting for target ScyllaCluster to roll out (RV=%s)", targetSC.ResourceVersion)
-		waitCtx7, waitCtx7Cancel := utils.ContextForRollout(ctx, targetSC)
-		defer waitCtx7Cancel()
-		targetSC, err = controllerhelpers.WaitForScyllaClusterState(waitCtx7, f.ScyllaClient().ScyllaV1().ScyllaClusters(targetSC.Namespace), targetSC.Name, controllerhelpers.WaitForStateOptions{}, utils.IsScyllaClusterRolledOut)
+		targetScyllaClusterRolloutCtx, targetScyllaClusterRolloutCtxCancel := utils.ContextForRollout(ctx, targetSC)
+		defer targetScyllaClusterRolloutCtxCancel()
+		targetSC, err = controllerhelpers.WaitForScyllaClusterState(targetScyllaClusterRolloutCtx, f.ScyllaClient().ScyllaV1().ScyllaClusters(targetSC.Namespace), targetSC.Name, controllerhelpers.WaitForStateOptions{}, utils.IsScyllaClusterRolledOut)
 		o.Expect(err).NotTo(o.HaveOccurred())
 
 		scyllaclusterverification.Verify(ctx, f.KubeClient(), f.ScyllaClient(), targetSC)
@@ -337,14 +319,16 @@ var _ = g.Describe("Scylla Manager integration", framework.RequiresObjectStorage
 		// Close the existing session to avoid polluting the logs.
 		di.Close()
 
-		framework.By("Waiting for target ScyllaCluster to sync with Scylla Manager")
-		waitCtx8, waitCtx8Cancel := utils.ContextForManagerSync(ctx, targetSC)
-		defer waitCtx8Cancel()
-		targetSC, err = controllerhelpers.WaitForScyllaClusterState(waitCtx8, f.ScyllaClient().ScyllaV1().ScyllaClusters(targetSC.Namespace), targetSC.Name, controllerhelpers.WaitForStateOptions{}, utils.IsScyllaClusterRegisteredWithManager)
+		framework.By("Waiting for ScyllaDB Manager cluster ID to propagate to target ScyllaCluster's status")
+		targetRegistrationCtx, targetRegistrationCtxCancel := utils.ContextForManagerSync(ctx, targetSC)
+		defer targetRegistrationCtxCancel()
+		targetSC, err = controllerhelpers.WaitForScyllaClusterState(targetRegistrationCtx, f.ScyllaClient().ScyllaV1().ScyllaClusters(targetSC.Namespace), targetSC.Name, controllerhelpers.WaitForStateOptions{}, utils.IsScyllaClusterRegisteredWithManager)
 		o.Expect(err).NotTo(o.HaveOccurred())
+
 		// Assert presence of target SC's manager ID before using it to register a restore task.
 		o.Expect(targetSC.Status.ManagerID).NotTo(o.BeNil())
-		o.Expect(*targetSC.Status.ManagerID).NotTo(o.BeEmpty())
+		targetManagerClusterID := *targetSC.Status.ManagerID
+		o.Expect(targetManagerClusterID).NotTo(o.BeEmpty())
 
 		scyllaManagerPods, err := f.KubeAdminClient().CoreV1().Pods(naming.ScyllaManagerNamespace).List(ctx, metav1.ListOptions{
 			LabelSelector: naming.ManagerSelector().String(),
@@ -359,10 +343,12 @@ var _ = g.Describe("Scylla Manager integration", framework.RequiresObjectStorage
 			Command: []string{
 				"sctool",
 				"restore",
-				fmt.Sprintf("--cluster=%s", *targetSC.Status.ManagerID),
+				fmt.Sprintf("--cluster=%s", targetManagerClusterID),
 				fmt.Sprintf("--location=%s", objectStorageLocation),
-				fmt.Sprintf("--snapshot-tag=%s", backupProgress.Progress.SnapshotTag),
+				fmt.Sprintf("--snapshot-tag=%s", snapshotTag),
 				"--restore-schema",
+				fmt.Sprintf("--num-retries=%d", utils.ScyllaDBManagerTaskNumRetries),
+				fmt.Sprintf("--retry-wait=%s", utils.ScyllaDBManagerTaskRetryWait),
 			},
 			Namespace:     scyllaManagerPod.Namespace,
 			PodName:       scyllaManagerPod.Name,
@@ -372,48 +358,16 @@ var _ = g.Describe("Scylla Manager integration", framework.RequiresObjectStorage
 		})
 		o.Expect(err).NotTo(o.HaveOccurred(), stdout, stderr)
 
-		_, schemaRestoreTaskID, err := managerClient.TaskSplit(ctx, *targetSC.Status.ManagerID, strings.TrimSpace(stdout))
+		_, schemaRestoreTaskID, err := managerClient.TaskSplit(ctx, targetManagerClusterID, strings.TrimSpace(stdout))
 		o.Expect(err).NotTo(o.HaveOccurred())
-
-		// Sanity check to avoid panics in closure.
-		o.Expect(targetSC.Status.ManagerID).NotTo(o.BeNil())
-
-		isRestoreTaskStatusDone := func(g o.Gomega, ctx context.Context, restoreTaskID string) bool {
-			restoreProgress, err := managerClient.RestoreProgress(ctx, *targetSC.Status.ManagerID, restoreTaskID, "latest")
-			g.Expect(err).NotTo(o.HaveOccurred())
-
-			return restoreProgress.Run.Status == managerclient.TaskStatusDone
-		}
 
 		framework.By("Waiting for schema restore to finish")
-		o.Eventually(isRestoreTaskStatusDone).
+		o.Eventually(verification.VerifyScyllaDBManagerRestoreTaskCompleted).
 			WithContext(ctx).
-			WithTimeout(10 * time.Minute).
-			WithPolling(5 * time.Second).
-			WithArguments(schemaRestoreTaskID.String()).
-			Should(o.BeTrue())
-
-		framework.By("Initiating a rolling restart of the target ScyllaCluster")
-		_, err = f.ScyllaClient().ScyllaV1().ScyllaClusters(f.Namespace()).Patch(
-			ctx,
-			targetSC.Name,
-			types.MergePatchType,
-			[]byte(`{"spec": {"forceRedeploymentReason": "schema restored"}}`),
-			metav1.PatchOptions{},
-		)
-		o.Expect(err).NotTo(o.HaveOccurred())
-
-		framework.By("Waiting for the target ScyllaCluster to roll out")
-		waitCtx9, waitCtx9Cancel := utils.ContextForRollout(ctx, targetSC)
-		defer waitCtx9Cancel()
-		targetSC, err = controllerhelpers.WaitForScyllaClusterState(waitCtx9, f.ScyllaClient().ScyllaV1().ScyllaClusters(targetSC.Namespace), targetSC.Name, controllerhelpers.WaitForStateOptions{}, utils.IsScyllaClusterRolledOut)
-		o.Expect(err).NotTo(o.HaveOccurred())
-		// Assert presence of target SC's manager ID before using it to register a restore task.
-		o.Expect(targetSC.Status.ManagerID).NotTo(o.BeNil())
-		o.Expect(*targetSC.Status.ManagerID).NotTo(o.BeEmpty())
-
-		scyllaclusterverification.Verify(ctx, f.KubeClient(), f.ScyllaClient(), targetSC)
-		scyllaclusterverification.WaitForFullQuorum(ctx, f.KubeClient().CoreV1(), targetSC)
+			WithTimeout(utils.ScyllaDBManagerTaskCompletionTimeout).
+			WithPolling(5*time.Second).
+			WithArguments(managerClient, targetManagerClusterID, schemaRestoreTaskID.String()).
+			Should(o.Succeed())
 
 		if e.postSchemaRestoreHook != nil {
 			e.postSchemaRestoreHook(ctx, f, targetSC)
@@ -424,10 +378,12 @@ var _ = g.Describe("Scylla Manager integration", framework.RequiresObjectStorage
 			Command: []string{
 				"sctool",
 				"restore",
-				fmt.Sprintf("--cluster=%s", *targetSC.Status.ManagerID),
+				fmt.Sprintf("--cluster=%s", targetManagerClusterID),
 				fmt.Sprintf("--location=%s", objectStorageLocation),
-				fmt.Sprintf("--snapshot-tag=%s", backupProgress.Progress.SnapshotTag),
+				fmt.Sprintf("--snapshot-tag=%s", snapshotTag),
 				"--restore-tables",
+				fmt.Sprintf("--num-retries=%d", utils.ScyllaDBManagerTaskNumRetries),
+				fmt.Sprintf("--retry-wait=%s", utils.ScyllaDBManagerTaskRetryWait),
 			},
 			Namespace:     scyllaManagerPod.Namespace,
 			PodName:       scyllaManagerPod.Name,
@@ -437,16 +393,16 @@ var _ = g.Describe("Scylla Manager integration", framework.RequiresObjectStorage
 		})
 		o.Expect(err).NotTo(o.HaveOccurred(), stdout, stderr)
 
-		_, tablesRestoreTaskID, err := managerClient.TaskSplit(ctx, *targetSC.Status.ManagerID, strings.TrimSpace(stdout))
+		_, tablesRestoreTaskID, err := managerClient.TaskSplit(ctx, targetManagerClusterID, strings.TrimSpace(stdout))
 		o.Expect(err).NotTo(o.HaveOccurred())
 
 		framework.By("Waiting for tables restore to finish")
-		o.Eventually(isRestoreTaskStatusDone).
+		o.Eventually(verification.VerifyScyllaDBManagerRestoreTaskCompleted).
 			WithContext(ctx).
-			WithTimeout(10 * time.Minute).
-			WithPolling(5 * time.Second).
-			WithArguments(tablesRestoreTaskID.String()).
-			Should(o.BeTrue())
+			WithTimeout(utils.ScyllaDBManagerTaskCompletionTimeout).
+			WithPolling(5*time.Second).
+			WithArguments(managerClient, targetManagerClusterID, tablesRestoreTaskID.String()).
+			Should(o.Succeed())
 
 		framework.By("Validating that the data restored from source cluster backup is available in target cluster")
 		targetHosts, err = utils.GetBroadcastRPCAddresses(ctx, f.KubeClient().CoreV1(), targetSC)
@@ -461,14 +417,35 @@ var _ = g.Describe("Scylla Manager integration", framework.RequiresObjectStorage
 		// Restoring schema with ScyllaDB OS 5.4.X or ScyllaDB Enterprise 2024.1.X and consistent_cluster_management isn’t supported.
 		// This test validates a workaround explained in the docs - https://operator.docs.scylladb.com/stable/nodeoperations/restore.html
 		g.Entry("using workaround for consistent_cluster_management for ScyllaDB Enterprise", entry{
-			scyllaRepository: "docker.io/scylladb/scylla-enterprise",
-			scyllaVersion:    configassests.Project.Operator.ScyllaDBEnterpriseVersionNeedingConsistentClusterManagementOverride,
+			scyllaRepository: configassets.ScyllaDBEnterpriseImageRepository,
+			scyllaVersion:    configassets.Project.Operator.ScyllaDBEnterpriseVersionNeedingConsistentClusterManagementOverride,
 			preTargetClusterCreateHook: func(targetCluster *scyllav1.ScyllaCluster) {
 				targetCluster.Spec.ScyllaArgs = "--consistent-cluster-management=false"
 			},
 			postSchemaRestoreHook: func(ctx context.Context, f *framework.Framework, targetSC *scyllav1.ScyllaCluster) {
+				var err error
+
+				framework.By("Initiating a rolling restart of the target ScyllaCluster")
+				targetSC, err = f.ScyllaClient().ScyllaV1().ScyllaClusters(f.Namespace()).Patch(
+					ctx,
+					targetSC.Name,
+					types.MergePatchType,
+					[]byte(`{"spec": {"forceRedeploymentReason": "schema restored"}}`),
+					metav1.PatchOptions{},
+				)
+				o.Expect(err).NotTo(o.HaveOccurred())
+
+				framework.By("Waiting for the target ScyllaCluster to roll out")
+				postSchemaRestoreTargetRolloutCtx, postSchemaRestoreTargetRolloutCtxCancel := utils.ContextForRollout(ctx, targetSC)
+				defer postSchemaRestoreTargetRolloutCtxCancel()
+				targetSC, err = controllerhelpers.WaitForScyllaClusterState(postSchemaRestoreTargetRolloutCtx, f.ScyllaClient().ScyllaV1().ScyllaClusters(targetSC.Namespace), targetSC.Name, controllerhelpers.WaitForStateOptions{}, utils.IsScyllaClusterRolledOut)
+				o.Expect(err).NotTo(o.HaveOccurred())
+
+				scyllaclusterverification.Verify(ctx, f.KubeClient(), f.ScyllaClient(), targetSC)
+				scyllaclusterverification.WaitForFullQuorum(ctx, f.KubeClient().CoreV1(), targetSC)
+
 				framework.By("Enabling raft in target cluster")
-				_, err := f.ScyllaClient().ScyllaV1().ScyllaClusters(f.Namespace()).Patch(
+				_, err = f.ScyllaClient().ScyllaV1().ScyllaClusters(f.Namespace()).Patch(
 					ctx,
 					targetSC.Name,
 					types.JSONPatchType,
@@ -489,39 +466,25 @@ var _ = g.Describe("Scylla Manager integration", framework.RequiresObjectStorage
 		}),
 	)
 
-	g.It("should discover cluster and sync errors for invalid tasks and invalid updates to existing tasks", func() {
-		ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
-		defer cancel()
-
+	g.It("should discover cluster and sync errors for invalid tasks and invalid updates to existing tasks", func(ctx g.SpecContext) {
 		sc := f.GetDefaultScyllaCluster()
 		sc.Spec.Datacenter.Racks[0].Members = 1
 
-		objectStorageType := f.GetObjectStorageType()
-		switch objectStorageType {
-		case framework.ObjectStorageTypeGCS:
-			gcServiceAccountKey := f.GetGCSServiceAccountKey()
-			o.Expect(gcServiceAccountKey).NotTo(o.BeEmpty())
+		objectStorageSettings, ok := f.GetClusterObjectStorageSettings()
+		o.Expect(ok).To(o.BeTrue(), "cluster object storage settings must be configured for this test")
 
-			sc = setUpGCSCredentials(ctx, f.KubeClient().CoreV1(), sc, f.Namespace(), gcServiceAccountKey)
-		case framework.ObjectStorageTypeS3:
-			s3CredentialsFile := f.GetS3CredentialsFile()
-			o.Expect(s3CredentialsFile).NotTo(o.BeEmpty())
+		setUpObjectStorageCredentials(ctx, f.Namespace(), f.Client, sc, objectStorageSettings)
 
-			sc = setUpS3Credentials(ctx, f.KubeClient().CoreV1(), sc, f.Namespace(), s3CredentialsFile)
-		default:
-			g.Fail("unsupported object storage type")
-		}
-
-		validObjectStorageLocation := fmt.Sprintf("%s:%s", f.GetObjectStorageProvider(), f.GetObjectStorageBucket())
+		validObjectStorageLocation := utils.LocationForScyllaManager(objectStorageSettings)
 
 		framework.By("Creating a ScyllaCluster")
 		sc, err := f.ScyllaClient().ScyllaV1().ScyllaClusters(f.Namespace()).Create(ctx, sc, metav1.CreateOptions{})
 		o.Expect(err).NotTo(o.HaveOccurred())
 
 		framework.By("Waiting for the ScyllaCluster to roll out (RV=%s)", sc.ResourceVersion)
-		waitCtx1, waitCtx1Cancel := utils.ContextForRollout(ctx, sc)
-		defer waitCtx1Cancel()
-		sc, err = controllerhelpers.WaitForScyllaClusterState(waitCtx1, f.ScyllaClient().ScyllaV1().ScyllaClusters(sc.Namespace), sc.Name, controllerhelpers.WaitForStateOptions{}, utils.IsScyllaClusterRolledOut)
+		rolloutCtx, rolloutCtxCancel := utils.ContextForRollout(ctx, sc)
+		defer rolloutCtxCancel()
+		sc, err = controllerhelpers.WaitForScyllaClusterState(rolloutCtx, f.ScyllaClient().ScyllaV1().ScyllaClusters(sc.Namespace), sc.Name, controllerhelpers.WaitForStateOptions{}, utils.IsScyllaClusterRolledOut)
 		o.Expect(err).NotTo(o.HaveOccurred())
 
 		scyllaclusterverification.Verify(ctx, f.KubeClient(), f.ScyllaClient(), sc)
@@ -533,11 +496,16 @@ var _ = g.Describe("Scylla Manager integration", framework.RequiresObjectStorage
 		di := verification.InsertAndVerifyCQLData(ctx, hosts)
 		defer di.Close()
 
-		framework.By("Waiting for ScyllaCluster to register with Scylla Manager")
-		waitCtx2, waitCtx2Cancel := utils.ContextForManagerSync(ctx, sc)
-		defer waitCtx2Cancel()
-		sc, err = controllerhelpers.WaitForScyllaClusterState(waitCtx2, f.ScyllaClient().ScyllaV1().ScyllaClusters(sc.Namespace), sc.Name, controllerhelpers.WaitForStateOptions{}, utils.IsScyllaClusterRegisteredWithManager)
+		// We get the ScyllaDB Manager cluster ID from the ScyllaCluster's status explicitly as the tasks may report errors without the cluster being registered with ScyllaDB Manager first.
+		framework.By("Waiting for ScyllaDB Manager cluster ID to propagate to ScyllaCluster's status")
+		registrationCtx, registrationCtxCancel := context.WithTimeout(ctx, utils.SyncTimeout)
+		defer registrationCtxCancel()
+		sc, err = controllerhelpers.WaitForScyllaClusterState(registrationCtx, f.ScyllaClient().ScyllaV1().ScyllaClusters(sc.Namespace), sc.Name, controllerhelpers.WaitForStateOptions{}, utils.IsScyllaClusterRegisteredWithManager)
 		o.Expect(err).NotTo(o.HaveOccurred())
+
+		o.Expect(sc.Status.ManagerID).NotTo(o.BeNil())
+		managerClusterID := *sc.Status.ManagerID
+		o.Expect(managerClusterID).NotTo(o.BeEmpty())
 
 		framework.By("Scheduling invalid tasks for ScyllaCluster")
 		scCopy := sc.DeepCopy()
@@ -586,9 +554,16 @@ var _ = g.Describe("Scylla Manager integration", framework.RequiresObjectStorage
 			return false, nil
 		}
 
-		waitCtx3, waitCtx3Cancel := utils.ContextForManagerSync(ctx, sc)
-		defer waitCtx3Cancel()
-		sc, err = controllerhelpers.WaitForScyllaClusterState(waitCtx3, f.ScyllaClient().ScyllaV1().ScyllaClusters(sc.Namespace), sc.Name, controllerhelpers.WaitForStateOptions{}, repairTaskFailedCond, backupTaskFailedCond)
+		taskErrorSyncCtx, taskErrorSyncCtxCancel := utils.ContextForManagerSync(ctx, sc)
+		defer taskErrorSyncCtxCancel()
+		sc, err = controllerhelpers.WaitForScyllaClusterState(
+			taskErrorSyncCtx,
+			f.ScyllaClient().ScyllaV1().ScyllaClusters(sc.Namespace),
+			sc.Name,
+			controllerhelpers.WaitForStateOptions{},
+			repairTaskFailedCond,
+			backupTaskFailedCond,
+		)
 		o.Expect(err).NotTo(o.HaveOccurred())
 
 		framework.By("Verifying that only task names and errors were propagated to status")
@@ -605,13 +580,10 @@ var _ = g.Describe("Scylla Manager integration", framework.RequiresObjectStorage
 		o.Expect(err).NotTo(o.HaveOccurred())
 
 		framework.By("Verifying that tasks are not in manager state")
-		// Sanity check.
-		o.Expect(sc.Status.ManagerID).NotTo(o.BeNil())
-
-		repairTasks, err := managerClient.ListTasks(ctx, *sc.Status.ManagerID, "repair", false, "", "")
+		repairTasks, err := managerClient.ListTasks(ctx, managerClusterID, "repair", false, "", "")
 		o.Expect(err).NotTo(o.HaveOccurred())
 		o.Expect(repairTasks.TaskListItemSlice).To(o.BeEmpty())
-		backupTasks, err := managerClient.ListTasks(ctx, *sc.Status.ManagerID, "backup", false, "", "")
+		backupTasks, err := managerClient.ListTasks(ctx, managerClusterID, "backup", false, "", "")
 		o.Expect(err).NotTo(o.HaveOccurred())
 		o.Expect(backupTasks.TaskListItemSlice).To(o.BeEmpty())
 
@@ -620,6 +592,12 @@ var _ = g.Describe("Scylla Manager integration", framework.RequiresObjectStorage
 		scCopy.Spec.Backups = []scyllav1.BackupTaskSpec{
 			{
 				TaskSpec: scyllav1.TaskSpec{
+					SchedulerTaskSpec: scyllav1.SchedulerTaskSpec{
+						NumRetries: pointer.Ptr[int64](utils.ScyllaDBManagerTaskNumRetries),
+						RetryWait: &metav1.Duration{
+							Duration: utils.ScyllaDBManagerTaskRetryWait,
+						},
+					},
 					Name: "backup",
 				},
 				Location: []string{validObjectStorageLocation},
@@ -628,6 +606,12 @@ var _ = g.Describe("Scylla Manager integration", framework.RequiresObjectStorage
 		scCopy.Spec.Repairs = []scyllav1.RepairTaskSpec{
 			{
 				TaskSpec: scyllav1.TaskSpec{
+					SchedulerTaskSpec: scyllav1.SchedulerTaskSpec{
+						NumRetries: pointer.Ptr[int64](utils.ScyllaDBManagerTaskNumRetries),
+						RetryWait: &metav1.Duration{
+							Duration: utils.ScyllaDBManagerTaskRetryWait,
+						},
+					},
 					Name: "repair",
 				},
 			},
@@ -679,9 +663,16 @@ var _ = g.Describe("Scylla Manager integration", framework.RequiresObjectStorage
 			return false, nil
 		}
 
-		waitCtx4, waitCtx4Cancel := utils.ContextForManagerSync(ctx, sc)
-		defer waitCtx4Cancel()
-		sc, err = controllerhelpers.WaitForScyllaClusterState(waitCtx4, f.ScyllaClient().ScyllaV1().ScyllaClusters(sc.Namespace), sc.Name, controllerhelpers.WaitForStateOptions{}, backupTaskScheduledCond, repairTaskScheduledCond)
+		taskSchedulingCtx, taskSchedulingCtxCancel := utils.ContextForManagerSync(ctx, sc)
+		defer taskSchedulingCtxCancel()
+		sc, err = controllerhelpers.WaitForScyllaClusterState(
+			taskSchedulingCtx,
+			f.ScyllaClient().ScyllaV1().ScyllaClusters(sc.Namespace),
+			sc.Name,
+			controllerhelpers.WaitForStateOptions{},
+			backupTaskScheduledCond,
+			repairTaskScheduledCond,
+		)
 		o.Expect(err).NotTo(o.HaveOccurred())
 		o.Expect(sc.Status.Backups).To(o.HaveLen(1))
 		o.Expect(sc.Status.Backups[0].ID).NotTo(o.BeNil())
@@ -695,17 +686,14 @@ var _ = g.Describe("Scylla Manager integration", framework.RequiresObjectStorage
 		o.Expect(sc.Status.Repairs[0].Host).To(o.BeNil())
 
 		framework.By("Verifying that valid task statuses were synchronized")
-		// Sanity check.
-		o.Expect(sc.Status.ManagerID).NotTo(o.BeNil())
-
-		backupTasks, err = managerClient.ListTasks(ctx, *sc.Status.ManagerID, "backup", false, "", "")
+		backupTasks, err = managerClient.ListTasks(ctx, managerClusterID, "backup", false, "", "")
 		o.Expect(err).NotTo(o.HaveOccurred())
 		o.Expect(backupTasks.TaskListItemSlice).To(o.HaveLen(1))
 		backupTask := backupTasks.TaskListItemSlice[0]
 		o.Expect(backupTask.Name).To(o.Equal(sc.Status.Backups[0].Name))
 		o.Expect(backupTask.ID).To(o.Equal(*sc.Status.Backups[0].ID))
 
-		repairTasks, err = managerClient.ListTasks(ctx, *sc.Status.ManagerID, "repair", false, "", "")
+		repairTasks, err = managerClient.ListTasks(ctx, managerClusterID, "repair", false, "", "")
 		o.Expect(err).NotTo(o.HaveOccurred())
 		o.Expect(repairTasks.TaskListItemSlice).To(o.HaveLen(1))
 		repairTask := repairTasks.TaskListItemSlice[0]
@@ -744,9 +732,16 @@ var _ = g.Describe("Scylla Manager integration", framework.RequiresObjectStorage
 		o.Expect(sc.Spec.Repairs[0].Host).To(o.Equal(pointer.Ptr("invalid")))
 
 		framework.By("Waiting for ScyllaCluster to sync task errors with Scylla Manager")
-		waitCtx5, waitCtx5Cancel := utils.ContextForManagerSync(ctx, sc)
-		defer waitCtx5Cancel()
-		sc, err = controllerhelpers.WaitForScyllaClusterState(waitCtx5, f.ScyllaClient().ScyllaV1().ScyllaClusters(sc.Namespace), sc.Name, controllerhelpers.WaitForStateOptions{}, backupTaskFailedCond, repairTaskFailedCond)
+		taskUpdateErrorSyncCtx, taskUpdateErrorSyncCtxCancel := utils.ContextForManagerSync(ctx, sc)
+		defer taskUpdateErrorSyncCtxCancel()
+		sc, err = controllerhelpers.WaitForScyllaClusterState(
+			taskUpdateErrorSyncCtx,
+			f.ScyllaClient().ScyllaV1().ScyllaClusters(sc.Namespace),
+			sc.Name,
+			controllerhelpers.WaitForStateOptions{},
+			backupTaskFailedCond,
+			repairTaskFailedCond,
+		)
 		o.Expect(err).NotTo(o.HaveOccurred())
 
 		framework.By("Verifying that task errors were propagated and task properties retained in status")
@@ -766,11 +761,8 @@ var _ = g.Describe("Scylla Manager integration", framework.RequiresObjectStorage
 		o.Expect(sc.Status.Repairs[0].Host).To(o.BeNil())
 
 		framework.By("Verifying that tasks in manager state weren't modified")
-		// Sanity check.
-		o.Expect(sc.Status.ManagerID).NotTo(o.BeNil())
-
 		previousBackupTask := backupTask
-		backupTasks, err = managerClient.ListTasks(ctx, *sc.Status.ManagerID, "backup", false, "", "")
+		backupTasks, err = managerClient.ListTasks(ctx, managerClusterID, "backup", false, "", "")
 		o.Expect(err).NotTo(o.HaveOccurred())
 		o.Expect(backupTasks.TaskListItemSlice).To(o.HaveLen(1))
 		backupTask = backupTasks.TaskListItemSlice[0]
@@ -779,7 +771,7 @@ var _ = g.Describe("Scylla Manager integration", framework.RequiresObjectStorage
 		o.Expect(backupTask.Properties).To(o.Equal(previousBackupTask.Properties))
 
 		previousRepairTask := repairTask
-		repairTasks, err = managerClient.ListTasks(ctx, *sc.Status.ManagerID, "repair", false, "", "")
+		repairTasks, err = managerClient.ListTasks(ctx, managerClusterID, "repair", false, "", "")
 		o.Expect(err).NotTo(o.HaveOccurred())
 		o.Expect(repairTasks.TaskListItemSlice).To(o.HaveLen(1))
 		repairTask = repairTasks.TaskListItemSlice[0]
@@ -789,8 +781,28 @@ var _ = g.Describe("Scylla Manager integration", framework.RequiresObjectStorage
 	})
 })
 
-func setUpGCSCredentials(ctx context.Context, coreClient corev1client.CoreV1Interface, sc *scyllav1.ScyllaCluster, namespace string, serviceAccountKey []byte) *scyllav1.ScyllaCluster {
-	scCopy := sc.DeepCopy()
+func setUpObjectStorageCredentials(ctx context.Context, ns string, nsClient framework.Client, sc *scyllav1.ScyllaCluster, objectStorageSettings framework.ClusterObjectStorageSettings) {
+	g.GinkgoHelper()
+
+	o.Expect(objectStorageSettings.Type()).To(o.BeElementOf(framework.ObjectStorageTypeGCS, framework.ObjectStorageTypeS3))
+	switch objectStorageSettings.Type() {
+	case framework.ObjectStorageTypeGCS:
+		gcServiceAccountKey := objectStorageSettings.GCSServiceAccountKey()
+		o.Expect(gcServiceAccountKey).NotTo(o.BeEmpty())
+
+		setUpGCSCredentials(ctx, nsClient.KubeClient().CoreV1(), sc, ns, gcServiceAccountKey)
+
+	case framework.ObjectStorageTypeS3:
+		s3CredentialsFile := objectStorageSettings.S3CredentialsFile()
+		o.Expect(s3CredentialsFile).NotTo(o.BeEmpty())
+
+		setUpS3Credentials(ctx, nsClient.KubeClient().CoreV1(), sc, ns, s3CredentialsFile)
+
+	}
+}
+
+func setUpGCSCredentials(ctx context.Context, coreClient corev1client.CoreV1Interface, sc *scyllav1.ScyllaCluster, namespace string, serviceAccountKey []byte) {
+	g.GinkgoHelper()
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -804,8 +816,8 @@ func setUpGCSCredentials(ctx context.Context, coreClient corev1client.CoreV1Inte
 	secret, err := coreClient.Secrets(namespace).Create(ctx, secret, metav1.CreateOptions{})
 	o.Expect(err).NotTo(o.HaveOccurred())
 
-	for i := range scCopy.Spec.Datacenter.Racks {
-		scCopy.Spec.Datacenter.Racks[i].Volumes = append(scCopy.Spec.Datacenter.Racks[i].Volumes, corev1.Volume{
+	for i := range sc.Spec.Datacenter.Racks {
+		sc.Spec.Datacenter.Racks[i].Volumes = append(sc.Spec.Datacenter.Racks[i].Volumes, corev1.Volume{
 			Name: "gcs-service-account",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
@@ -819,19 +831,17 @@ func setUpGCSCredentials(ctx context.Context, coreClient corev1client.CoreV1Inte
 				},
 			},
 		})
-		scCopy.Spec.Datacenter.Racks[i].AgentVolumeMounts = append(scCopy.Spec.Datacenter.Racks[i].AgentVolumeMounts, corev1.VolumeMount{
+		sc.Spec.Datacenter.Racks[i].AgentVolumeMounts = append(sc.Spec.Datacenter.Racks[i].AgentVolumeMounts, corev1.VolumeMount{
 			Name:      "gcs-service-account",
 			ReadOnly:  true,
 			MountPath: "/etc/scylla-manager-agent/gcs-service-account.json",
 			SubPath:   "gcs-service-account.json",
 		})
 	}
-
-	return scCopy
 }
 
-func setUpS3Credentials(ctx context.Context, coreClient corev1client.CoreV1Interface, sc *scyllav1.ScyllaCluster, namespace string, s3CredentialsFile []byte) *scyllav1.ScyllaCluster {
-	scCopy := sc.DeepCopy()
+func setUpS3Credentials(ctx context.Context, coreClient corev1client.CoreV1Interface, sc *scyllav1.ScyllaCluster, namespace string, s3CredentialsFile []byte) {
+	g.GinkgoHelper()
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -845,8 +855,8 @@ func setUpS3Credentials(ctx context.Context, coreClient corev1client.CoreV1Inter
 	secret, err := coreClient.Secrets(namespace).Create(ctx, secret, metav1.CreateOptions{})
 	o.Expect(err).NotTo(o.HaveOccurred())
 
-	for i := range scCopy.Spec.Datacenter.Racks {
-		scCopy.Spec.Datacenter.Racks[i].Volumes = append(scCopy.Spec.Datacenter.Racks[i].Volumes, corev1.Volume{
+	for i := range sc.Spec.Datacenter.Racks {
+		sc.Spec.Datacenter.Racks[i].Volumes = append(sc.Spec.Datacenter.Racks[i].Volumes, corev1.Volume{
 			Name: "aws-credentials",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
@@ -860,13 +870,11 @@ func setUpS3Credentials(ctx context.Context, coreClient corev1client.CoreV1Inter
 				},
 			},
 		})
-		scCopy.Spec.Datacenter.Racks[i].AgentVolumeMounts = append(scCopy.Spec.Datacenter.Racks[i].AgentVolumeMounts, corev1.VolumeMount{
+		sc.Spec.Datacenter.Racks[i].AgentVolumeMounts = append(sc.Spec.Datacenter.Racks[i].AgentVolumeMounts, corev1.VolumeMount{
 			Name:      "aws-credentials",
 			ReadOnly:  true,
 			MountPath: "/var/lib/scylla-manager/.aws/credentials",
 			SubPath:   "credentials",
 		})
 	}
-
-	return scCopy
 }

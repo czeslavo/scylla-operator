@@ -11,7 +11,7 @@ import (
 	scyllav1alpha1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1alpha1"
 	"github.com/scylladb/scylla-operator/pkg/controllerhelpers"
 	"github.com/scylladb/scylla-operator/pkg/helpers"
-	"github.com/scylladb/scylla-operator/pkg/helpers/slices"
+	oslices "github.com/scylladb/scylla-operator/pkg/helpers/slices"
 	"github.com/scylladb/scylla-operator/pkg/internalapi"
 	"github.com/scylladb/scylla-operator/pkg/naming"
 	"github.com/scylladb/scylla-operator/pkg/pointer"
@@ -26,8 +26,8 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
-	setsutil "k8s.io/apimachinery/pkg/util/sets"
+	apimachineryutilerrors "k8s.io/apimachinery/pkg/util/errors"
+	apimachineryutilsets "k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/util/retry"
 	"k8s.io/klog/v2"
 )
@@ -90,7 +90,7 @@ func (sdcc *Controller) backupKeyspaces(ctx context.Context, scyllaClient *scyll
 			return fmt.Errorf("can't list snapshots on host %q: %w", host, err)
 		}
 
-		if slices.ContainsItem(snapshots, snapshotTag) {
+		if oslices.ContainsItem(snapshots, snapshotTag) {
 			return nil
 		}
 
@@ -114,7 +114,7 @@ func (sdcc *Controller) removeSnapshot(ctx context.Context, scyllaClient *scylla
 			return fmt.Errorf("can't list snapshots on host %q: %w", host, err)
 		}
 
-		snapshotSet := setsutil.NewString(snapshots...)
+		snapshotSet := apimachineryutilsets.NewString(snapshots...)
 		for _, snapshotTag := range snapshotTags {
 			if !snapshotSet.Has(snapshotTag) {
 				continue
@@ -264,7 +264,7 @@ func (sdcc *Controller) beforeNodeUpgrade(ctx context.Context, sdc *scyllav1alph
 		return true, fmt.Errorf("can't list keyspaces for host %q: %w", host, err)
 	}
 
-	keyspaceSet := setsutil.NewString(allKeyspaces...)
+	keyspaceSet := apimachineryutilsets.NewString(allKeyspaces...)
 	keyspaceSet.Delete(systemKeyspaces...)
 	klog.V(4).InfoS("Backing up data keyspaces", "ScyllaDBDatacenter", klog.KObj(sdc), "Host", host)
 	err = sdcc.backupKeyspaces(ctx, scyllaClient, []string{host}, keyspaceSet.List(), upgradeContext.DataSnapshotTag)
@@ -385,11 +385,11 @@ func (sdcc *Controller) pruneStatefulSets(
 			continue
 		}
 
-		status.Racks = slices.FilterOut(status.Racks, func(rackStatus scyllav1alpha1.RackStatus) bool {
+		status.Racks = oslices.FilterOut(status.Racks, func(rackStatus scyllav1alpha1.RackStatus) bool {
 			return rackStatus.Name == rackName
 		})
 	}
-	return progressingConditions, utilerrors.NewAggregate(errs)
+	return progressingConditions, apimachineryutilerrors.NewAggregate(errs)
 }
 
 // createMissingStatefulSets creates missing StatefulSets.
@@ -430,8 +430,8 @@ func (sdcc *Controller) createMissingStatefulSets(
 					continue
 				}
 
-				updatedRackStatus := *sdcc.calculateRackStatus(sdc, sts)
-				_, idx, ok := slices.Find(status.Racks, func(rackStatus scyllav1alpha1.RackStatus) bool {
+				updatedRackStatus := *sdcc.calculateRackStatus(sdc, rackName, sts)
+				_, idx, ok := oslices.Find(status.Racks, func(rackStatus scyllav1alpha1.RackStatus) bool {
 					return rackStatus.Name == rackName
 				})
 				if ok {
@@ -467,7 +467,7 @@ func (sdcc *Controller) createMissingStatefulSets(
 		}
 	}
 
-	return progressingConditions, utilerrors.NewAggregate(errs)
+	return progressingConditions, apimachineryutilerrors.NewAggregate(errs)
 }
 
 func (sdcc *Controller) syncStatefulSets(
@@ -518,6 +518,24 @@ func (sdcc *Controller) syncStatefulSets(
 	progressingConditions = append(progressingConditions, pruneProgressingConditions...)
 	if err != nil {
 		return progressingConditions, fmt.Errorf("can't delete StatefulSet(s): %w", err)
+	}
+
+	// Wait for ScyllaDBDatacenterNodesStatusReport controller to finish progressing before proceeding.
+	// This ensures that the status report is up to date before we start making changes,
+	// which lowers the chance of a new node being bootstrapped while the cluster is unhealthy.
+	isScyllaDBDatacenterNodesStatusReportControllerProgressing := apimeta.IsStatusConditionTrue(status.Conditions, scyllaDBDatacenterNodesStatusReportControllerProgressingCondition)
+	if isScyllaDBDatacenterNodesStatusReportControllerProgressing {
+		klog.V(4).InfoS("Waiting for ScyllaDBDatacenterNodesStatusReport controller to finish progressing", "ScyllaDBDatacenter", klog.KObj(sdc))
+		progressingConditions = append(progressingConditions, metav1.Condition{
+			Type:               statefulSetControllerProgressingCondition,
+			Status:             metav1.ConditionTrue,
+			Reason:             "WaitingForScyllaDBDatacenterNodesStatusReportController",
+			Message:            fmt.Sprintf("Waiting for ScyllaDBDatacenterNodesStatusReport controller to finish progressing"),
+			ObservedGeneration: sdc.Generation,
+		})
+	}
+	if len(progressingConditions) > 0 {
+		return progressingConditions, nil
 	}
 
 	// Before any update, make sure all StatefulSets are present.
@@ -774,7 +792,7 @@ func (sdcc *Controller) syncStatefulSets(
 						continue
 					}
 
-					_, idx, ok := slices.Find(sdc.Status.Racks, func(status scyllav1alpha1.RackStatus) bool {
+					_, idx, ok := oslices.Find(sdc.Status.Racks, func(status scyllav1alpha1.RackStatus) bool {
 						return status.Name == rackName
 					})
 					if !ok {
@@ -782,14 +800,14 @@ func (sdcc *Controller) syncStatefulSets(
 						continue
 					}
 
-					status.Racks[idx] = *sdcc.calculateRackStatus(sdc, updatedSts)
+					status.Racks[idx] = *sdcc.calculateRackStatus(sdc, rackName, updatedSts)
 				}
 			}
 			if anyStsChanged {
 				// TODO: Add expectations, not to reconcile sooner then we see this new StatefulSet in our caches. (#682)
 				time.Sleep(artificialDelayForCachesToCatchUp)
 			}
-			err = utilerrors.NewAggregate(errs)
+			err = apimachineryutilerrors.NewAggregate(errs)
 			if err != nil {
 				return progressingConditions, err
 			}
@@ -1043,14 +1061,14 @@ func (sdcc *Controller) syncStatefulSets(
 					naming.RackNameLabel,
 				)
 			}
-			_, idx, ok := slices.Find(sdc.Status.Racks, func(status scyllav1alpha1.RackStatus) bool {
+			_, idx, ok := oslices.Find(sdc.Status.Racks, func(status scyllav1alpha1.RackStatus) bool {
 				return status.Name == rackName
 			})
 			if !ok {
 				return progressingConditions, fmt.Errorf("can't find rack %q status in %q ScyllaDBDatacenter", rackName, naming.ObjRef(sdc))
 			}
 
-			status.Racks[idx] = *sdcc.calculateRackStatus(sdc, updatedSts)
+			status.Racks[idx] = *sdcc.calculateRackStatus(sdc, rackName, updatedSts)
 		}
 
 		// Wait for the StatefulSet to roll out.
@@ -1091,7 +1109,7 @@ func (sdcc *Controller) setStatefulSetsAvailableStatusCondition(
 		}
 		desiredMembers += *rackCount
 
-		rackStatus, _, found := slices.Find(status.Racks, func(status scyllav1alpha1.RackStatus) bool {
+		rackStatus, _, found := oslices.Find(status.Racks, func(status scyllav1alpha1.RackStatus) bool {
 			return status.Name == rack.Name
 		})
 		if !found {

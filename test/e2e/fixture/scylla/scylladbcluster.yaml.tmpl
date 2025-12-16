@@ -12,15 +12,15 @@ spec:
       clients:
         type: {{ .clientsBroadcastAddressType }}
   scyllaDB:
-    image: "docker.io/scylladb/scylla:{{ .scyllaDBVersion }}"
+    image: "{{ .scyllaDBRepository }}:{{ .scyllaDBVersion }}"
     enableDeveloperMode: true
   scyllaDBManagerAgent:
-    image: "docker.io/scylladb/scylla-manager-agent:{{ .scyllaDBManagerVersion }}"
+    image: "{{ .scyllaDBManagerAgentRepository }}:{{ .scyllaDBManagerVersion }}"
   datacenterTemplate:
     scyllaDB:
       resources:
         requests:
-          cpu: 10m
+          cpu: 100m
           memory: 100Mi
         limits:
           cpu: 1
@@ -34,6 +34,8 @@ spec:
       nodes: 1
     racks:
     - name: a
+    - name: b
+    - name: c
     placement:
       nodeAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
@@ -49,7 +51,7 @@ spec:
         operator: Equal
         value: scyllaclusters
   datacenters:
-  {{- range $rkcIdx, $rkc := .remoteKubernetesClusters }}
-  - name: dc-{{ $rkcIdx }}
+  {{- range $rkcKey, $rkc := .remoteKubernetesClusterMap }}
+  - name: {{ $rkcKey }}
     remoteKubernetesClusterName: {{ $rkc.Name }}
   {{- end }}

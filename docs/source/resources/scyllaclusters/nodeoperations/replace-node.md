@@ -33,7 +33,7 @@ _This procedure is for replacing one dead node. To replace more than one dead no
     ```
 1. Drain node which we would like to replace using. **This command may delete your data from local disks attached to given node!**
     ```bash
-    kubectl drain gke-scylla-demo-default-pool-b4b390a1-6j12 --ignore-daemonsets --delete-local-data
+    kubectl drain gke-scylla-demo-default-pool-b4b390a1-6j12 --ignore-daemonsets --delete-emptydir-data
     ```
 
    Pod which will be replaced should enter the `Pending` state
@@ -44,11 +44,11 @@ _This procedure is for replacing one dead node. To replace more than one dead no
     simple-cluster-us-east-1-us-east-1a-1   2/2     Running   0          3h19m
     simple-cluster-us-east-1-us-east-1a-2   0/2     Pending   0          8m14s
     ```
-1. To being node replacing, add `scylla/replace=""` label to service bound to pod we are replacing.
+1. To begin replacing the node, add the `scylla/replace=""` label to the service associated with the pod being replaced.
     ```bash
     kubectl -n scylla label svc simple-cluster-us-east-1-us-east-1a-2 scylla/replace=""
     ```
-   Your failed Pod should be recreated on available k8s node
+   The failed Pod should then be recreated on an available Kubernetes node
     ```bash
     kubectl -n scylla get pods
     NAME                                    READY   STATUS    RESTARTS   AGE

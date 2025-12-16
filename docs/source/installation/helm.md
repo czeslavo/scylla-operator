@@ -12,8 +12,11 @@ We will use Minikube K8s cluster, but this could be any K8s cluster supported by
 
 ## Prerequisites
 
-- Kubernetes 1.16+
+- Kubernetes (see the supported version range in the [support matrix](../support/releases.md#support-matrix))
 - Helm 3+
+
+:::{include} ../.internal/namespaces.md
+:::
 
 ## TL;DR
 
@@ -31,7 +34,7 @@ helm install scylla scylla/scylla --create-namespace --namespace scylla
 This step is optional if you want to use your own certificate. 
 If you don't have one, make sure to not disable autogeneration using Scylla Operator Helm Chart.
 
-First deploy Cert Manager, you can either follow [upsteam instructions](https://cert-manager.io/docs/installation/kubernetes/) or use following command:
+First deploy Cert Manager, you can either follow [upsteam instructions](https://cert-manager.io/docs/installation/) or use following command:
 
 ```console
 kubectl apply -f examples/common/cert-manager.yaml
@@ -116,16 +119,21 @@ webhook:
 
 ### Customization
 
-You can customize all these fields and others by providing file containing desired values.
-Content of this file will overwrite default values.
+You can customize all these fields and others by providing file containing desired values. 
+Please refer to the {{ '[values.yaml](https://raw.githubusercontent.com/{}/{}/helm/scylla-operator/values.yaml)'.format(repository, revision) }} file in Scylla Operator repository for all available fields.
 
-You can find an example in Scylla Operator repository under `examples/helm/values.operator.yaml`
+You can copy the default `values.yaml` file and modify it to your needs.
 
 ### Installation
 
-To deploy Scylla Operator using customized values file execute the following:
+To deploy Scylla Operator using default values execute the following command:
 ```
-helm install scylla-operator scylla/scylla-operator --values examples/helm/values.operator.yaml --create-namespace --namespace scylla-operator
+helm install scylla-operator scylla/scylla-operator --create-namespace --namespace scylla-operator
+```
+
+To deploy Scylla Operator using customized values file (as described in the [Customization](#customization) section), execute the following command:
+```
+helm install scylla-operator scylla/scylla-operator --values <path-to-values-file> --create-namespace --namespace scylla-operator
 ```
 
 ## Scylla Helm Chart
@@ -135,16 +143,18 @@ By default Scylla Helm charts deploys working Scylla cluster, but of course we c
 
 ### Customization
 
-Versions of images used in the cluster can be set via `scyllaImage` and `agentImage`
-```yaml
+Versions of images used in the cluster can be set via `scyllaImage` and `agentImage`:
+
+:::{code-block} yaml
+:substitutions:
 scyllaImage:
   repository: scylladb/scylla
-  tag: 4.3.0
+  tag: {{imageTag}}
 
 agentImage:
   repository: scylladb/scylla-manager-agent
-  tag: 2.2.1
-```
+  tag: {{agentVersion}}
+:::
 
 A minimal Scylla cluster can be expressed as:
 ```yaml
@@ -163,17 +173,25 @@ racks:
       memory: 1Gi
 ```
 
-Above cluster will use 4.3.0 Scylla, 2.2.1 Scylla Manager Agent sidecar and will have a single rack having 2 nodes. 
+Above cluster will use {{ imageTag }} Scylla, {{ agentVersion }} Scylla Manager Agent sidecar and will have a single rack having 2 nodes. 
 Each node will have a single CPU and 1 GiB of memory.
 
-For other customizable fields, please refer to [ScyllaCluster CRD](../api-reference/groups/scylla.scylladb.com/scyllaclusters.rst).
-CRD Rack Spec and Helm Chart Rack should have the same fields.
+For other customizable fields, please refer to chart source ({{ '[values.yaml](https://raw.githubusercontent.com/{}/{}/helm/scylla/values.yaml)'.format(repository, revision) }}) in Scylla Operator repository
+and [ScyllaCluster CRD](../reference/api/groups/scylla.scylladb.com/scyllaclusters.rst).
+The CRD's `spec.rack` and Helm chart `rack` should have the same fields.
+
+You can copy the default `values.yaml` file and modify it to your needs.
 
 ### Installation
 
+To deploy Scylla cluster using default values execute the following command:
+```
+helm install scylla scylla/scylla --create-namespace --namespace scylla
+```
+
 To deploy Scylla cluster using customzied values file execute the following command:
 ```
-helm install scylla scylla/scylla --values examples/helm/values.cluster.yaml --create-namespace --namespace scylla
+helm install scylla scylla/scylla --values <path-to-values-file> --create-namespace --namespace scylla
 ```
 
 Scylla Operator will provision this cluster on your K8s environment.
@@ -181,19 +199,21 @@ Scylla Operator will provision this cluster on your K8s environment.
 ## Scylla Manager Helm Chart
 
 Scylla Manager Chart allows to customize and deploy Scylla Manager in K8s environment.
-Scylla Manager consist of two applications (Scylla Manager itself and Scylla Manager Controller) and additional Scylla cluster.
+Besides Scylla Manager, it deploys an additional Scylla cluster for the Manager’s needs.
 
 To read more about Scylla Manager see [Manager guide](../architecture/manager.md).
 
 ### Scylla Manager
 
 To set version of used Scylla Manager you can use `image` field:
-```yaml
+:::{code-block} yaml
+:substitutions:
 image:
   repository: scylladb
   pullPolicy: IfNotPresent
-  tag: 2.2.1
-```
+  tag: {{agentVersion}}
+:::
+
 To control how many resources are allocated for Scylla Manager use `resource` field:
 ```yaml
 resources:
@@ -205,42 +225,24 @@ resources:
     memory: 500Mi
 ```
 
-### Scylla Manager Controller 
-
-Similarly Scylla Manager Controller image can be customized:
-
-```yaml
-controllerImage:
-  repository: scylladb
-  pullPolicy: IfNotPresent
-  tag: ""
-```
-
-And allocated resources:
-```yaml
-controllerResources:
-  limits:
-    cpu: 100m
-    memory: 30Mi
-  requests:
-    cpu: 100m
-    memory: 20Mi
-```
-
 ### Scylla
 
 To customize internal Scylla instance dedicated to Scylla Manager, see guide above customizing Scylla Helm Chart.
 It's definition should land as a `scylla` field.
 
-### Customization
-
-All others customizable fields can be looked up in Chart source in Scylla Operator repository.
+All others customizable fields can be looked up in Chart source ({{ '[values.yaml](https://raw.githubusercontent.com/{}/{}/helm/scylla-manager/values.yaml)'.format(repository, revision) }}) in Scylla Operator repository.
+You can copy the default `values.yaml` file and modify it to your needs.
 
 ### Installation
 
+To deploy Scylla Manager using default values execute the following command:
+```
+helm install scylla-manager scylla/scylla-manager --create-namespace --namespace scylla-manager
+```
+
 To deploy Scylla Manager using customized values file execute the following command:
 ```
-helm install scylla-manager scylla/scylla-manager --values examples/helm/values.manager.yaml --create-namespace --namespace scylla-manager
+helm install scylla-manager scylla/scylla-manager --values <path-to-values-file> --create-namespace --namespace scylla-manager
 ```
 
 ## Results
@@ -275,8 +277,6 @@ $ kubectl -n scylla-manager get all
 
 NAME                                             READY   STATUS    RESTARTS   AGE
 pod/scylla-manager-669db64dd-bcm4v               1/1     Running   0          89s
-pod/scylla-manager-controller-844ccc56c4-drbth   1/1     Running   0          89s
-pod/scylla-manager-controller-844ccc56c4-rhwqx   1/1     Running   0          89s
 
 NAME                            TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)             AGE
 service/scylla-manager          ClusterIP   10.105.231.53   <none>        80/TCP,5090/TCP     89s
@@ -284,11 +284,9 @@ service/scylla-manager-client   ClusterIP   None            <none>        9180/T
 
 NAME                                        READY   UP-TO-DATE   AVAILABLE   AGE
 deployment.apps/scylla-manager              1/1     1            1           89s
-deployment.apps/scylla-manager-controller   2/2     2            2           89s
 
 NAME                                                   DESIRED   CURRENT   READY   AGE
 replicaset.apps/scylla-manager-669db64dd               1         1         1       89s
-replicaset.apps/scylla-manager-controller-844ccc56c4   2         2         2       89s
 
 
 ```
@@ -316,41 +314,25 @@ Two running nodes, exactly what we were asking for.
 
 ## Monitoring
 
-To spin up a Prometheus monitoring refer to [monitoring guide](../resources/scylladbmonitorings.md).
+To spin up a Prometheus monitoring refer to [ScyllaDB Monitoring setup guide](../management/monitoring/setup.md).
 
 Helm charts can create ServiceMonitors needed to observe Scylla Manager and Scylla. 
-Both of these Helm Charts allows to specify whether you want to create a ServiceMonitor:
+Both of these Helm Charts allow specifying whether you want to create a ServiceMonitor:
 ```yaml
 serviceMonitor:
   create: false
 ```
 
-Change `create` to `true` and update your current deployment using:
+Change `create` to `true` in your `values.yaml` file and update your current deployment using:
 ```shell
-helm upgrade --install scylla --namespace scylla scylla/scylla -f examples/helm/values.cluster.yaml
+helm upgrade --install scylla --namespace scylla scylla/scylla -f <path-to-values-file> 
 ```
 
-Helm should notice the difference, install the ServiceMonitor, and then Prometheous will be able to scrape metrics.
+Helm should notice the difference, install the ServiceMonitor, and then Prometheus will be able to scrape metrics.
 
-## Upgrade via Helm
+## Upgrade
 
-Replace `<release_name>` with the name of your Helm release for Scylla Operator and replace `<version>` with the version number you want to install:
-1. Make sure Helm chart repository is up-to-date:
-   ```
-   helm repo add scylla-operator https://storage.googleapis.com/scylla-operator-charts/stable
-   helm repo update
-   ```
-2. Update CRD resources. We recommend using `--server-side` flag for `kubectl apply`, if your version supports it.
-   ```
-   tmpdir=$( mktemp -d ) \
-     && helm pull scylla-operator/scylla-operator --version <version> --untar --untardir "${tmpdir}" \
-     && find "${tmpdir}"/scylla-operator/crds/ -name '*.yaml' -printf '-f=%p ' \
-     | xargs kubectl apply
-   ``` 
-3. Update Scylla Operator
-   ```
-   helm upgrade --version <version> <release_name> scylla-operator/scylla-operator
-   ```
+Please refer to the [upgrade guide](./../management/upgrading/upgrade.md#upgrade-via-helm) to learn how to upgrade your Helm installations.
 
 ## Cleanup
 

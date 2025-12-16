@@ -9,6 +9,7 @@ import (
 
 	scyllaversionedclient "github.com/scylladb/scylla-operator/pkg/client/scylla/clientset/versioned"
 	scyllainformers "github.com/scylladb/scylla-operator/pkg/client/scylla/informers/externalversions"
+	"github.com/scylladb/scylla-operator/pkg/cmdutil"
 	"github.com/scylladb/scylla-operator/pkg/controller/nodesetup"
 	"github.com/scylladb/scylla-operator/pkg/controller/nodetune"
 	"github.com/scylladb/scylla-operator/pkg/cri"
@@ -16,14 +17,13 @@ import (
 	"github.com/scylladb/scylla-operator/pkg/kubelet"
 	"github.com/scylladb/scylla-operator/pkg/naming"
 	"github.com/scylladb/scylla-operator/pkg/signals"
-	"github.com/scylladb/scylla-operator/pkg/version"
 	"github.com/spf13/cobra"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
-	apierrors "k8s.io/apimachinery/pkg/util/errors"
-	"k8s.io/apimachinery/pkg/util/wait"
+	apimachineryutilerrors "k8s.io/apimachinery/pkg/util/errors"
+	apimachineryutilwait "k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/retry"
@@ -35,13 +35,12 @@ type NodeSetupDaemonOptions struct {
 	genericclioptions.ClientConfig
 	genericclioptions.InClusterReflection
 
-	PodName              string
-	NodeName             string
-	NodeConfigName       string
-	NodeConfigUID        string
-	ScyllaImage          string
-	OperatorImage        string
-	DisableOptimizations bool
+	PodName        string
+	NodeName       string
+	NodeConfigName string
+	NodeConfigUID  string
+	ScyllaImage    string
+	OperatorImage  string
 
 	CRIEndpoints                []string
 	KubeletPodResourcesEndpoint string
@@ -101,7 +100,6 @@ func NewNodeSetupCmd(streams genericclioptions.IOStreams) *cobra.Command {
 	cmd.Flags().StringVarP(&o.NodeConfigName, "node-config-name", "", o.NodeConfigName, "Name of the NodeConfig that owns this subcontroller.")
 	cmd.Flags().StringVarP(&o.NodeConfigUID, "node-config-uid", "", o.NodeConfigUID, "UID of the NodeConfig that owns this subcontroller.")
 	cmd.Flags().StringVarP(&o.ScyllaImage, "scylla-image", "", o.ScyllaImage, "Scylla image used for running perftune.")
-	cmd.Flags().BoolVarP(&o.DisableOptimizations, "disable-optimizations", "", o.DisableOptimizations, "Controls if optimizations are disabled")
 	cmd.Flags().StringArrayVarP(&o.CRIEndpoints, "cri-endpoint", "", o.CRIEndpoints, "CRI endpoint to connect to. It will try to connect to any of them, in the given order.")
 	cmd.Flags().StringVarP(&o.KubeletPodResourcesEndpoint, "kubelet-pod-resources-endpoint", "", o.KubeletPodResourcesEndpoint, "Endpoint to kubelet PodResources API server")
 	cmd.Flags().StringVarP(&o.OperatorImage, "operator-image", "", o.OperatorImage, "Operator image used for running tuning.")
@@ -143,7 +141,7 @@ func (o *NodeSetupDaemonOptions) Validate() error {
 		errs = append(errs, fmt.Errorf("kubelet-pod-resources-endpoint can't be empty"))
 	}
 
-	return apierrors.NewAggregate(errs)
+	return apimachineryutilerrors.NewAggregate(errs)
 }
 
 func (o *NodeSetupDaemonOptions) Complete() error {
@@ -171,7 +169,7 @@ func (o *NodeSetupDaemonOptions) Complete() error {
 }
 
 func (o *NodeSetupDaemonOptions) Run(streams genericclioptions.IOStreams, cmd *cobra.Command) error {
-	klog.Infof("%s version %s", cmd.Name(), version.Get())
+	cmdutil.LogCommandStarting(cmd)
 	cliflag.PrintFlags(cmd.Flags())
 
 	stopCh := signals.StopChannel()
@@ -209,7 +207,7 @@ func (o *NodeSetupDaemonOptions) Run(streams genericclioptions.IOStreams, cmd *c
 	))
 
 	var node *corev1.Node
-	err = wait.ExponentialBackoffWithContext(ctx, retry.DefaultBackoff, func(fCtx context.Context) (bool, error) {
+	err = apimachineryutilwait.ExponentialBackoffWithContext(ctx, retry.DefaultBackoff, func(fCtx context.Context) (bool, error) {
 		node, err = o.kubeClient.CoreV1().Nodes().Get(fCtx, o.NodeName, metav1.GetOptions{})
 		if err != nil {
 			klog.V(2).InfoS("Can't get Node", "Node", o.NodeName, "Error", err.Error())
@@ -246,6 +244,7 @@ func (o *NodeSetupDaemonOptions) Run(streams genericclioptions.IOStreams, cmd *c
 		localNodeScyllaCoreInformers.Core().V1().Pods(),
 		namespacedKubeInformers.Apps().V1().DaemonSets(),
 		namespacedKubeInformers.Batch().V1().Jobs(),
+		namespacedKubeInformers.Core().V1().ConfigMaps(),
 		selfPodInformers.Core().V1().Pods(),
 		o.Namespace,
 		o.PodName,

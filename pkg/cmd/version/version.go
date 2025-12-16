@@ -5,10 +5,10 @@ package version
 import (
 	"fmt"
 
+	"github.com/scylladb/scylla-operator/pkg/build"
 	"github.com/scylladb/scylla-operator/pkg/genericclioptions"
-	"github.com/scylladb/scylla-operator/pkg/version"
 	"github.com/spf13/cobra"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	apimachineryutilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/kubectl/pkg/util/templates"
 )
 
@@ -62,14 +62,14 @@ func NewCmd(streams genericclioptions.IOStreams) *cobra.Command {
 func (o *Options) Validate() error {
 	var errs []error
 
-	return utilerrors.NewAggregate(errs)
+	return apimachineryutilerrors.NewAggregate(errs)
 }
 
 func (o *Options) Complete() error {
 	return nil
 }
 
-func (o *Options) Run(originalStreams genericclioptions.IOStreams, cmd *cobra.Command) error {
-	fmt.Printf("%s: %s\n", cmd.Name(), version.Get())
+func (o *Options) Run(genericclioptions.IOStreams, *cobra.Command) error {
+	fmt.Printf("GitCommit=%s\n", build.GitCommit())
 	return nil
 }

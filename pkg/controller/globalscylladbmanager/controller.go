@@ -9,12 +9,11 @@ import (
 	scyllaclient "github.com/scylladb/scylla-operator/pkg/client/scylla/clientset/versioned"
 	scyllav1alpha1informers "github.com/scylladb/scylla-operator/pkg/client/scylla/informers/externalversions/scylla/v1alpha1"
 	scyllav1alpha1listers "github.com/scylladb/scylla-operator/pkg/client/scylla/listers/scylla/v1alpha1"
+	"github.com/scylladb/scylla-operator/pkg/controllerhelpers"
 	"github.com/scylladb/scylla-operator/pkg/controllertools"
 	"github.com/scylladb/scylla-operator/pkg/naming"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	apimachineryutilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	corev1informers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
 	corev1listers "k8s.io/client-go/listers/core/v1"
@@ -34,6 +33,7 @@ type Controller struct {
 
 	scyllaDBManagerClusterRegistrationLister scyllav1alpha1listers.ScyllaDBManagerClusterRegistrationLister
 	scyllaDBDatacenterLister                 scyllav1alpha1listers.ScyllaDBDatacenterLister
+	scyllaDBClusterLister                    scyllav1alpha1listers.ScyllaDBClusterLister
 	namespaceLister                          corev1listers.NamespaceLister
 }
 
@@ -42,6 +42,7 @@ func NewController(
 	scyllaClient scyllaclient.Interface,
 	scyllaDBManagerClusterRegistrationInformer scyllav1alpha1informers.ScyllaDBManagerClusterRegistrationInformer,
 	scyllaDBDatacenterInformer scyllav1alpha1informers.ScyllaDBDatacenterInformer,
+	scyllaDBClusterInformer scyllav1alpha1informers.ScyllaDBClusterInformer,
 	namespaceInformer corev1informers.NamespaceInformer,
 ) (*Controller, error) {
 	gsmc := &Controller{
@@ -50,6 +51,7 @@ func NewController(
 
 		scyllaDBManagerClusterRegistrationLister: scyllaDBManagerClusterRegistrationInformer.Lister(),
 		scyllaDBDatacenterLister:                 scyllaDBDatacenterInformer.Lister(),
+		scyllaDBClusterLister:                    scyllaDBClusterInformer.Lister(),
 		namespaceLister:                          namespaceInformer.Lister(),
 	}
 
@@ -79,6 +81,16 @@ func NewController(
 	}
 	observer.AddCachesToSync(scyllaDBDatacenterHandler.HasSynced)
 
+	scyllaDBClusterHandler, err := scyllaDBClusterInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    gsmc.addScyllaDBCluster,
+		UpdateFunc: gsmc.updateScyllaDBCluster,
+		DeleteFunc: gsmc.deleteScyllaDBCluster,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("can't add ScyllaDBCluster handler: %w", err)
+	}
+	observer.AddCachesToSync(scyllaDBClusterHandler.HasSynced)
+
 	namespaceHandler, err := namespaceInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    gsmc.addNamespace,
 		UpdateFunc: gsmc.updateNamespace,
@@ -100,7 +112,7 @@ func NewController(
 func (gsmc *Controller) addScyllaDBManagerClusterRegistration(obj interface{}) {
 	smcr := obj.(*scyllav1alpha1.ScyllaDBManagerClusterRegistration)
 
-	if !isManagedByGlobalScyllaDBManagerInstance(smcr) {
+	if !controllerhelpers.IsManagedByGlobalScyllaDBManagerInstance(smcr) {
 		klog.V(4).InfoS("Not enqueueing ScyllaDBManagerClusterRegistration not owned by global ScyllaDB Manager", "ScyllaDBManagerClusterRegistration", klog.KObj(smcr), "RV", smcr.ResourceVersion)
 		return
 	}
@@ -120,7 +132,7 @@ func (gsmc *Controller) updateScyllaDBManagerClusterRegistration(old, cur interf
 	if currentSMCR.UID != oldSMCR.UID {
 		key, err := keyFunc(oldSMCR)
 		if err != nil {
-			utilruntime.HandleError(fmt.Errorf("can't get key for object %#v: %w", oldSMCR, err))
+			apimachineryutilruntime.HandleError(fmt.Errorf("can't get key for object %#v: %w", oldSMCR, err))
 			return
 		}
 
@@ -130,7 +142,7 @@ func (gsmc *Controller) updateScyllaDBManagerClusterRegistration(old, cur interf
 		})
 	}
 
-	if !isManagedByGlobalScyllaDBManagerInstance(currentSMCR) {
+	if !controllerhelpers.IsManagedByGlobalScyllaDBManagerInstance(currentSMCR) {
 		klog.V(4).InfoS("Not enqueueing ScyllaDBManagerClusterRegistration not owned by global ScyllaDB Manager", "ScyllaDBManagerClusterRegistration", klog.KObj(currentSMCR), "RV", currentSMCR.ResourceVersion)
 		return
 	}
@@ -150,17 +162,17 @@ func (gsmc *Controller) deleteScyllaDBManagerClusterRegistration(obj interface{}
 		var tombstone cache.DeletedFinalStateUnknown
 		tombstone, ok = obj.(cache.DeletedFinalStateUnknown)
 		if !ok {
-			utilruntime.HandleError(fmt.Errorf("can't get object from tombstone %#v", obj))
+			apimachineryutilruntime.HandleError(fmt.Errorf("can't get object from tombstone %#v", obj))
 			return
 		}
 		smcr, ok = tombstone.Obj.(*scyllav1alpha1.ScyllaDBManagerClusterRegistration)
 		if !ok {
-			utilruntime.HandleError(fmt.Errorf("tombstone contains an object that is not a ScyllaDBManagerClusterRegistration %#v", obj))
+			apimachineryutilruntime.HandleError(fmt.Errorf("tombstone contains an object that is not a ScyllaDBManagerClusterRegistration %#v", obj))
 			return
 		}
 	}
 
-	if !isManagedByGlobalScyllaDBManagerInstance(smcr) {
+	if !controllerhelpers.IsManagedByGlobalScyllaDBManagerInstance(smcr) {
 		klog.V(4).InfoS("Not enqueueing ScyllaDBManagerClusterRegistration not owned by global ScyllaDB Manager", "ScyllaDBManagerClusterRegistration", klog.KObj(smcr), "RV", smcr.ResourceVersion)
 		return
 	}
@@ -191,7 +203,7 @@ func (gsmc *Controller) updateScyllaDBDatacenter(old, cur interface{}) {
 	if currentSDC.UID != oldSDC.UID {
 		key, err := keyFunc(oldSDC)
 		if err != nil {
-			utilruntime.HandleError(fmt.Errorf("can't get key for object %#v: %w", oldSDC, err))
+			apimachineryutilruntime.HandleError(fmt.Errorf("can't get key for object %#v: %w", oldSDC, err))
 			return
 		}
 
@@ -216,12 +228,12 @@ func (gsmc *Controller) deleteScyllaDBDatacenter(obj interface{}) {
 		var tombstone cache.DeletedFinalStateUnknown
 		tombstone, ok = obj.(cache.DeletedFinalStateUnknown)
 		if !ok {
-			utilruntime.HandleError(fmt.Errorf("can't get object from tombstone %#v", obj))
+			apimachineryutilruntime.HandleError(fmt.Errorf("can't get object from tombstone %#v", obj))
 			return
 		}
 		sdc, ok = tombstone.Obj.(*scyllav1alpha1.ScyllaDBDatacenter)
 		if !ok {
-			utilruntime.HandleError(fmt.Errorf("tombstone contains an object that is not a ScyllaDBDatacenter %#v", obj))
+			apimachineryutilruntime.HandleError(fmt.Errorf("tombstone contains an object that is not a ScyllaDBDatacenter %#v", obj))
 			return
 		}
 	}
@@ -230,6 +242,67 @@ func (gsmc *Controller) deleteScyllaDBDatacenter(obj interface{}) {
 		"Observed deletion of ScyllaDBDatacenter",
 		"ScyllaDBDatacenter", klog.KObj(sdc),
 		"RV", sdc.ResourceVersion,
+	)
+	gsmc.Enqueue()
+}
+
+func (gsmc *Controller) addScyllaDBCluster(obj interface{}) {
+	sc := obj.(*scyllav1alpha1.ScyllaDBCluster)
+
+	klog.V(4).InfoS(
+		"Observed addition of ScyllaDBCluster",
+		"ScyllaDBCluster", klog.KObj(sc),
+		"RV", sc.ResourceVersion,
+	)
+	gsmc.Enqueue()
+}
+
+func (gsmc *Controller) updateScyllaDBCluster(old, cur interface{}) {
+	oldSC := old.(*scyllav1alpha1.ScyllaDBCluster)
+	currentSC := cur.(*scyllav1alpha1.ScyllaDBCluster)
+
+	if currentSC.UID != oldSC.UID {
+		key, err := keyFunc(oldSC)
+		if err != nil {
+			apimachineryutilruntime.HandleError(fmt.Errorf("can't get key for object %#v: %w", oldSC, err))
+			return
+		}
+
+		gsmc.deleteScyllaDBCluster(cache.DeletedFinalStateUnknown{
+			Key: key,
+			Obj: oldSC,
+		})
+	}
+
+	klog.V(4).InfoS(
+		"Observed update of ScyllaDBCluster",
+		"ScyllaDBCluster", klog.KObj(currentSC),
+		"RV", fmt.Sprintf("%s->%s", oldSC.ResourceVersion, currentSC.ResourceVersion),
+		"UID", fmt.Sprintf("%s->%s", oldSC.UID, currentSC.UID),
+	)
+	gsmc.Enqueue()
+}
+
+func (gsmc *Controller) deleteScyllaDBCluster(obj interface{}) {
+	sc, ok := obj.(*scyllav1alpha1.ScyllaDBCluster)
+	if !ok {
+		var tombstone cache.DeletedFinalStateUnknown
+		tombstone, ok = obj.(cache.DeletedFinalStateUnknown)
+		if !ok {
+			apimachineryutilruntime.HandleError(fmt.Errorf("can't get object from tombstone %#v", obj))
+			return
+		}
+		sc, ok = tombstone.Obj.(*scyllav1alpha1.ScyllaDBCluster)
+		if !ok {
+			apimachineryutilruntime.HandleError(fmt.Errorf("tombstone contains an object that is not a ScyllaDBCluster %#v", obj))
+			return
+		}
+	}
+
+	klog.V(4).InfoS(
+		"Observed deletion of ScyllaDBCluster",
+		"ScyllaDBCluster", klog.KObj(sc),
+		"RV", sc.ResourceVersion,
 	)
 	gsmc.Enqueue()
 }
@@ -256,7 +329,7 @@ func (gsmc *Controller) updateNamespace(old, cur interface{}) {
 	if currentNS.UID != oldNS.UID {
 		key, err := keyFunc(oldNS)
 		if err != nil {
-			utilruntime.HandleError(fmt.Errorf("can't get key for object %#v: %w", oldNS, err))
+			apimachineryutilruntime.HandleError(fmt.Errorf("can't get key for object %#v: %w", oldNS, err))
 			return
 		}
 
@@ -285,12 +358,12 @@ func (gsmc *Controller) deleteNamespace(obj interface{}) {
 		var tombstone cache.DeletedFinalStateUnknown
 		tombstone, ok = obj.(cache.DeletedFinalStateUnknown)
 		if !ok {
-			utilruntime.HandleError(fmt.Errorf("can't get object from tombstone %#v", obj))
+			apimachineryutilruntime.HandleError(fmt.Errorf("can't get object from tombstone %#v", obj))
 			return
 		}
 		ns, ok = tombstone.Obj.(*corev1.Namespace)
 		if !ok {
-			utilruntime.HandleError(fmt.Errorf("tombstone contains an object that is not a Namespace %#v", obj))
+			apimachineryutilruntime.HandleError(fmt.Errorf("tombstone contains an object that is not a Namespace %#v", obj))
 			return
 		}
 	}
@@ -305,10 +378,6 @@ func (gsmc *Controller) deleteNamespace(obj interface{}) {
 		"RV", ns.ResourceVersion,
 	)
 	gsmc.Enqueue()
-}
-
-func isManagedByGlobalScyllaDBManagerInstance(obj metav1.Object) bool {
-	return naming.GlobalScyllaDBManagerClusterRegistrationSelector().Matches(labels.Set(obj.GetLabels()))
 }
 
 func isGlobalScyllaDBManagerNamespace(ns *corev1.Namespace) bool {

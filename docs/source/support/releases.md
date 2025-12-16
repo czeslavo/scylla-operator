@@ -6,7 +6,7 @@ We are aiming to ship a new release approximately every 2 months. The following 
 :::{table}
 | Release | Code freeze | General availability |
 |:-------:|:-----------:|:--------------------:|
-|  1.18   | 2025-07-21  |      2025-08-04      |
+|  1.20   |  2026-02-09 |      2026-02-16      |
 :::
 
 ## Supported releases
@@ -15,8 +15,10 @@ We support the latest 2 releases of Scylla Operator to give everyone time to upg
 :::{table}
 | Release | General availability |  Support ends   |
 |:-------:|:--------------------:|:---------------:|
-|  1.17   |      2025-05-12      | Release of 1.19 |
-|  1.16   |      2025-03-03      | Release of 1.18 |
+|  1.19   |      2025-11-19      | Release of 1.21 |
+|  1.18   |      2025-08-11      | Release of 1.20 |
+|  1.17   |      2025-05-12      |   2025-11-19    |
+|  1.16   |      2025-03-03      |   2025-08-11    |
 |  1.15   |      2024-12-19      |   2025-05-12    |
 |  1.14   |      2024-09-19      |   2025-03-03    |
 |  1.13   |      2024-06-20      |   2024-12-19    |
@@ -40,7 +42,7 @@ Usually, only important bug fixes are eligible for being backported.
 This may depend on the situation and assessment of the maintainers.
 
 ## CI/CD
-We use [GitHub actions](https://github.com/scylladb/scylla-operator/actions/workflows/go.yaml?query=branch%3Amaster+event%3Apush) for our CI/CD. Every merge to a supported branch, or a creation of a tag will automatically trigger a job to build, test and publish the container image and other artifacts like helm charts. Before we publish any image, it must pass the e2e suite.
+We use [Prow](https://prow.scylla-operator.scylladb.com/) for our CI/CD. Before we publish any image, it must pass the E2E suite.
 
 ### Automated promotions
 
@@ -63,28 +65,28 @@ GA images aren't built from scratch but rather promoted from an existing release
 The support matrix table shows version requirements for a particular **Scylla Operator** version. Be sure to match these requirements, otherwise some functionality will not work.
 
 :::{table}
-| Component         | master                       | v1.17                        | v1.16                                 |
-|:-----------------:|:----------------------------:|:----------------------------:|:-------------------------------------:|
-| Kubernetes        | `>=1.25`                     | `>=1.25`                     | `>=1.25`                              |
-| CRI API           | `v1`                         | `v1`                         | `v1`                                  |
-| ScyllaDB          | `>=6.0`, `2023.1 ... 2025.1` | `>=6.0`, `2023.1 ... 2025.1` | `>=6.0`, `2023.1 ... 2025.1`          |
-| Scylla Manager    | `>=3.3.3 && <=3.5`           | `>=3.3.3 && <=3.5`           | `>=3.3.3 && <=3.4`                    |
-| Scylla Monitoring | `(CRD)`                      | `(CRD)`                      | `(CRD)`                               |
+| Component           | master                    | v1.19                     | v1.18             |
+| ------------------- | ------------------------- | ------------------------- | ----------------- |
+| Kubernetes          | `1.31 - 1.34`             | `1.31 - 1.34`             | `1.30 - 1.33`     |
+| CRI API             | `v1`                      | `v1`                      | `v1`              |
+| ScyllaDB            | `2024.1, 2025.1 - 2025.3` | `2024.1, 2025.1 - 2025.3` | `2024.1 - 2025.1` |
+| ScyllaDB Manager    | `3.5, 3.7`                | `3.5, 3.7`                | `3.5`             |
+| ScyllaDB Monitoring | `(CRD)`                   | `(CRD)`                   | `(CRD)`           |
 :::
 
 ### Architectures
 
 {{productName}} image is published as a manifest list to `docker.io/scylladb/scylla-operator:X.Y.Z` containing image build for `amd64` and `aarch64`.
 
-### Supported Kubernetes platforms
+### Supported Kubernetes environments
 
-We officially test and recommend to use the following platforms:
+We officially test and recommend to use the following environments:
 
 :::{table}
-| Platform         | OS Image     |
-|:-----------------|:-------------|
-| GKE              | Ubuntu       |
-| EKS              | Amazon Linux |
+| Platform | OS Image     |
+|:---------|:-------------|
+| GKE      | Ubuntu       |
+| EKS      | Amazon Linux |
 :::
 
 While our APIs generally work on any Kubernetes conformant cluster,
@@ -92,12 +94,12 @@ performance tuning and other pieces that need to interact with the host OS, kube
 
 
 :::{warning}
-The following platforms are known **not to work correctly** at this time.
+The following environments are known **not to work correctly** at this time.
 
 :::{table}
-| Platform         | OS Image     | Details |
-|:-----------------|:-------------| :------ |
-| GKE              | Container OS |         |
-| EKS              | Bottlerocket | Suspected kernel/cgroups issue that breaks available memory detection for ScyllaDB |
+| Platform | OS Image     | Details |
+|:---------|:-------------| :------ |
+| GKE      | Container OS | Lack of XFS support |
+| EKS      | Bottlerocket | Suspected kernel/cgroups issue that breaks available memory detection for ScyllaDB |
 :::
 :::

@@ -9,9 +9,9 @@ import (
 	"github.com/scylladb/scylla-operator/pkg/scheme"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
+	apimachineryutilerrors "k8s.io/apimachinery/pkg/util/errors"
+	apimachineryutilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	apimachineryutilwait "k8s.io/apimachinery/pkg/util/wait"
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
@@ -23,7 +23,7 @@ type ObserverSyncFunc = func(ctx context.Context) error
 
 type Observer struct {
 	name          string
-	queue         workqueue.RateLimitingInterface
+	queue         workqueue.TypedRateLimitingInterface[string]
 	syncFunc      ObserverSyncFunc
 	eventRecorder record.EventRecorder
 	cachesToSync  []cache.InformerSynced
@@ -36,9 +36,9 @@ func NewObserver(name string, eventsClient corev1client.EventInterface, syncFunc
 
 	return &Observer{
 		name: name,
-		queue: workqueue.NewRateLimitingQueueWithConfig(
-			workqueue.DefaultControllerRateLimiter(),
-			workqueue.RateLimitingQueueConfig{
+		queue: workqueue.NewTypedRateLimitingQueueWithConfig(
+			workqueue.DefaultTypedControllerRateLimiter[string](),
+			workqueue.TypedRateLimitingQueueConfig[string]{
 				Name: name,
 			}),
 		syncFunc:      syncFunc,
@@ -55,7 +55,7 @@ func (o *Observer) singletonKey() string {
 }
 
 func (o *Observer) Enqueue() {
-	o.queue.Add(o.name)
+	o.queue.Add(o.singletonKey())
 }
 
 func (o *Observer) AddCachesToSync(caches ...cache.InformerSynced) {
@@ -99,7 +99,7 @@ func (o *Observer) processNextItem(ctx context.Context) bool {
 
 	err := o.syncFunc(ctx)
 	// TODO: Do smarter filtering then just Reduce to handle cases like 2 conflict errors.
-	err = utilerrors.Reduce(err)
+	err = apimachineryutilerrors.Reduce(err)
 	switch {
 	case err == nil:
 		o.queue.Forget(key)
@@ -111,13 +111,14 @@ func (o *Observer) processNextItem(ctx context.Context) bool {
 	case apierrors.IsAlreadyExists(err):
 		klog.V(2).InfoS("Hit already exists, will retry in a bit", "Key", key, "Error", err)
 
+	case IsNonRetriable(err):
+		klog.InfoS("Hit non-retriable error. Dropping the item from the queue.", "Error", err)
+		o.queue.Forget(key)
+		return true
+
 	default:
-		if IsNonRetriable(err) {
-			klog.InfoS("Hit non-retriable error. Dropping the item from the queue.", "Error", err)
-			o.queue.Forget(key)
-			return true
-		}
-		utilruntime.HandleError(fmt.Errorf("sync loop has failed: %w", err))
+		apimachineryutilruntime.HandleError(fmt.Errorf("sync loop has failed: %w", err))
+
 	}
 
 	o.queue.AddRateLimited(key)
@@ -131,12 +132,12 @@ func (o *Observer) runWorker(ctx context.Context) {
 }
 
 func (o *Observer) Run(ctx context.Context) {
-	defer utilruntime.HandleCrash()
+	defer apimachineryutilruntime.HandleCrash()
 
 	klog.InfoS("Starting observer", "Name", o.name)
 
 	if !cache.WaitForNamedCacheSync("Observer "+o.name, ctx.Done(), o.cachesToSync...) {
-		klog.ErrorS(fmt.Errorf("timed out waiting for caches to sync"), "Observer", o.name)
+		klog.ErrorS(nil, "Timed out waiting for caches to sync", "Observer", o.name)
 		return
 	}
 
@@ -151,7 +152,7 @@ func (o *Observer) Run(ctx context.Context) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		wait.UntilWithContext(ctx, o.runWorker, time.Second)
+		apimachineryutilwait.UntilWithContext(ctx, o.runWorker, time.Second)
 	}()
 
 	<-ctx.Done()

@@ -7,12 +7,11 @@ import (
 	"net/http"
 
 	admissionv1 "k8s.io/api/admission/v1"
-	v1 "k8s.io/api/admission/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	apimachineryutilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/klog/v2"
 )
 
@@ -22,12 +21,13 @@ var (
 )
 
 func init() {
-	utilruntime.Must(admissionv1.AddToScheme(scheme))
+	apimachineryutilruntime.Must(admissionv1.AddToScheme(scheme))
 
 	codecs = serializer.NewCodecFactory(scheme)
 }
 
-type HandleFunc func(*v1.AdmissionReview) error
+// HandleFunc is a function type that processes an AdmissionReview request and returns warnings and a validation error.
+type HandleFunc func(*admissionv1.AdmissionReview) ([]string, error)
 
 type handler struct {
 	f HandleFunc
@@ -71,8 +71,8 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	var responseObj runtime.Object
 	switch *gvk {
-	case v1.SchemeGroupVersion.WithKind("AdmissionReview"):
-		requestedAdmissionReview, ok := obj.(*v1.AdmissionReview)
+	case admissionv1.SchemeGroupVersion.WithKind("AdmissionReview"):
+		requestedAdmissionReview, ok := obj.(*admissionv1.AdmissionReview)
 		if !ok {
 			msg := fmt.Sprintf("Expected v1.AdmissionReview but got: %T", obj)
 			klog.Error(msg)
@@ -80,14 +80,14 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		funcErr := h.f(requestedAdmissionReview)
+		funcWarnings, funcErr := h.f(requestedAdmissionReview)
 		if funcErr != nil {
 			klog.V(2).InfoS("Review failed", "Error", err)
 		}
 
-		responseAdmissionReview := &v1.AdmissionReview{}
+		responseAdmissionReview := &admissionv1.AdmissionReview{}
 		responseAdmissionReview.SetGroupVersionKind(*gvk)
-		responseAdmissionReview.Response = &v1.AdmissionResponse{
+		responseAdmissionReview.Response = &admissionv1.AdmissionResponse{
 			UID:     requestedAdmissionReview.Request.UID,
 			Allowed: funcErr == nil,
 			Result: func() *metav1.Status {
@@ -106,6 +106,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 					}(),
 				}
 			}(),
+			Warnings: funcWarnings,
 		}
 		responseObj = responseAdmissionReview
 

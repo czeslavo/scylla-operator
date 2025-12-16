@@ -106,3 +106,67 @@ func ApplyScyllaDBManagerClusterRegistration(
 		options,
 	)
 }
+
+func ApplyScyllaDBManagerTaskWithControl(
+	ctx context.Context,
+	control ApplyControlInterface[*scyllav1alpha1.ScyllaDBManagerTask],
+	recorder record.EventRecorder,
+	required *scyllav1alpha1.ScyllaDBManagerTask,
+	options ApplyOptions,
+) (*scyllav1alpha1.ScyllaDBManagerTask, bool, error) {
+	return ApplyGeneric[*scyllav1alpha1.ScyllaDBManagerTask](ctx, control, recorder, required, options)
+}
+
+func ApplyScyllaDBManagerTask(
+	ctx context.Context,
+	client scyllav1alpha1client.ScyllaDBManagerTasksGetter,
+	lister scyllav1alpha1listers.ScyllaDBManagerTaskLister,
+	recorder record.EventRecorder,
+	required *scyllav1alpha1.ScyllaDBManagerTask,
+	options ApplyOptions,
+) (*scyllav1alpha1.ScyllaDBManagerTask, bool, error) {
+	return ApplyScyllaDBManagerTaskWithControl(
+		ctx,
+		ApplyControlFuncs[*scyllav1alpha1.ScyllaDBManagerTask]{
+			GetCachedFunc: lister.ScyllaDBManagerTasks(required.Namespace).Get,
+			CreateFunc:    client.ScyllaDBManagerTasks(required.Namespace).Create,
+			UpdateFunc:    client.ScyllaDBManagerTasks(required.Namespace).Update,
+			DeleteFunc:    client.ScyllaDBManagerTasks(required.Namespace).Delete,
+		},
+		recorder,
+		required,
+		options,
+	)
+}
+
+func ApplyScyllaDBDatacenterNodesStatusReportWithControl(
+	ctx context.Context,
+	control ApplyControlInterface[*scyllav1alpha1.ScyllaDBDatacenterNodesStatusReport],
+	recorder record.EventRecorder,
+	required *scyllav1alpha1.ScyllaDBDatacenterNodesStatusReport,
+	options ApplyOptions,
+) (*scyllav1alpha1.ScyllaDBDatacenterNodesStatusReport, bool, error) {
+	return ApplyGeneric[*scyllav1alpha1.ScyllaDBDatacenterNodesStatusReport](ctx, control, recorder, required, options)
+}
+
+func ApplyScyllaDBDatacenterNodesStatusReport(
+	ctx context.Context,
+	client scyllav1alpha1client.ScyllaDBDatacenterNodesStatusReportsGetter,
+	lister scyllav1alpha1listers.ScyllaDBDatacenterNodesStatusReportLister,
+	recorder record.EventRecorder,
+	required *scyllav1alpha1.ScyllaDBDatacenterNodesStatusReport,
+	options ApplyOptions,
+) (*scyllav1alpha1.ScyllaDBDatacenterNodesStatusReport, bool, error) {
+	return ApplyScyllaDBDatacenterNodesStatusReportWithControl(
+		ctx,
+		ApplyControlFuncs[*scyllav1alpha1.ScyllaDBDatacenterNodesStatusReport]{
+			GetCachedFunc: lister.ScyllaDBDatacenterNodesStatusReports(required.Namespace).Get,
+			CreateFunc:    client.ScyllaDBDatacenterNodesStatusReports(required.Namespace).Create,
+			UpdateFunc:    client.ScyllaDBDatacenterNodesStatusReports(required.Namespace).Update,
+			DeleteFunc:    client.ScyllaDBDatacenterNodesStatusReports(required.Namespace).Delete,
+		},
+		recorder,
+		required,
+		options,
+	)
+}

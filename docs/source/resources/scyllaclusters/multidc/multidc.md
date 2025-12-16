@@ -92,6 +92,9 @@ kubectl --context="${CONTEXT_DC1}" create ns scylla
 
 For this guide, let's assume that your cluster is running in `us-east-1` region and the nodes dedicated to running ScyllaDB nodes are running in zones `us-east-1a`, `us-east-1b` and `us-east-1c` correspondingly. If that is not the case, adjust the manifest accordingly.
 
+:::{include} ../../../.internal/rf-warning.md
+:::
+
 :::{caution}
 The `.spec.name` field of the ScyllaCluster objects represents the ScyllaDB cluster name and has to be consistent across all datacenters of this ScyllaDB cluster.
 The names of the datacenters, specified in `.spec.datacenter.name`, have to be unique across the entire multi-datacenter cluster.
@@ -100,18 +103,17 @@ For more information see [Create a ScyllaDB Cluster - Multi Data Centers (DC)](h
 :::
 
 Save the ScyllaCluster manifest in `dc1.yaml`:
-```yaml
+:::{code-block} yaml
+:substitutions:
 apiVersion: scylla.scylladb.com/v1
 kind: ScyllaCluster
 metadata:
   name: scylla-cluster
   namespace: scylla
 spec:
-  agentVersion: 3.5.0
-  version: 2025.1.2
+  agentVersion: {{agentVersion}}
+  version: {{imageTag}}
   cpuset: true
-  sysctls:
-  - "fs.aio-max-nr=2097152"
   automaticOrphanedNodeCleanup: true
   exposeOptions:
     broadcastOptions:
@@ -256,7 +258,7 @@ spec:
           key: scylla-operator.scylladb.com/dedicated
           operator: Equal
           value: scyllaclusters
-```
+:::
 
 Apply the manifest:
 ```shell
@@ -349,19 +351,23 @@ Replace the values in `.spec.externalSeeds` of the below manifest with the Pod I
 The provided values are going to serve as initial contact points for the joining nodes of the second datacenter.
 
 For this guide, let's assume that the second cluster is running in `us-east-2` region and the nodes dedicated for running ScyllaDB nodes are running in zones `us-east-2a`, `us-east-2b` and `us-east-2c` correspondingly. If that is not the case, adjust the manifest accordingly.
+
+:::{include} ../../../.internal/rf-warning.md
+:::
+
 Having configured it, save the manifest as `dc2.yaml`:
-```yaml
+:::{code-block} yaml
+:substitutions:
+
 apiVersion: scylla.scylladb.com/v1
 kind: ScyllaCluster
 metadata:
   name: scylla-cluster
   namespace: scylla
 spec:
-  agentVersion: 3.5.0
-  version: 2025.1.2
+  agentVersion: {{ agentVersion }}
+  version: {{ imageTag }}
   cpuset: true
-  sysctls:
-  - "fs.aio-max-nr=2097152"
   automaticOrphanedNodeCleanup: true
   exposeOptions:
     broadcastOptions:
@@ -510,7 +516,7 @@ spec:
           key: scylla-operator.scylladb.com/dedicated
           operator: Equal
           value: scyllaclusters
-```
+:::
 
 To apply the manifest, run:
 ```shell
@@ -598,4 +604,4 @@ kubectl --context="${CONTEXT_DC2}" -n=scylla patch scyllacluster/scylla-cluster 
 ## ScyllaDBMonitoring
 
 To monitor your cluster, deploy ScyllaDBMonitoring in every datacenter independently.
-To deploy ScyllaDB Monitoring, follow the steps described in [Deploy managed monitoring](../../../resources/scylladbmonitorings.md#deploy-managed-monitoring) in {{productName}} documentation.
+To deploy ScyllaDB Monitoring, follow the steps described in [ScyllaDB Monitoring setup](../../../management/monitoring/setup.md) in {{productName}} documentation.

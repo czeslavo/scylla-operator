@@ -2,9 +2,9 @@
 
 ## Introduction
 
-[ScyllaCluster](../../api-reference/groups/scylla.scylladb.com/scyllaclusters.rst) defines a ScyllaDB **datacenter** and manages the racks within.
+[ScyllaCluster](../../reference/api/groups/scylla.scylladb.com/scyllaclusters.rst) defines a ScyllaDB **datacenter** and manages the racks within.
 This section aims to make you familiar with how it looks like and how to perform some of the basic configuration or accessing the APIs.
-By no means is this a complete description of what it can do. Please consult our [generated API reference](../../api-reference/groups/scylla.scylladb.com/scyllaclusters.rst) for a complete list of options.
+By no means is this a complete description of what it can do. Please consult our [generated API reference](../../reference/api/groups/scylla.scylladb.com/scyllaclusters.rst) for a complete list of options.
 
 ::::{tip}
 You can always see the currently supported API fields for a particular version installed in your cluster by running
@@ -14,7 +14,7 @@ kubectl explain --api-version='scylla.scylladb.com/v1' ScyllaCluster.spec
 ::::
 
 Note that the Kubernetes clusters are only a regional concept, availability-wise they map into a ScyllaDB datacenter.
-To deploy a ScyllaDB cluster with multiple datacenters use our multi datacenter resource [ScyllaDBCluster](../scylladbclusters/scylladbclusters.md), or combine multiple Kubernetes clusters, each running a [ScyllaCluster](../../api-reference/groups/scylla.scylladb.com/scyllaclusters.rst),
+To deploy a ScyllaDB cluster with multiple datacenters use our multi datacenter resource [ScyllaDBCluster](../scylladbclusters/scylladbclusters.md), or combine multiple Kubernetes clusters, each running a [ScyllaCluster](../../reference/api/groups/scylla.scylladb.com/scyllaclusters.rst),
 To learn more about **manual** multi-dc deployments using ScyllaCluster resource, please see [the dedicated multi-datacenter guide](./multidc/multidc.md).
 
 ## Creating a ScyllaCluster
@@ -46,6 +46,9 @@ IOW, please stay away from touching networking, listen or published addresses an
 
 Now we can create a simple ScyllaCluster to get ScyllaDB running.
 
+:::{include} ../../.internal/rf-warning.md
+:::
+
 :::{code-block} bash
 :linenos:
 :substitutions:
@@ -61,8 +64,6 @@ spec:
   agentVersion: {{agentVersion}}
   developerMode: false
   automaticOrphanedNodeCleanup: true
-  sysctls:
-  - fs.aio-max-nr=30000000
   datacenter:
     name: us-east-1
     racks:
@@ -84,6 +85,72 @@ spec:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
             - matchExpressions:
+              - key: topology.kubernetes.io/zone
+                operator: In
+                values:
+                - us-east-1a 
+              - key: scylla.scylladb.com/node-type
+                operator: In
+                values:
+                - scylla
+        tolerations:
+        - key: scylla-operator.scylladb.com/dedicated
+          operator: Equal
+          value: scyllaclusters
+          effect: NoSchedule
+    - name: us-east-1b
+      members: 1
+      scyllaConfig: scylladb-config
+      storage:
+        capacity: 100Gi
+        storageClassName: scylladb-local-xfs
+      resources:
+        requests:
+          cpu: 1
+          memory: 8Gi
+        limits:
+          cpu: 1
+          memory: 8Gi
+      placement:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: topology.kubernetes.io/zone
+                operator: In
+                values:
+                - us-east-1b
+              - key: scylla.scylladb.com/node-type
+                operator: In
+                values:
+                - scylla
+        tolerations:
+        - key: scylla-operator.scylladb.com/dedicated
+          operator: Equal
+          value: scyllaclusters
+          effect: NoSchedule
+    - name: us-east-1c
+      members: 1
+      scyllaConfig: scylladb-config
+      storage:
+        capacity: 100Gi
+        storageClassName: scylladb-local-xfs
+      resources:
+        requests:
+          cpu: 1
+          memory: 8Gi
+        limits:
+          cpu: 1
+          memory: 8Gi
+      placement:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: topology.kubernetes.io/zone
+                operator: In
+                values:
+                - us-east-1c
               - key: scylla.scylladb.com/node-type
                 operator: In
                 values:
@@ -130,11 +197,8 @@ EOF
 
 ::::
 
-:::{code-block} bash
-# Wait for it to deploy.
-kubectl wait --for='condition=Progressing=False' scyllacluster.scylla.scylladb.com/scylladb
-kubectl wait --for='condition=Degraded=False' scyllacluster.scylla.scylladb.com/scylladb
-kubectl wait --for='condition=Available=True' scyllacluster.scylla.scylladb.com/scylladb
+Wait for it to deploy by watching status conditions.
+:::{include} ./../../.internal/wait-for-status-conditions.scyllacluster.code-block.md
 :::
 
 ## Forcing a rolling restart
@@ -146,9 +210,12 @@ When you change a ScyllaDB config option that's not live reloaded by ScyllaDB, o
 ScyllaCluster give you the freedom to chose how you want to spread you rack over your Kubernetes nodes with generic [placement options](api-scylla.scylladb.com-scyllaclusters-v1-.spec.datacenter.racks[].placement).
 Here is a quick example of how you'd use them to spread your racks across different availability zone:
 
-:::::{tab-set}
+:::{include} ../../.internal/rf-warning.md
+:::
 
-::::{tab-item} GKE
+:::::{tabs}
+
+::::{group-tab} GKE
 :::{code} yaml
 spec:
   datacenter:
@@ -167,7 +234,7 @@ spec:
 :::
 ::::
 
-::::{tab-item} EKS
+::::{group-tab} EKS
 :::{code} yaml
 spec:
   datacenter:

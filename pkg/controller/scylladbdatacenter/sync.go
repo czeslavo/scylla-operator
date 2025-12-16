@@ -17,7 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	apimachineryutilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 )
@@ -186,7 +186,22 @@ func (sdcc *Controller) sync(ctx context.Context, key string) error {
 		objectErrs = append(objectErrs, err)
 	}
 
-	objectErr := utilerrors.NewAggregate(objectErrs)
+	scyllaDBDatacenterNodesStatusReportMap, err := controllerhelpers.GetObjects[CT, *scyllav1alpha1.ScyllaDBDatacenterNodesStatusReport](
+		ctx,
+		sdc,
+		scyllav1alpha1.ScyllaDBDatacenterGVK,
+		sdcSelector,
+		controllerhelpers.ControlleeManagerGetObjectsFuncs[CT, *scyllav1alpha1.ScyllaDBDatacenterNodesStatusReport]{
+			GetControllerUncachedFunc: sdcc.scyllaClient.ScyllaDBDatacenters(sdc.Namespace).Get,
+			ListObjectsFunc:           sdcc.scyllaDBDatacenterNodesStatusReportLister.ScyllaDBDatacenterNodesStatusReports(sdc.Namespace).List,
+			PatchObjectFunc:           sdcc.scyllaClient.ScyllaDBDatacenterNodesStatusReports(sdc.Namespace).Patch,
+		},
+	)
+	if err != nil {
+		objectErrs = append(objectErrs, err)
+	}
+
+	objectErr := apimachineryutilerrors.NewAggregate(objectErrs)
 	if objectErr != nil {
 		return objectErr
 	}
@@ -263,6 +278,16 @@ func (sdcc *Controller) sync(ctx context.Context, key string) error {
 	if err != nil {
 		errs = append(errs, fmt.Errorf("can't sync configs: %w", err))
 	}
+
+	err = controllerhelpers.RunSync(
+		&status.Conditions,
+		scyllaDBDatacenterNodesStatusReportControllerProgressingCondition,
+		scyllaDBDatacenterNodesStatusReportControllerDegradedCondition,
+		sdc.Generation,
+		func() ([]metav1.Condition, error) {
+			return sdcc.syncScyllaDBDatacenterNodesStatusReports(ctx, sdc, serviceMap, scyllaDBDatacenterNodesStatusReportMap)
+		},
+	)
 
 	err = controllerhelpers.RunSync(
 		&status.Conditions,
@@ -343,5 +368,5 @@ func (sdcc *Controller) sync(ctx context.Context, key string) error {
 		errs = append(errs, err)
 	}
 
-	return utilerrors.NewAggregate(errs)
+	return apimachineryutilerrors.NewAggregate(errs)
 }

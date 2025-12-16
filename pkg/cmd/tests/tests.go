@@ -31,29 +31,51 @@ var Suites = ginkgotest.TestSuites{
 	{
 		Name: "scylla-operator/conformance/parallel",
 		Description: templates.LongDesc(`
-		Tests that ensure an Scylla Operator is working properly.
+		Tests that can be run in parallel.
 		`),
 		LabelFilter: fmt.Sprintf(
-			"!%s && !%s",
+			"!%s && !%s && !%s",
 			framework.SerialLabelName,
 			framework.MultiDatacenterLabelName,
+			framework.SupportedOnlyOnOpenShiftLabelName,
+		),
+		DefaultParallelism: 42,
+	},
+	{
+		Name: "scylla-operator/conformance/parallel/openshift",
+		Description: templates.LongDesc(`
+		Tests that can be run in parallel on an OpenShift cluster.
+		`),
+		LabelFilter: fmt.Sprintf(
+			"!%s && !%s && !%s",
+			framework.SerialLabelName,
+			framework.MultiDatacenterLabelName,
+			framework.NotSupportedOnOpenShiftLabelName,
 		),
 		DefaultParallelism: 42,
 	},
 	{
 		Name: "scylla-operator/conformance/serial",
 		Description: templates.LongDesc(`
-		Tests that ensure an Scylla Operator is working properly.
+		Tests that must be run serially.
 		`),
-		LabelFilter:        fmt.Sprintf("%s", framework.SerialLabelName),
+		LabelFilter: fmt.Sprintf(
+			"%s && !%s",
+			framework.SerialLabelName,
+			framework.SupportedOnlyOnOpenShiftLabelName,
+		),
 		DefaultParallelism: 1,
 	},
 	{
 		Name: "scylla-operator/conformance/multi-datacenter-parallel",
 		Description: templates.LongDesc(`
-		Tests that ensure Scylla Operator is working properly in multi-datacenter infrastructure.
+		Tests for multi-datacenter setups that can be run in parallel.
 		`),
-		LabelFilter:        fmt.Sprintf("%s", framework.MultiDatacenterLabelName),
+		LabelFilter: fmt.Sprintf(
+			"%s && !%s",
+			framework.MultiDatacenterLabelName,
+			framework.SupportedOnlyOnOpenShiftLabelName,
+		),
 		DefaultParallelism: 42,
 	},
 }

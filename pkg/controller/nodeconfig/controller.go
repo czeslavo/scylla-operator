@@ -21,9 +21,9 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
+	apimachineryutilerrors "k8s.io/apimachinery/pkg/util/errors"
+	apimachineryutilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	apimachineryutilwait "k8s.io/apimachinery/pkg/util/wait"
 	appsv1informers "k8s.io/client-go/informers/apps/v1"
 	corev1informers "k8s.io/client-go/informers/core/v1"
 	rbacv1informers "k8s.io/client-go/informers/rbac/v1"
@@ -64,12 +64,13 @@ type Controller struct {
 	namespaceLister            corev1listers.NamespaceLister
 	nodeLister                 corev1listers.NodeLister
 	serviceAccountLister       corev1listers.ServiceAccountLister
+	configMapLister            corev1listers.ConfigMapLister
 
 	cachesToSync []cache.InformerSynced
 
 	eventRecorder record.EventRecorder
 
-	queue    workqueue.RateLimitingInterface
+	queue    workqueue.TypedRateLimitingInterface[string]
 	handlers *controllerhelpers.Handlers[*scyllav1alpha1.NodeConfig]
 
 	operatorImage string
@@ -92,6 +93,7 @@ func NewController(
 	namespaceInformer corev1informers.NamespaceInformer,
 	nodeInformer corev1informers.NodeInformer,
 	serviceAccountInformer corev1informers.ServiceAccountInformer,
+	configMapInformer corev1informers.ConfigMapInformer,
 	operatorImage string,
 ) (*Controller, error) {
 	eventBroadcaster := record.NewBroadcaster()
@@ -112,6 +114,7 @@ func NewController(
 		namespaceLister:            namespaceInformer.Lister(),
 		nodeLister:                 nodeInformer.Lister(),
 		serviceAccountLister:       serviceAccountInformer.Lister(),
+		configMapLister:            configMapInformer.Lister(),
 
 		cachesToSync: []cache.InformerSynced{
 			nodeConfigInformer.Informer().HasSynced,
@@ -124,11 +127,17 @@ func NewController(
 			namespaceInformer.Informer().HasSynced,
 			nodeInformer.Informer().HasSynced,
 			serviceAccountInformer.Informer().HasSynced,
+			configMapInformer.Informer().HasSynced,
 		},
 
 		eventRecorder: eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: "NodeConfig-controller"}),
 
-		queue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "NodeConfig"),
+		queue: workqueue.NewTypedRateLimitingQueueWithConfig(
+			workqueue.DefaultTypedControllerRateLimiter[string](),
+			workqueue.TypedRateLimitingQueueConfig[string]{
+				Name: "NodeConfig",
+			},
+		),
 
 		operatorImage: operatorImage,
 	}
@@ -211,6 +220,12 @@ func NewController(
 		AddFunc:    ncc.addNamespace,
 		UpdateFunc: ncc.updateNamespace,
 		DeleteFunc: ncc.deleteNamespace,
+	})
+
+	configMapInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    ncc.addConfigMap,
+		UpdateFunc: ncc.updateConfigMap,
+		DeleteFunc: ncc.deleteConfigMap,
 	})
 
 	return ncc, nil
@@ -423,6 +438,29 @@ func (ncc *Controller) deleteScyllaOperatorConfig(obj interface{}) {
 	)
 }
 
+func (ncc *Controller) addConfigMap(obj interface{}) {
+	ncc.handlers.HandleAdd(
+		obj.(*corev1.ConfigMap),
+		ncc.handlers.EnqueueOwner,
+	)
+}
+
+func (ncc *Controller) updateConfigMap(old, cur interface{}) {
+	ncc.handlers.HandleUpdate(
+		old.(*corev1.ConfigMap),
+		cur.(*corev1.ConfigMap),
+		ncc.handlers.EnqueueOwner,
+		ncc.deleteConfigMap,
+	)
+}
+
+func (ncc *Controller) deleteConfigMap(obj interface{}) {
+	ncc.handlers.HandleDelete(
+		obj,
+		ncc.handlers.EnqueueOwner,
+	)
+}
+
 func (ncc *Controller) processNextItem(ctx context.Context) bool {
 	key, quit := ncc.queue.Get()
 	if quit {
@@ -432,9 +470,9 @@ func (ncc *Controller) processNextItem(ctx context.Context) bool {
 
 	ctx, cancel := context.WithTimeout(ctx, maxSyncDuration)
 	defer cancel()
-	err := ncc.sync(ctx, key.(string))
+	err := ncc.sync(ctx, key)
 	// TODO: Do smarter filtering then just Reduce to handle cases like 2 conflict errors.
-	err = utilerrors.Reduce(err)
+	err = apimachineryutilerrors.Reduce(err)
 	switch {
 	case err == nil:
 		ncc.queue.Forget(key)
@@ -447,7 +485,7 @@ func (ncc *Controller) processNextItem(ctx context.Context) bool {
 		klog.V(2).InfoS("Hit already exists, will retry in a bit", "Key", key, "Error", err)
 
 	default:
-		utilruntime.HandleError(fmt.Errorf("syncing key '%v' failed: %v", key, err))
+		apimachineryutilruntime.HandleError(fmt.Errorf("syncing key '%v' failed: %v", key, err))
 	}
 
 	ncc.queue.AddRateLimited(key)
@@ -461,7 +499,7 @@ func (ncc *Controller) runWorker(ctx context.Context) {
 }
 
 func (ncc *Controller) Run(ctx context.Context, workers int) {
-	defer utilruntime.HandleCrash()
+	defer apimachineryutilruntime.HandleCrash()
 
 	klog.InfoS("Starting controller", "controller", ControllerName)
 
@@ -481,7 +519,7 @@ func (ncc *Controller) Run(ctx context.Context, workers int) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			wait.UntilWithContext(ctx, ncc.runWorker, time.Second)
+			apimachineryutilwait.UntilWithContext(ctx, ncc.runWorker, time.Second)
 		}()
 	}
 

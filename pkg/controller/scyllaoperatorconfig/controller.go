@@ -20,9 +20,9 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
+	apimachineryutilerrors "k8s.io/apimachinery/pkg/util/errors"
+	apimachineryutilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	apimachineryutilwait "k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/cache"
@@ -58,7 +58,7 @@ type Controller struct {
 
 	eventRecorder record.EventRecorder
 
-	queue    workqueue.RateLimitingInterface
+	queue    workqueue.TypedRateLimitingInterface[string]
 	handlers *controllerhelpers.Handlers[*scyllav1alpha1.ScyllaOperatorConfig]
 
 	wg sync.WaitGroup
@@ -86,9 +86,14 @@ func NewController(
 
 		getClusterDomainFunc: getClusterDomain,
 
-		eventRecorder: eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: "orphanedpv-controller"}),
+		eventRecorder: eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: "scyllaoperatorconfig-controller"}),
 
-		queue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "orphanedpv"),
+		queue: workqueue.NewTypedRateLimitingQueueWithConfig(
+			workqueue.DefaultTypedControllerRateLimiter[string](),
+			workqueue.TypedRateLimitingQueueConfig[string]{
+				Name: "scyllaoperatorconfig",
+			},
+		),
 	}
 
 	var err error
@@ -137,7 +142,7 @@ func (opc *Controller) processNextItem(ctx context.Context) bool {
 	}
 
 	// Make sure we always have an aggregate to process and all nested errors are flattened.
-	allErrors := utilerrors.Flatten(utilerrors.NewAggregate([]error{syncErr}))
+	allErrors := apimachineryutilerrors.Flatten(apimachineryutilerrors.NewAggregate([]error{syncErr}))
 	var remainingErrors []error
 	for _, err := range allErrors.Errors() {
 		switch {
@@ -155,9 +160,9 @@ func (opc *Controller) processNextItem(ctx context.Context) bool {
 		}
 	}
 
-	err := utilerrors.NewAggregate(remainingErrors)
+	err := apimachineryutilerrors.NewAggregate(remainingErrors)
 	if err != nil {
-		utilruntime.HandleError(fmt.Errorf("syncing key '%v' failed: %v", key, err))
+		apimachineryutilruntime.HandleError(fmt.Errorf("syncing key '%v' failed: %v", key, err))
 	}
 
 	opc.queue.AddRateLimited(key)
@@ -171,7 +176,7 @@ func (opc *Controller) runWorker(ctx context.Context) {
 }
 
 func (opc *Controller) Run(ctx context.Context, workers int) {
-	defer utilruntime.HandleCrash()
+	defer apimachineryutilruntime.HandleCrash()
 
 	klog.InfoS("Starting controller", "controller", ControllerName)
 
@@ -190,14 +195,14 @@ func (opc *Controller) Run(ctx context.Context, workers int) {
 		opc.wg.Add(1)
 		go func() {
 			defer opc.wg.Done()
-			wait.UntilWithContext(ctx, opc.runWorker, time.Second)
+			apimachineryutilwait.UntilWithContext(ctx, opc.runWorker, time.Second)
 		}()
 	}
 
 	opc.wg.Add(1)
 	go func() {
 		defer opc.wg.Done()
-		wait.UntilWithContext(ctx, func(ctx context.Context) {
+		apimachineryutilwait.UntilWithContext(ctx, func(ctx context.Context) {
 			klog.V(4).InfoS("Periodically enqueuing %q ScyllaOperatorConfig", naming.SingletonName)
 
 			key, err := keyFunc(&metav1.ObjectMeta{
@@ -205,7 +210,7 @@ func (opc *Controller) Run(ctx context.Context, workers int) {
 				Name:      naming.SingletonName,
 			})
 			if err != nil {
-				utilruntime.HandleError(fmt.Errorf("couldn't get key for object name %#v: %v", naming.SingletonName, err))
+				apimachineryutilruntime.HandleError(fmt.Errorf("couldn't get key for object name %#v: %v", naming.SingletonName, err))
 				return
 			}
 

@@ -6,16 +6,16 @@ import (
 	"sync"
 	"time"
 
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	monitoringv1informers "github.com/prometheus-operator/prometheus-operator/pkg/client/informers/externalversions/monitoring/v1"
+	monitoringv1listers "github.com/prometheus-operator/prometheus-operator/pkg/client/listers/monitoring/v1"
+	monitoringv1client "github.com/prometheus-operator/prometheus-operator/pkg/client/versioned/typed/monitoring/v1"
 	scyllav1alpha1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1alpha1"
 	scyllav1alpha1client "github.com/scylladb/scylla-operator/pkg/client/scylla/clientset/versioned/typed/scylla/v1alpha1"
 	scyllav1alpha1informers "github.com/scylladb/scylla-operator/pkg/client/scylla/informers/externalversions/scylla/v1alpha1"
 	scyllav1alpha1listers "github.com/scylladb/scylla-operator/pkg/client/scylla/listers/scylla/v1alpha1"
 	"github.com/scylladb/scylla-operator/pkg/controllerhelpers"
 	"github.com/scylladb/scylla-operator/pkg/crypto"
-	monitoringv1 "github.com/scylladb/scylla-operator/pkg/externalapi/monitoring/v1"
-	monitoringv1client "github.com/scylladb/scylla-operator/pkg/externalclient/monitoring/clientset/versioned/typed/monitoring/v1"
-	monitoringv1informers "github.com/scylladb/scylla-operator/pkg/externalclient/monitoring/informers/externalversions/monitoring/v1"
-	monitoringv1listers "github.com/scylladb/scylla-operator/pkg/externalclient/monitoring/listers/monitoring/v1"
 	"github.com/scylladb/scylla-operator/pkg/kubeinterfaces"
 	"github.com/scylladb/scylla-operator/pkg/scheme"
 	appsv1 "k8s.io/api/apps/v1"
@@ -24,9 +24,9 @@ import (
 	policyv1 "k8s.io/api/policy/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
+	apimachineryutilerrors "k8s.io/apimachinery/pkg/util/errors"
+	apimachineryutilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	apimachineryutilwait "k8s.io/apimachinery/pkg/util/wait"
 	appsv1informers "k8s.io/client-go/informers/apps/v1"
 	corev1informers "k8s.io/client-go/informers/core/v1"
 	networkingv1informers "k8s.io/client-go/informers/networking/v1"
@@ -69,7 +69,7 @@ type Controller struct {
 	deploymentLister           appsv1listers.DeploymentLister
 	ingressLister              networkingv1listers.IngressLister
 
-	scylladbMonitoringLister scyllav1alpha1listers.ScyllaDBMonitoringLister
+	scyllaDBMonitoringInformer scyllav1alpha1informers.ScyllaDBMonitoringInformer
 
 	prometheusLister     monitoringv1listers.PrometheusLister
 	prometheusRuleLister monitoringv1listers.PrometheusRuleLister
@@ -79,7 +79,7 @@ type Controller struct {
 
 	eventRecorder record.EventRecorder
 
-	queue    workqueue.RateLimitingInterface
+	queue    workqueue.TypedRateLimitingInterface[string]
 	handlers *controllerhelpers.Handlers[*scyllav1alpha1.ScyllaDBMonitoring]
 
 	keyGetter crypto.RSAKeyGetter
@@ -123,7 +123,7 @@ func NewController(
 		deploymentLister:           deploymentInformer.Lister(),
 		ingressLister:              ingressInformer.Lister(),
 
-		scylladbMonitoringLister: scyllaDBMonitoringInformer.Lister(),
+		scyllaDBMonitoringInformer: scyllaDBMonitoringInformer,
 
 		prometheusLister:     prometheusInformer.Lister(),
 		prometheusRuleLister: prometheusRuleInformer.Lister(),
@@ -149,9 +149,21 @@ func NewController(
 
 		eventRecorder: eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: "scylladbmonitoring-controller"}),
 
-		queue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "scylladbmonitoring"),
+		queue: workqueue.NewTypedRateLimitingQueueWithConfig(
+			workqueue.DefaultTypedControllerRateLimiter[string](),
+			workqueue.TypedRateLimitingQueueConfig[string]{
+				Name: "scylladbmonitoring",
+			},
+		),
 
 		keyGetter: keyGetter,
+	}
+
+	if err := scyllaDBMonitoringInformer.Informer().AddIndexers(cache.Indexers{
+		scyllaDBMonitoringBySecretIndexName:    indexScyllaDBMonitoringBySecret,
+		scyllaDBMonitoringByConfigMapIndexName: indexScyllaDBMonitoringByConfigMap,
+	}); err != nil {
+		return nil, fmt.Errorf("can't add indexers to ScyllaDBMonitoring informer: %w", err)
 	}
 
 	var err error
@@ -162,10 +174,10 @@ func NewController(
 		scylladbMonitoringControllerGVK,
 		kubeinterfaces.NamespacedGetList[*scyllav1alpha1.ScyllaDBMonitoring]{
 			GetFunc: func(namespace, name string) (*scyllav1alpha1.ScyllaDBMonitoring, error) {
-				return smc.scylladbMonitoringLister.ScyllaDBMonitorings(namespace).Get(name)
+				return smc.scyllaDBMonitoringInformer.Lister().ScyllaDBMonitorings(namespace).Get(name)
 			},
 			ListFunc: func(namespace string, selector labels.Selector) (ret []*scyllav1alpha1.ScyllaDBMonitoring, err error) {
-				return smc.scylladbMonitoringLister.ScyllaDBMonitorings(namespace).List(selector)
+				return smc.scyllaDBMonitoringInformer.Lister().ScyllaDBMonitorings(namespace).List(selector)
 			},
 		},
 	)
@@ -296,7 +308,10 @@ func (smc *Controller) deleteScyllaOperatorConfig(obj interface{}) {
 func (smc *Controller) addConfigMap(obj interface{}) {
 	smc.handlers.HandleAdd(
 		obj.(*corev1.ConfigMap),
-		smc.handlers.EnqueueOwner,
+		combineEnqueueFuncs(
+			smc.enqueueByConfigMapRef,
+			smc.handlers.EnqueueOwner,
+		),
 	)
 }
 
@@ -304,7 +319,10 @@ func (smc *Controller) updateConfigMap(old, cur interface{}) {
 	smc.handlers.HandleUpdate(
 		old.(*corev1.ConfigMap),
 		cur.(*corev1.ConfigMap),
-		smc.handlers.EnqueueOwner,
+		combineEnqueueFuncs(
+			smc.enqueueByConfigMapRef,
+			smc.handlers.EnqueueOwner,
+		),
 		smc.deleteConfigMap,
 	)
 }
@@ -312,14 +330,20 @@ func (smc *Controller) updateConfigMap(old, cur interface{}) {
 func (smc *Controller) deleteConfigMap(obj interface{}) {
 	smc.handlers.HandleDelete(
 		obj,
-		smc.handlers.EnqueueOwner,
+		combineEnqueueFuncs(
+			smc.enqueueByConfigMapRef,
+			smc.handlers.EnqueueOwner,
+		),
 	)
 }
 
 func (smc *Controller) addSecret(obj interface{}) {
 	smc.handlers.HandleAdd(
 		obj.(*corev1.Secret),
-		smc.handlers.EnqueueOwner,
+		combineEnqueueFuncs(
+			smc.enqueueBySecretRef,
+			smc.handlers.EnqueueOwner,
+		),
 	)
 }
 
@@ -327,7 +351,10 @@ func (smc *Controller) updateSecret(old, cur interface{}) {
 	smc.handlers.HandleUpdate(
 		old.(*corev1.Secret),
 		cur.(*corev1.Secret),
-		smc.handlers.EnqueueOwner,
+		combineEnqueueFuncs(
+			smc.enqueueBySecretRef,
+			smc.handlers.EnqueueOwner,
+		),
 		smc.deleteSecret,
 	)
 }
@@ -335,7 +362,10 @@ func (smc *Controller) updateSecret(old, cur interface{}) {
 func (smc *Controller) deleteSecret(obj interface{}) {
 	smc.handlers.HandleDelete(
 		obj,
-		smc.handlers.EnqueueOwner,
+		combineEnqueueFuncs(
+			smc.enqueueBySecretRef,
+			smc.handlers.EnqueueOwner,
+		),
 	)
 }
 
@@ -523,6 +553,54 @@ func (smc *Controller) deleteServiceMonitor(obj interface{}) {
 	)
 }
 
+func (smc *Controller) enqueueBySecretRef(depth int, obj kubeinterfaces.ObjectInterface, op controllerhelpers.HandlerOperationType) {
+	_, ok := obj.(*corev1.Secret)
+	if !ok {
+		apimachineryutilruntime.HandleError(fmt.Errorf("expected %T, got %T", &corev1.Secret{}, obj))
+		return
+	}
+
+	name := obj.GetName()
+	indexedSDBMs, err := smc.scyllaDBMonitoringInformer.Informer().GetIndexer().ByIndex(scyllaDBMonitoringBySecretIndexName, name)
+	if err != nil {
+		apimachineryutilruntime.HandleError(fmt.Errorf("can't get ScyllaDBMonitoring for Secret %q: %w", name, err))
+	}
+
+	for _, indexedSDBM := range indexedSDBMs {
+		sdbm, ok := indexedSDBM.(*scyllav1alpha1.ScyllaDBMonitoring)
+		if !ok {
+			apimachineryutilruntime.HandleError(fmt.Errorf("expected *scyllav1alpha1.ScyllaDBMonitoring, got %T", indexedSDBM))
+			continue
+		}
+		klog.V(4).InfoS("Enqueuing ScyllaDBMonitoring for Secret", "Secret", name, "ScyllaDBMonitoring", klog.KObj(sdbm))
+		smc.handlers.Enqueue(depth+1, sdbm, op)
+	}
+}
+
+func (smc *Controller) enqueueByConfigMapRef(depth int, obj kubeinterfaces.ObjectInterface, op controllerhelpers.HandlerOperationType) {
+	_, ok := obj.(*corev1.ConfigMap)
+	if !ok {
+		apimachineryutilruntime.HandleError(fmt.Errorf("expected %T, got %T", &corev1.ConfigMap{}, obj))
+		return
+	}
+
+	name := obj.GetName()
+	indexedSDBMs, err := smc.scyllaDBMonitoringInformer.Informer().GetIndexer().ByIndex(scyllaDBMonitoringByConfigMapIndexName, name)
+	if err != nil {
+		apimachineryutilruntime.HandleError(fmt.Errorf("can't get ScyllaDBMonitoring for ConfigMap %q: %w", name, err))
+	}
+
+	for _, indexedSDBM := range indexedSDBMs {
+		sdbm, ok := indexedSDBM.(*scyllav1alpha1.ScyllaDBMonitoring)
+		if !ok {
+			apimachineryutilruntime.HandleError(fmt.Errorf("expected %T, got %T", &scyllav1alpha1.ScyllaDBMonitoring{}, indexedSDBM))
+			continue
+		}
+		klog.V(4).InfoS("Enqueuing ScyllaDBMonitoring for ConfigMap", "ConfigMap", name, "ScyllaDBMonitoring", klog.KObj(sdbm))
+		smc.handlers.Enqueue(depth+1, sdbm, op)
+	}
+}
+
 func (smc *Controller) processNextItem(ctx context.Context) bool {
 	key, quit := smc.queue.Get()
 	if quit {
@@ -530,9 +608,9 @@ func (smc *Controller) processNextItem(ctx context.Context) bool {
 	}
 	defer smc.queue.Done(key)
 
-	err := smc.sync(ctx, key.(string))
+	err := smc.sync(ctx, key)
 	// TODO: Do smarter filtering then just Reduce to handle cases like 2 conflict errors.
-	err = utilerrors.Reduce(err)
+	err = apimachineryutilerrors.Reduce(err)
 	switch {
 	case err == nil:
 		smc.queue.Forget(key)
@@ -545,7 +623,7 @@ func (smc *Controller) processNextItem(ctx context.Context) bool {
 		klog.V(2).InfoS("Hit already exists, will retry in a bit", "Key", key, "Error", err)
 
 	default:
-		utilruntime.HandleError(fmt.Errorf("syncing key '%v' failed: %v", key, err))
+		apimachineryutilruntime.HandleError(fmt.Errorf("syncing key '%v' failed: %v", key, err))
 	}
 
 	smc.queue.AddRateLimited(key)
@@ -559,7 +637,7 @@ func (smc *Controller) runWorker(ctx context.Context) {
 }
 
 func (smc *Controller) Run(ctx context.Context, workers int) {
-	defer utilruntime.HandleCrash()
+	defer apimachineryutilruntime.HandleCrash()
 
 	klog.InfoS("Starting controller", "controller", "ScyllaDBMonitoring")
 
@@ -579,9 +657,17 @@ func (smc *Controller) Run(ctx context.Context, workers int) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			wait.UntilWithContext(ctx, smc.runWorker, time.Second)
+			apimachineryutilwait.UntilWithContext(ctx, smc.runWorker, time.Second)
 		}()
 	}
 
 	<-ctx.Done()
+}
+
+func combineEnqueueFuncs(funcs ...controllerhelpers.EnqueueFuncType) controllerhelpers.EnqueueFuncType {
+	return func(depth int, obj kubeinterfaces.ObjectInterface, op controllerhelpers.HandlerOperationType) {
+		for _, fn := range funcs {
+			fn(depth+1, obj, op)
+		}
+	}
 }

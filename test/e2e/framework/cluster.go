@@ -12,6 +12,7 @@ import (
 
 type ClusterInterface interface {
 	AdminClientInterface
+	Name() string
 	DefaultNamespaceIfAny() (*corev1.Namespace, Client, bool)
 	CreateUserNamespace(ctx context.Context) (*corev1.Namespace, Client)
 	AddCleaners(cleaners ...Cleaner)
@@ -58,6 +59,10 @@ func NewCluster(name string, artifactsDir string, restConfig *restclient.Config,
 	}
 }
 
+func (c *Cluster) Name() string {
+	return c.name
+}
+
 func (c *Cluster) DefaultNamespaceIfAny() (*corev1.Namespace, Client, bool) {
 	if c.defaultNamespace == nil {
 		return nil, Client{}, false
@@ -81,7 +86,7 @@ func (c *Cluster) GetArtifactsDir() string {
 func (c *Cluster) CreateUserNamespace(ctx context.Context) (*corev1.Namespace, Client) {
 	ns, nsClient := c.createNamespace(ctx, c.KubeAdminClient(), c.AdminClientConfig())
 
-	cc := NewNamespaceCleanerCollector(c.KubeAdminClient(), c.DynamicAdminClient(), ns)
+	cc := NewNamespaceCleanerCollector(c.AdminClientConfig(), c.KubeAdminClient(), c.DynamicAdminClient(), ns)
 	c.AddCleaners(cc)
 	c.AddCollectors(cc)
 

@@ -11,13 +11,14 @@ import (
 	"github.com/scylladb/scylla-operator/pkg/resourceapply"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	apimachineryutilerrors "k8s.io/apimachinery/pkg/util/errors"
 )
 
 func (ncc *Controller) makeServiceAccounts() []*corev1.ServiceAccount {
 	serviceAccounts := []*corev1.ServiceAccount{
 		makeNodeConfigServiceAccount(),
 		makePerftuneServiceAccount(),
+		makeSysctlsServiceAccount(),
 		makeRlimitsServiceAccount(),
 	}
 
@@ -54,7 +55,7 @@ func (ncc *Controller) pruneServiceAccounts(ctx context.Context, requiredService
 			continue
 		}
 	}
-	return utilerrors.NewAggregate(errs)
+	return apimachineryutilerrors.NewAggregate(errs)
 }
 
 func (ncc *Controller) syncServiceAccounts(ctx context.Context, nc *scyllav1alpha1.NodeConfig, serviceAccounts map[string]*corev1.ServiceAccount) ([]metav1.Condition, error) {
@@ -82,5 +83,5 @@ func (ncc *Controller) syncServiceAccounts(ctx context.Context, nc *scyllav1alph
 		}
 	}
 
-	return progressingConditions, utilerrors.NewAggregate(errs)
+	return progressingConditions, apimachineryutilerrors.NewAggregate(errs)
 }

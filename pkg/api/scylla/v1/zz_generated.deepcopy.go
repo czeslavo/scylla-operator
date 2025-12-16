@@ -639,6 +639,11 @@ func (in *RepairTaskSpec) DeepCopyInto(out *RepairTaskSpec) {
 		*out = new(string)
 		**out = **in
 	}
+	if in.IgnoreDownHosts != nil {
+		in, out := &in.IgnoreDownHosts, &out.IgnoreDownHosts
+		*out = new(bool)
+		**out = **in
+	}
 	return
 }
 
@@ -691,6 +696,11 @@ func (in *RepairTaskStatus) DeepCopyInto(out *RepairTaskStatus) {
 		*out = new(string)
 		**out = **in
 	}
+	if in.IgnoreDownHosts != nil {
+		in, out := &in.IgnoreDownHosts, &out.IgnoreDownHosts
+		*out = new(bool)
+		**out = **in
+	}
 	return
 }
 
@@ -720,6 +730,11 @@ func (in *SchedulerTaskSpec) DeepCopyInto(out *SchedulerTaskSpec) {
 	if in.NumRetries != nil {
 		in, out := &in.NumRetries, &out.NumRetries
 		*out = new(int64)
+		**out = **in
+	}
+	if in.RetryWait != nil {
+		in, out := &in.RetryWait, &out.RetryWait
+		*out = new(metav1.Duration)
 		**out = **in
 	}
 	if in.Cron != nil {
@@ -761,6 +776,11 @@ func (in *SchedulerTaskStatus) DeepCopyInto(out *SchedulerTaskStatus) {
 	if in.NumRetries != nil {
 		in, out := &in.NumRetries, &out.NumRetries
 		*out = new(int64)
+		**out = **in
+	}
+	if in.RetryWait != nil {
+		in, out := &in.RetryWait, &out.RetryWait
+		*out = new(metav1.Duration)
 		**out = **in
 	}
 	if in.Cron != nil {

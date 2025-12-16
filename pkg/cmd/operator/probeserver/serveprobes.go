@@ -10,11 +10,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/scylladb/scylla-operator/pkg/cmdutil"
 	"github.com/scylladb/scylla-operator/pkg/genericclioptions"
 	"github.com/scylladb/scylla-operator/pkg/signals"
-	"github.com/scylladb/scylla-operator/pkg/version"
 	"github.com/spf13/cobra"
-	apierrors "k8s.io/apimachinery/pkg/util/errors"
+	apimachineryutilerrors "k8s.io/apimachinery/pkg/util/errors"
 	cliflag "k8s.io/component-base/cli/flag"
 	"k8s.io/klog/v2"
 )
@@ -41,7 +41,7 @@ func (o *ServeProbesOptions) AddFlags(cmd *cobra.Command) {
 func (o *ServeProbesOptions) Validate(args []string) error {
 	var errs []error
 
-	return apierrors.NewAggregate(errs)
+	return apimachineryutilerrors.NewAggregate(errs)
 }
 
 func (o *ServeProbesOptions) Complete(args []string) error {
@@ -49,7 +49,7 @@ func (o *ServeProbesOptions) Complete(args []string) error {
 }
 
 func (o *ServeProbesOptions) Run(originalStreams genericclioptions.IOStreams, cmd *cobra.Command) (returnErr error) {
-	klog.Infof("%s version %s", cmd.Name(), version.Get())
+	cmdutil.LogCommandStarting(cmd)
 	cliflag.PrintFlags(cmd.Flags())
 
 	stopCh := signals.StopChannel()

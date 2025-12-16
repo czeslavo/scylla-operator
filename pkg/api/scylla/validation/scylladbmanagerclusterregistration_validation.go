@@ -9,13 +9,14 @@ import (
 	"github.com/scylladb/scylla-operator/pkg/naming"
 	apimachineryvalidation "k8s.io/apimachinery/pkg/api/validation"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/validation"
+	apimachineryutilvalidation "k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
 var (
-	supportedLocalScyllaDBReferenceKinds = []string{
+	scyllaDBManagerClusterRegistrationSupportedLocalScyllaDBReferenceKinds = []string{
 		scyllav1alpha1.ScyllaDBDatacenterGVK.Kind,
+		scyllav1alpha1.ScyllaDBClusterGVK.Kind,
 	}
 )
 
@@ -44,18 +45,18 @@ func ValidateScyllaDBManagerClusterRegistrationObjectMeta(objectMeta *metav1.Obj
 func ValidateScyllaDBManagerClusterRegistrationSpec(spec *scyllav1alpha1.ScyllaDBManagerClusterRegistrationSpec, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 
-	allErrs = append(allErrs, ValidateLocalScyllaDBReference(&spec.ScyllaDBClusterRef, fldPath.Child("scyllaDBClusterRef"))...)
+	allErrs = append(allErrs, ValidateLocalScyllaDBReference(&spec.ScyllaDBClusterRef, scyllaDBManagerClusterRegistrationSupportedLocalScyllaDBReferenceKinds, fldPath.Child("scyllaDBClusterRef"))...)
 
 	return allErrs
 }
 
-func ValidateLocalScyllaDBReference(localScyllaDBReference *scyllav1alpha1.LocalScyllaDBReference, fldPath *field.Path) field.ErrorList {
+func ValidateLocalScyllaDBReference(localScyllaDBReference *scyllav1alpha1.LocalScyllaDBReference, supportedLocalScyllaDBReferenceKinds []string, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 
 	if len(localScyllaDBReference.Name) == 0 {
 		allErrs = append(allErrs, field.Required(fldPath.Child("name"), ""))
 	} else {
-		for _, msg := range validation.IsDNS1123Subdomain(localScyllaDBReference.Name) {
+		for _, msg := range apimachineryutilvalidation.IsDNS1123Subdomain(localScyllaDBReference.Name) {
 			allErrs = append(allErrs, field.Invalid(fldPath.Child("name"), localScyllaDBReference.Name, msg))
 		}
 	}
@@ -94,4 +95,12 @@ func ValidateScyllaDBManagerClusterRegistrationSpecUpdate(newSpec, oldSpec *scyl
 	allErrs = append(allErrs, apimachineryvalidation.ValidateImmutableField(newSpec.ScyllaDBClusterRef.Name, oldSpec.ScyllaDBClusterRef.Name, fldPath.Child("scyllaDBClusterRef", "name"))...)
 
 	return allErrs
+}
+
+func GetWarningsOnScyllaDBManagerClusterRegistrationCreate(smcr *scyllav1alpha1.ScyllaDBManagerClusterRegistration) []string {
+	return nil
+}
+
+func GetWarningsOnScyllaDBManagerClusterRegistrationUpdate(new, old *scyllav1alpha1.ScyllaDBManagerClusterRegistration) []string {
+	return nil
 }

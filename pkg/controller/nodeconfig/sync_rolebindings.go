@@ -12,7 +12,7 @@ import (
 	"github.com/scylladb/scylla-operator/pkg/resourceapply"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	apimachineryutilerrors "k8s.io/apimachinery/pkg/util/errors"
 )
 
 func (ncc *Controller) syncRoleBindings(
@@ -24,6 +24,7 @@ func (ncc *Controller) syncRoleBindings(
 
 	requiredRoleBindings := []*rbacv1.RoleBinding{
 		makePerftuneRoleBinding(),
+		makeSysctlsRoleBinding(),
 		makeRlimitsRoleBinding(),
 	}
 
@@ -54,5 +55,5 @@ func (ncc *Controller) syncRoleBindings(
 			continue
 		}
 	}
-	return progressingConditions, utilerrors.NewAggregate(errs)
+	return progressingConditions, apimachineryutilerrors.NewAggregate(errs)
 }

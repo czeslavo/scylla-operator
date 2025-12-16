@@ -2,9 +2,9 @@
 
 ## Introduction
 
-The [ScyllaDBCluster](../../api-reference/groups/scylla.scylladb.com/scylladbclusters.rst) resource defines a multi-datacenter ScyllaDB cluster that can span multiple geo-distributed Kubernetes clusters.
+The [ScyllaDBCluster](../../reference/api/groups/scylla.scylladb.com/scylladbclusters.rst) resource defines a multi-datacenter ScyllaDB cluster that can span multiple geo-distributed Kubernetes clusters.
 This section provides an overview of its structure and demonstrates how to perform basic configurations and access the APIs.
-It is not intended as a comprehensive guide to all capabilities. For a full list of available options, refer to the [generated API reference](../../api-reference/groups/scylla.scylladb.com/scylladbclusters.rst).
+It is not intended as a comprehensive guide to all capabilities. For a full list of available options, refer to the [generated API reference](../../reference/api/groups/scylla.scylladb.com/scylladbclusters.rst).
 
 :::{caution}
 ScyllaDBCluster is considered as a technical preview, which means users should be cautious when using it on environments other than development.
@@ -37,6 +37,10 @@ The remaining clusters will serve as Worker clusters and must meet the following
 - Have {{productName}} and its prerequisites installed.
 - Run a storage provisioner capable of provisioning XFS volumes with the StorageClass `scylladb-local-xfs` on each node dedicated to ScyllaDB.
 
+:::{caution}
+You are strongly advised to [enable bootstrap synchronisation](../../reference/feature-gates.md#bootstrapsynchronisation) in your {{productName}} installations to avoid potential stability issues when adding new nodes to your ScyllaDB clusters.
+:::
+
 For guidance on setting up such infrastructure, refer to one of the following resources:
 
 - [Build multiple Amazon EKS clusters with Inter-Kubernetes networking](../common/multidc/eks.md)
@@ -63,16 +67,17 @@ In this guide, we assume that the credential Secrets are placed in the `remoteku
 However, you are free to use your own naming conventions.
 
 Create three RemoteKubernetesCluster resources in the Control Plane cluster—one for each Worker cluster.
-::::{tab-set}
-:::{tab-item} dev-us-east-1
+
+::::{tabs}
+:::{group-tab} dev-us-east-1
 ```{literalinclude} ../../../../examples/multi-dc/cluster-wide-resources/00_dev-us-east-1.remotekubernetescluster.yaml
 ```
 :::
-:::{tab-item} dev-us-central-1
+:::{group-tab} dev-us-central-1
 ```{literalinclude} ../../../../examples/multi-dc/cluster-wide-resources/00_dev-us-central-1.remotekubernetescluster.yaml
 ```
 :::
-:::{tab-item} dev-us-west-1
+:::{group-tab} dev-us-west-1
 ```{literalinclude} ../../../../examples/multi-dc/cluster-wide-resources/00_dev-us-west-1.remotekubernetescluster.yaml
 ```
 :::
@@ -169,10 +174,7 @@ Similarly, the tolerations will differ depending on how and whether you set up d
 
 Wait for it to deploy, by watching status conditions.
 
-:::{code-block} bash
-kubectl --context=${CONTROL_PLANE_CONTEXT} wait --for='condition=Progressing=False' scylladbcluster.scylla.scylladb.com/dev-cluster
-kubectl --context=${CONTROL_PLANE_CONTEXT} wait --for='condition=Degraded=False' scylladbcluster.scylla.scylladb.com/dev-cluster
-kubectl --context=${CONTROL_PLANE_CONTEXT} wait --for='condition=Available=True' scylladbcluster.scylla.scylladb.com/dev-cluster
+:::{include} ./../../.internal/wait-for-status-conditions.scylladbcluster.code-block.md
 :::
 
 Datacenters in Worker clusters are reconciled in unique namespaces. Their names are visible in `ScyllaDBCluster.status.datacenters`.

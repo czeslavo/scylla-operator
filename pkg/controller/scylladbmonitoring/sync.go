@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	scyllav1alpha1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1alpha1"
 	"github.com/scylladb/scylla-operator/pkg/controllerhelpers"
-	monitoringv1 "github.com/scylladb/scylla-operator/pkg/externalapi/monitoring/v1"
 	"github.com/scylladb/scylla-operator/pkg/naming"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -16,7 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	apimachineryutilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 )
@@ -43,7 +43,7 @@ func (smc *Controller) sync(ctx context.Context, key string) error {
 		klog.V(4).InfoS("Finished syncing ScyllaDBMonitoring", "ScyllaDBMonitoring", klog.KRef(namespace, name), "duration", time.Since(startTime))
 	}()
 
-	sm, err := smc.scylladbMonitoringLister.ScyllaDBMonitorings(namespace).Get(name)
+	sm, err := smc.scyllaDBMonitoringInformer.Lister().ScyllaDBMonitorings(namespace).Get(name)
 	if errors.IsNotFound(err) {
 		klog.V(2).InfoS("ScyllaDBMonitoring has been deleted", "ScyllaDBMonitoring", klog.KObj(sm))
 		return nil
@@ -217,7 +217,7 @@ func (smc *Controller) sync(ctx context.Context, key string) error {
 		objectErrs = append(objectErrs, fmt.Errorf("can't get service monitors: %w", err))
 	}
 
-	objectErr := utilerrors.NewAggregate(objectErrs)
+	objectErr := apimachineryutilerrors.NewAggregate(objectErrs)
 	if objectErr != nil {
 		return objectErr
 	}
@@ -292,5 +292,5 @@ func (smc *Controller) sync(ctx context.Context, key string) error {
 		errs = append(errs, err)
 	}
 
-	return utilerrors.NewAggregate(errs)
+	return apimachineryutilerrors.NewAggregate(errs)
 }

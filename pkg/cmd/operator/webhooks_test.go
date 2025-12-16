@@ -21,8 +21,19 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/scylladb/scylla-operator/pkg/genericclioptions"
-	"k8s.io/apimachinery/pkg/util/wait"
+	admissionv1 "k8s.io/api/admission/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/apimachinery/pkg/util/validation/field"
+	apimachineryutilwait "k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apiserver/pkg/server/dynamiccertificates"
 )
 
@@ -183,7 +194,7 @@ func TestWebhookOptionsRunWithReload(t *testing.T) {
 		}
 	}
 
-	err = wait.PollImmediate(pollInterval, pollTimeout, hasExpectedCertificate(initialCertSerialNumber))
+	err = apimachineryutilwait.PollImmediate(pollInterval, pollTimeout, hasExpectedCertificate(initialCertSerialNumber))
 	if err != nil {
 		t.Fatalf("can't observe the initial certificate: %v", err)
 	}
@@ -204,9 +215,54 @@ func TestWebhookOptionsRunWithReload(t *testing.T) {
 		t.Fatalf("can't create a file: %v", err)
 	}
 
-	err = wait.PollImmediate(pollInterval, pollTimeout, hasExpectedCertificate(updatedCertSerialNumber))
+	err = apimachineryutilwait.PollImmediate(pollInterval, pollTimeout, hasExpectedCertificate(updatedCertSerialNumber))
 	if err != nil {
 		t.Errorf("certificate wasn't updated: %v", err)
+	}
+}
+
+func TestPortFlag(t *testing.T) {
+	t.Parallel()
+
+	tt := []struct {
+		name          string
+		portFlag      string
+		expectedValue int
+		expectedError error
+	}{
+		{
+			name:          "port number",
+			portFlag:      "1234",
+			expectedValue: 1234,
+			expectedError: nil,
+		},
+		{
+			name:          "string with tcp://host:port format",
+			portFlag:      "tcp://host:1234",
+			expectedValue: 1234,
+			expectedError: nil,
+		},
+		{
+			name:          "string with tcp://ip:port format",
+			portFlag:      "tcp://127.0.0.1:4321",
+			expectedValue: 4321,
+			expectedError: nil,
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			pf := portFlag(0)
+			gotErr := pf.Set(tc.portFlag)
+			if !equality.Semantic.DeepEqual(gotErr, tc.expectedError) {
+				t.Errorf("expected error %v, got %v", tc.expectedError, gotErr)
+			}
+			if int(pf) != tc.expectedValue {
+				t.Errorf("expected value %v, got %v", tc.expectedValue, pf)
+			}
+		})
 	}
 }
 
@@ -325,4 +381,353 @@ func createFileWithContent(path string, data []byte) error {
 	}
 
 	return nil
+}
+
+func Test_validate(t *testing.T) {
+	t.Parallel()
+
+	testScheme := runtime.NewScheme()
+
+	err := corev1.AddToScheme(testScheme)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	codecs := serializer.NewCodecFactory(testScheme)
+	encoder := unstructured.NewJSONFallbackEncoder(codecs.LegacyCodec(testScheme.PrioritizedVersionsAllGroups()...))
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "pod",
+			Namespace: "test",
+		},
+	}
+	podRaw, err := runtime.Encode(encoder, pod)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tt := []struct {
+		name             string
+		ar               *admissionv1.AdmissionReview
+		validators       map[schema.GroupVersionResource]Validator
+		expectedWarnings []string
+		expectedError    error
+	}{
+		{
+			name: "create, no errors, no warnings",
+			ar: func() *admissionv1.AdmissionReview {
+				return &admissionv1.AdmissionReview{
+					Request: &admissionv1.AdmissionRequest{
+						UID: "uid",
+						Resource: metav1.GroupVersionResource{
+							Group:    "",
+							Version:  "v1",
+							Resource: "pods",
+						},
+						Operation: "CREATE",
+						Object:    runtime.RawExtension{Raw: podRaw},
+					},
+				}
+			}(),
+			validators: map[schema.GroupVersionResource]Validator{
+				corev1.SchemeGroupVersion.WithResource("pods"): &GenericValidator[*corev1.Pod]{
+					ValidateCreateFunc: func(_ *corev1.Pod) field.ErrorList {
+						return nil
+					},
+					ValidateUpdateFunc: func(_, _ *corev1.Pod) field.ErrorList {
+						panic("unexpected call to ValidateUpdateFunc")
+					},
+					GetWarningsOnCreateFunc: func(_ *corev1.Pod) []string {
+						return nil
+					},
+					GetWarningsOnUpdateFunc: func(_, _ *corev1.Pod) []string {
+						panic("unexpected call to GetWarningsOnUpdateFunc")
+					},
+				},
+			},
+			expectedWarnings: nil,
+			expectedError:    nil,
+		},
+		{
+			name: "create, error, no warnings",
+			ar: func() *admissionv1.AdmissionReview {
+				return &admissionv1.AdmissionReview{
+					Request: &admissionv1.AdmissionRequest{
+						UID: "uid",
+						Resource: metav1.GroupVersionResource{
+							Group:    "",
+							Version:  "v1",
+							Resource: "pods",
+						},
+						Operation: "CREATE",
+						Object:    runtime.RawExtension{Raw: podRaw},
+					},
+				}
+			}(),
+			validators: map[schema.GroupVersionResource]Validator{
+				corev1.SchemeGroupVersion.WithResource("pods"): &GenericValidator[*corev1.Pod]{
+					ValidateCreateFunc: func(_ *corev1.Pod) field.ErrorList {
+						return field.ErrorList{
+							field.Invalid(field.NewPath("spec"), "value", "error"),
+						}
+					},
+					ValidateUpdateFunc: func(_, _ *corev1.Pod) field.ErrorList {
+						panic("unexpected call to ValidateUpdateFunc")
+					},
+					GetWarningsOnCreateFunc: func(_ *corev1.Pod) []string {
+						return nil
+					},
+					GetWarningsOnUpdateFunc: func(_, _ *corev1.Pod) []string {
+						panic("unexpected call to GetWarningsOnUpdateFunc")
+					},
+				},
+			},
+			expectedWarnings: nil,
+			expectedError: apierrors.NewInvalid(corev1.SchemeGroupVersion.WithKind("Pod").GroupKind(), "pod", field.ErrorList{
+				field.Invalid(field.NewPath("spec"), "value", "error"),
+			}),
+		},
+		{
+			name: "create, no errors, warnings",
+			ar: func() *admissionv1.AdmissionReview {
+				return &admissionv1.AdmissionReview{
+					Request: &admissionv1.AdmissionRequest{
+						UID: "uid",
+						Resource: metav1.GroupVersionResource{
+							Group:    "",
+							Version:  "v1",
+							Resource: "pods",
+						},
+						Operation: "CREATE",
+						Object:    runtime.RawExtension{Raw: podRaw},
+					},
+				}
+			}(),
+			validators: map[schema.GroupVersionResource]Validator{
+				corev1.SchemeGroupVersion.WithResource("pods"): &GenericValidator[*corev1.Pod]{
+					ValidateCreateFunc: func(_ *corev1.Pod) field.ErrorList {
+						return nil
+					},
+					ValidateUpdateFunc: func(_, _ *corev1.Pod) field.ErrorList {
+						panic("unexpected call to ValidateUpdateFunc")
+					},
+					GetWarningsOnCreateFunc: func(_ *corev1.Pod) []string {
+						return []string{"warning"}
+					},
+					GetWarningsOnUpdateFunc: func(_, _ *corev1.Pod) []string {
+						panic("unexpected call to GetWarningsOnUpdateFunc")
+					},
+				},
+			},
+			expectedWarnings: []string{"warning"},
+			expectedError:    nil,
+		},
+		{
+			name: "create, errors, warnings",
+			ar: func() *admissionv1.AdmissionReview {
+				return &admissionv1.AdmissionReview{
+					Request: &admissionv1.AdmissionRequest{
+						UID: "uid",
+						Resource: metav1.GroupVersionResource{
+							Group:    "",
+							Version:  "v1",
+							Resource: "pods",
+						},
+						Operation: "CREATE",
+						Object:    runtime.RawExtension{Raw: podRaw},
+					},
+				}
+			}(),
+			validators: map[schema.GroupVersionResource]Validator{
+				corev1.SchemeGroupVersion.WithResource("pods"): &GenericValidator[*corev1.Pod]{
+					ValidateCreateFunc: func(_ *corev1.Pod) field.ErrorList {
+						return field.ErrorList{
+							field.Invalid(field.NewPath("spec"), "value", "error"),
+						}
+					},
+					ValidateUpdateFunc: func(_, _ *corev1.Pod) field.ErrorList {
+						panic("unexpected call to ValidateUpdateFunc")
+					},
+					GetWarningsOnCreateFunc: func(_ *corev1.Pod) []string {
+						return []string{"warning"}
+					},
+					GetWarningsOnUpdateFunc: func(_, _ *corev1.Pod) []string {
+						panic("unexpected call to GetWarningsOnUpdateFunc")
+					},
+				},
+			},
+			expectedWarnings: []string{"warning"},
+			expectedError: apierrors.NewInvalid(corev1.SchemeGroupVersion.WithKind("Pod").GroupKind(), "pod", field.ErrorList{
+				field.Invalid(field.NewPath("spec"), "value", "error"),
+			}),
+		},
+		{
+			name: "update, no errors, no warnings",
+			ar: func() *admissionv1.AdmissionReview {
+				return &admissionv1.AdmissionReview{
+					Request: &admissionv1.AdmissionRequest{
+						UID: "uid",
+						Resource: metav1.GroupVersionResource{
+							Group:    "",
+							Version:  "v1",
+							Resource: "pods",
+						},
+						Operation: "UPDATE",
+						Object:    runtime.RawExtension{Raw: podRaw},
+						OldObject: runtime.RawExtension{Raw: podRaw},
+					},
+				}
+			}(),
+			validators: map[schema.GroupVersionResource]Validator{
+				corev1.SchemeGroupVersion.WithResource("pods"): &GenericValidator[*corev1.Pod]{
+					ValidateCreateFunc: func(_ *corev1.Pod) field.ErrorList {
+						panic("unexpected call to ValidateCreateFunc")
+					},
+					ValidateUpdateFunc: func(_, _ *corev1.Pod) field.ErrorList {
+						return nil
+					},
+					GetWarningsOnCreateFunc: func(_ *corev1.Pod) []string {
+						panic("unexpected call to GetWarningsOnCreateFunc")
+					},
+					GetWarningsOnUpdateFunc: func(_, _ *corev1.Pod) []string {
+						return nil
+					},
+				},
+			},
+			expectedWarnings: nil,
+			expectedError:    nil,
+		},
+		{
+			name: "update, error, no warnings",
+			ar: func() *admissionv1.AdmissionReview {
+				return &admissionv1.AdmissionReview{
+					Request: &admissionv1.AdmissionRequest{
+						UID: "uid",
+						Resource: metav1.GroupVersionResource{
+							Group:    "",
+							Version:  "v1",
+							Resource: "pods",
+						},
+						Operation: "UPDATE",
+						Object:    runtime.RawExtension{Raw: podRaw},
+						OldObject: runtime.RawExtension{Raw: podRaw},
+					},
+				}
+			}(),
+			validators: map[schema.GroupVersionResource]Validator{
+				corev1.SchemeGroupVersion.WithResource("pods"): &GenericValidator[*corev1.Pod]{
+					ValidateCreateFunc: func(_ *corev1.Pod) field.ErrorList {
+						panic("unexpected call to ValidateCreateFunc")
+					},
+					ValidateUpdateFunc: func(_, _ *corev1.Pod) field.ErrorList {
+						return field.ErrorList{
+							field.Invalid(field.NewPath("spec"), "value", "error"),
+						}
+					},
+					GetWarningsOnCreateFunc: func(_ *corev1.Pod) []string {
+						panic("unexpected call to GetWarningsOnCreateFunc")
+					},
+					GetWarningsOnUpdateFunc: func(_, _ *corev1.Pod) []string {
+						return nil
+					},
+				},
+			},
+			expectedWarnings: nil,
+			expectedError: apierrors.NewInvalid(corev1.SchemeGroupVersion.WithKind("Pod").GroupKind(), "pod", field.ErrorList{
+				field.Invalid(field.NewPath("spec"), "value", "error"),
+			}),
+		},
+		{
+			name: "update, no errors, warnings",
+			ar: func() *admissionv1.AdmissionReview {
+				return &admissionv1.AdmissionReview{
+					Request: &admissionv1.AdmissionRequest{
+						UID: "uid",
+						Resource: metav1.GroupVersionResource{
+							Group:    "",
+							Version:  "v1",
+							Resource: "pods",
+						},
+						Operation: "UPDATE",
+						Object:    runtime.RawExtension{Raw: podRaw},
+						OldObject: runtime.RawExtension{Raw: podRaw},
+					},
+				}
+			}(),
+			validators: map[schema.GroupVersionResource]Validator{
+				corev1.SchemeGroupVersion.WithResource("pods"): &GenericValidator[*corev1.Pod]{
+					ValidateCreateFunc: func(_ *corev1.Pod) field.ErrorList {
+						panic("unexpected call to ValidateCreateFunc")
+					},
+					ValidateUpdateFunc: func(_, _ *corev1.Pod) field.ErrorList {
+						return nil
+					},
+					GetWarningsOnCreateFunc: func(_ *corev1.Pod) []string {
+						panic("unexpected call to GetWarningsOnCreateFunc")
+					},
+					GetWarningsOnUpdateFunc: func(_, _ *corev1.Pod) []string {
+						return []string{"warning"}
+					},
+				},
+			},
+			expectedWarnings: []string{"warning"},
+			expectedError:    nil,
+		},
+		{
+			name: "update, errors, warnings",
+			ar: func() *admissionv1.AdmissionReview {
+				return &admissionv1.AdmissionReview{
+					Request: &admissionv1.AdmissionRequest{
+						UID: "uid",
+						Resource: metav1.GroupVersionResource{
+							Group:    "",
+							Version:  "v1",
+							Resource: "pods",
+						},
+						Operation: "UPDATE",
+						Object:    runtime.RawExtension{Raw: podRaw},
+						OldObject: runtime.RawExtension{Raw: podRaw},
+					},
+				}
+			}(),
+			validators: map[schema.GroupVersionResource]Validator{
+				corev1.SchemeGroupVersion.WithResource("pods"): &GenericValidator[*corev1.Pod]{
+					ValidateCreateFunc: func(_ *corev1.Pod) field.ErrorList {
+						panic("unexpected call to ValidateCreateFunc")
+					},
+					ValidateUpdateFunc: func(_, _ *corev1.Pod) field.ErrorList {
+						return field.ErrorList{
+							field.Invalid(field.NewPath("spec"), "value", "error"),
+						}
+					},
+					GetWarningsOnCreateFunc: func(_ *corev1.Pod) []string {
+						panic("unexpected call to GetWarningsOnCreateFunc")
+					},
+					GetWarningsOnUpdateFunc: func(_, _ *corev1.Pod) []string {
+						return []string{"warning"}
+					},
+				},
+			},
+			expectedWarnings: []string{"warning"},
+			expectedError: apierrors.NewInvalid(corev1.SchemeGroupVersion.WithKind("Pod").GroupKind(), "pod", field.ErrorList{
+				field.Invalid(field.NewPath("spec"), "value", "error"),
+			}),
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			warnings, err := validate(tc.ar, tc.validators)
+			if !reflect.DeepEqual(tc.expectedError, err) {
+				t.Fatalf("expected and actual errors differ: %s", cmp.Diff(tc.expectedError, err, cmpopts.EquateErrors()))
+			}
+
+			if !reflect.DeepEqual(tc.expectedWarnings, warnings) {
+				t.Errorf("expected and actual warnings differ: %s", cmp.Diff(tc.expectedWarnings, warnings))
+			}
+		})
+	}
 }

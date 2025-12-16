@@ -13,6 +13,7 @@ import (
 	"github.com/scylladb/scylla-operator/pkg/controllerhelpers"
 	"github.com/scylladb/scylla-operator/pkg/crypto"
 	"github.com/scylladb/scylla-operator/pkg/kubeinterfaces"
+	"github.com/scylladb/scylla-operator/pkg/naming"
 	"github.com/scylladb/scylla-operator/pkg/scheme"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -23,9 +24,9 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
+	apimachineryutilerrors "k8s.io/apimachinery/pkg/util/errors"
+	apimachineryutilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	apimachineryutilwait "k8s.io/apimachinery/pkg/util/wait"
 	appsv1informers "k8s.io/client-go/informers/apps/v1"
 	batchv1informers "k8s.io/client-go/informers/batch/v1"
 	corev1informers "k8s.io/client-go/informers/core/v1"
@@ -64,23 +65,24 @@ type Controller struct {
 	kubeClient   kubernetes.Interface
 	scyllaClient scyllav1alpha1client.ScyllaV1alpha1Interface
 
-	podLister                corev1listers.PodLister
-	serviceLister            corev1listers.ServiceLister
-	secretLister             corev1listers.SecretLister
-	configMapLister          corev1listers.ConfigMapLister
-	serviceAccountLister     corev1listers.ServiceAccountLister
-	roleBindingLister        rbacv1listers.RoleBindingLister
-	statefulSetLister        appsv1listers.StatefulSetLister
-	pdbLister                policyv1listers.PodDisruptionBudgetLister
-	ingressLister            networkingv1listers.IngressLister
-	scyllaDBDatacenterLister scyllav1alpha1listers.ScyllaDBDatacenterLister
-	jobLister                batchv1listers.JobLister
+	podLister                                 corev1listers.PodLister
+	serviceLister                             corev1listers.ServiceLister
+	secretLister                              corev1listers.SecretLister
+	configMapLister                           corev1listers.ConfigMapLister
+	serviceAccountLister                      corev1listers.ServiceAccountLister
+	roleBindingLister                         rbacv1listers.RoleBindingLister
+	statefulSetLister                         appsv1listers.StatefulSetLister
+	pdbLister                                 policyv1listers.PodDisruptionBudgetLister
+	ingressLister                             networkingv1listers.IngressLister
+	scyllaDBDatacenterLister                  scyllav1alpha1listers.ScyllaDBDatacenterLister
+	jobLister                                 batchv1listers.JobLister
+	scyllaDBDatacenterNodesStatusReportLister scyllav1alpha1listers.ScyllaDBDatacenterNodesStatusReportLister
 
 	cachesToSync []cache.InformerSynced
 
 	eventRecorder record.EventRecorder
 
-	queue    workqueue.RateLimitingInterface
+	queue    workqueue.TypedRateLimitingInterface[string]
 	handlers *controllerhelpers.Handlers[*scyllav1alpha1.ScyllaDBDatacenter]
 
 	keyGetter crypto.RSAKeyGetter
@@ -100,6 +102,7 @@ func NewController(
 	ingressInformer networkingv1informers.IngressInformer,
 	jobInformer batchv1informers.JobInformer,
 	scyllaDBDatacenterInformer scyllav1alpha1informers.ScyllaDBDatacenterInformer,
+	scyllaDBDatacenterNodesStatusReportInformer scyllav1alpha1informers.ScyllaDBDatacenterNodesStatusReportInformer,
 	operatorImage string,
 	cqlsIngressPort int,
 	keyGetter crypto.RSAKeyGetter,
@@ -126,6 +129,7 @@ func NewController(
 		ingressLister:            ingressInformer.Lister(),
 		scyllaDBDatacenterLister: scyllaDBDatacenterInformer.Lister(),
 		jobLister:                jobInformer.Lister(),
+		scyllaDBDatacenterNodesStatusReportLister: scyllaDBDatacenterNodesStatusReportInformer.Lister(),
 
 		cachesToSync: []cache.InformerSynced{
 			podInformer.Informer().HasSynced,
@@ -139,11 +143,17 @@ func NewController(
 			ingressInformer.Informer().HasSynced,
 			scyllaDBDatacenterInformer.Informer().HasSynced,
 			jobInformer.Informer().HasSynced,
+			scyllaDBDatacenterNodesStatusReportInformer.Informer().HasSynced,
 		},
 
 		eventRecorder: eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: "scylladbdatacenter-controller"}),
 
-		queue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "scylladbdatacenter"),
+		queue: workqueue.NewTypedRateLimitingQueueWithConfig(
+			workqueue.DefaultTypedControllerRateLimiter[string](),
+			workqueue.TypedRateLimitingQueueConfig[string]{
+				Name: "scylladbdatacenter",
+			},
+		),
 
 		keyGetter: keyGetter,
 	}
@@ -185,7 +195,9 @@ func NewController(
 		DeleteFunc: sdcc.deleteConfigMap,
 	})
 
-	// We need pods events to know if a pod is ready after replace operation.
+	// We need pods events to know if a pod:
+	// - is ready after a replace operation
+	// - has updated a status report
 	podInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    sdcc.addPod,
 		UpdateFunc: sdcc.updatePod,
@@ -234,6 +246,12 @@ func NewController(
 		DeleteFunc: sdcc.deleteJob,
 	})
 
+	scyllaDBDatacenterNodesStatusReportInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    sdcc.addScyllaDBDatacenterNodesStatusReport,
+		UpdateFunc: sdcc.updateScyllaDBDatacenterNodesStatusReport,
+		DeleteFunc: sdcc.deleteScyllaDBDatacenterNodesStatusReport,
+	})
+
 	return sdcc, nil
 }
 
@@ -244,9 +262,9 @@ func (sdcc *Controller) processNextItem(ctx context.Context) bool {
 	}
 	defer sdcc.queue.Done(key)
 
-	err := sdcc.sync(ctx, key.(string))
+	err := sdcc.sync(ctx, key)
 	// TODO: Do smarter filtering then just Reduce to handle cases like 2 conflict errors.
-	err = utilerrors.Reduce(err)
+	err = apimachineryutilerrors.Reduce(err)
 	switch {
 	case err == nil:
 		sdcc.queue.Forget(key)
@@ -259,7 +277,7 @@ func (sdcc *Controller) processNextItem(ctx context.Context) bool {
 		klog.V(2).InfoS("Hit already exists, will retry in a bit", "Key", key, "Error", err)
 
 	default:
-		utilruntime.HandleError(fmt.Errorf("syncing key '%v' failed: %v", key, err))
+		apimachineryutilruntime.HandleError(fmt.Errorf("syncing key '%v' failed: %v", key, err))
 	}
 
 	sdcc.queue.AddRateLimited(key)
@@ -273,7 +291,7 @@ func (sdcc *Controller) runWorker(ctx context.Context) {
 }
 
 func (sdcc *Controller) Run(ctx context.Context, workers int) {
-	defer utilruntime.HandleCrash()
+	defer apimachineryutilruntime.HandleCrash()
 
 	klog.InfoS("Starting controller", "controller", ControllerName)
 
@@ -293,7 +311,7 @@ func (sdcc *Controller) Run(ctx context.Context, workers int) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			wait.UntilWithContext(ctx, sdcc.runWorker, time.Second)
+			apimachineryutilwait.UntilWithContext(ctx, sdcc.runWorker, time.Second)
 		}()
 	}
 
@@ -398,7 +416,7 @@ func (sdcc *Controller) deleteService(obj interface{}) {
 func (sdcc *Controller) addSecret(obj interface{}) {
 	sdcc.handlers.HandleAdd(
 		obj.(*corev1.Secret),
-		sdcc.handlers.EnqueueOwner,
+		sdcc.enqueueThroughScyllaDBManagerAgentAuthTokenOverrideSecretRefAnnotationOrOwner,
 	)
 }
 
@@ -406,7 +424,7 @@ func (sdcc *Controller) updateSecret(old, cur interface{}) {
 	sdcc.handlers.HandleUpdate(
 		old.(*corev1.Secret),
 		cur.(*corev1.Secret),
-		sdcc.handlers.EnqueueOwner,
+		sdcc.enqueueThroughScyllaDBManagerAgentAuthTokenOverrideSecretRefAnnotationOrOwner,
 		sdcc.deleteSecret,
 	)
 }
@@ -414,7 +432,7 @@ func (sdcc *Controller) updateSecret(old, cur interface{}) {
 func (sdcc *Controller) deleteSecret(obj interface{}) {
 	sdcc.handlers.HandleDelete(
 		obj,
-		sdcc.handlers.EnqueueOwner,
+		sdcc.enqueueThroughScyllaDBManagerAgentAuthTokenOverrideSecretRefAnnotationOrOwner,
 	)
 }
 
@@ -619,6 +637,42 @@ func (sdcc *Controller) updateJob(old, cur interface{}) {
 }
 
 func (sdcc *Controller) deleteJob(obj interface{}) {
+	sdcc.handlers.HandleDelete(
+		obj,
+		sdcc.handlers.EnqueueOwner,
+	)
+}
+
+func (sdcc *Controller) enqueueThroughScyllaDBManagerAgentAuthTokenOverrideSecretRefAnnotationOrOwner(depth int, obj kubeinterfaces.ObjectInterface, op controllerhelpers.HandlerOperationType) {
+	secret := obj.(*corev1.Secret)
+
+	sdcc.enqueueThroughScyllaDBManagerAgentAuthTokenOverrideSecretRefAnnotation(secret)(depth+1, secret, op)
+	sdcc.handlers.EnqueueOwner(depth+1, obj, op)
+}
+
+func (sdcc *Controller) enqueueThroughScyllaDBManagerAgentAuthTokenOverrideSecretRefAnnotation(secret *corev1.Secret) controllerhelpers.EnqueueFuncType {
+	return sdcc.handlers.EnqueueAllFunc(sdcc.handlers.EnqueueWithFilterFunc(func(sdc *scyllav1alpha1.ScyllaDBDatacenter) bool {
+		return secret.Namespace == sdc.Namespace && sdc.Annotations[naming.ScyllaDBManagerAgentAuthTokenOverrideSecretRefAnnotation] == secret.Name
+	}))
+}
+
+func (sdcc *Controller) addScyllaDBDatacenterNodesStatusReport(obj interface{}) {
+	sdcc.handlers.HandleAdd(
+		obj.(*scyllav1alpha1.ScyllaDBDatacenterNodesStatusReport),
+		sdcc.handlers.EnqueueOwner,
+	)
+}
+
+func (sdcc *Controller) updateScyllaDBDatacenterNodesStatusReport(old, cur interface{}) {
+	sdcc.handlers.HandleUpdate(
+		old.(*scyllav1alpha1.ScyllaDBDatacenterNodesStatusReport),
+		cur.(*scyllav1alpha1.ScyllaDBDatacenterNodesStatusReport),
+		sdcc.handlers.EnqueueOwner,
+		sdcc.deleteScyllaDBDatacenterNodesStatusReport,
+	)
+}
+
+func (sdcc *Controller) deleteScyllaDBDatacenterNodesStatusReport(obj interface{}) {
 	sdcc.handlers.HandleDelete(
 		obj,
 		sdcc.handlers.EnqueueOwner,

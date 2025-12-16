@@ -1,7 +1,7 @@
 package features
 
 import (
-	"k8s.io/apimachinery/pkg/util/runtime"
+	apimachineryutilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/component-base/featuregate"
 )
@@ -18,13 +18,26 @@ const (
 	// alpha: v1.8
 	// beta: v1.11
 	AutomaticTLSCertificates featuregate.Feature = "AutomaticTLSCertificates"
+
+	// BootstrapSynchronisation enables a barrier which ensures bootstrap preconditions are met before starting a ScyllaDB node attempting to join the cluster.
+	// alpha: v1.19
+	BootstrapSynchronisation featuregate.Feature = "BootstrapSynchronisation"
 )
 
+var Features = []featuregate.Feature{
+	AutomaticTLSCertificates,
+	BootstrapSynchronisation,
+}
+
 func init() {
-	runtime.Must(utilfeature.DefaultMutableFeatureGate.Add(map[featuregate.Feature]featuregate.FeatureSpec{
+	apimachineryutilruntime.Must(utilfeature.DefaultMutableFeatureGate.Add(map[featuregate.Feature]featuregate.FeatureSpec{
 		AutomaticTLSCertificates: {
 			Default:    true,
 			PreRelease: featuregate.Beta,
+		},
+		BootstrapSynchronisation: {
+			Default:    false,
+			PreRelease: featuregate.Alpha,
 		},
 	}))
 }

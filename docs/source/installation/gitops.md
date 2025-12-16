@@ -3,12 +3,14 @@
 ## Disclaimer
 
 The following commands reference manifests that come from the same repository as the source code is being built from.
-This means we can't have a pinned reference to the latest release as that is a [chicken-egg problem](https://en.wikipedia.org/wiki/Chicken_or_the_egg). Therefore, we use a rolling tag for the particular branch in our manifests.
+This means we can't have a pinned reference to the latest release as that is a [chicken-egg problem](https://en.wikipedia.org/wiki/Chicken_or_the_egg). Therefore, we use a rolling tag (e.g., `{major}.{minor}` or `latest`) for the particular branch in our manifests.
 :::{caution}
 For production deployment, you should always replace the {{productName}} image in all the manifests that contain it with a stable (full version) reference.
 We'd encourage you to use a sha reference, although using full-version tags is also fine.
 :::
 
+:::{include} ../.internal/namespaces.md
+:::
 
 ## Installation
 
@@ -22,11 +24,11 @@ In case you already have a supported version of each of these dependencies insta
 
 :::{code-block} shell
 :substitutions:
-
 kubectl apply --server-side -f=https://raw.githubusercontent.com/{{repository}}/{{revision}}/examples/third-party/cert-manager.yaml
 :::
 
 :::{code-block} shell
+
 # Wait for CRDs to propagate to all apiservers.
 kubectl wait --for condition=established --timeout=60s crd/certificates.cert-manager.io crd/issuers.cert-manager.io
 
@@ -43,19 +45,28 @@ done
 
 #### Prometheus Operator
 
-:::{code-block} shell
-:substitutions:
+:::{note}
+{{productName}} currently relies on the Prometheus Operator CRDs being present in the cluster even if you do not use the
+monitoring stack (`ScyllaDBMonitoring` CRD).
 
-kubectl -n=prometheus-operator apply --server-side -f=https://raw.githubusercontent.com/{{repository}}/{{revision}}/examples/third-party/prometheus-operator.yaml
+If the CRDs are not installed, {{productName}} may report errors about missing Prometheus types. These errors do
+not affect the core functionality of {{productName}}.
+
+Support for making Prometheus Operator installation fully optional is being tracked in issue [#3075](https://github.com/scylladb/scylla-operator/issues/3075).
 :::
 
 :::{code-block} shell
+:substitutions:
+kubectl apply -n prometheus-operator --server-side -f=https://raw.githubusercontent.com/{{repository}}/{{revision}}/examples/third-party/prometheus-operator.yaml
+:::
+
+```shell
 # Wait for CRDs to propagate to all apiservers.
 kubectl wait --for='condition=established' crd/prometheuses.monitoring.coreos.com crd/prometheusrules.monitoring.coreos.com crd/servicemonitors.monitoring.coreos.com
 
 # Wait for prometheus operator deployment.
 kubectl -n=prometheus-operator rollout status --timeout=10m deployment.apps/prometheus-operator
-:::
+```
 
 ### {{productName}}
 
@@ -63,7 +74,6 @@ Once you have the dependencies installed and available in your cluster, it is th
 
 :::{code-block} shell
 :substitutions:
-
 kubectl -n=scylla-operator apply --server-side -f=https://raw.githubusercontent.com/{{repository}}/{{revision}}/deploy/operator.yaml
 :::
 
@@ -87,11 +97,11 @@ spec:
       containers:
       - name: scylla-operator
         # ...
-        image: docker.io/scylladb/scylla-operator:1.14.0@sha256:8c75c5780e2283f0a8f9734925352716f37e0e7f41007e50ce9b1d9924046fa1
+        image: docker.io/scylladb/scylla-operator:1.18.0@sha256:ea1d287c2699efdfdb040b4a8c35be74a12d19b292541d8a4204f7a079731ca6
         env:
           # ...
         - name: SCYLLA_OPERATOR_IMAGE
-          value: docker.io/scylladb/scylla-operator:1.14.0@sha256:8c75c5780e2283f0a8f9734925352716f37e0e7f41007e50ce9b1d9924046fa1
+          value: docker.io/scylladb/scylla-operator:1.18.0@sha256:ea1d287c2699efdfdb040b4a8c35be74a12d19b292541d8a4204f7a079731ca6
 :::
 The {{productName}} image value and the `SCYLLA_OPERATOR_IMAGE` shall always match.
 Be careful not to use a rolling tag for any of them to avoid an accidental skew!
@@ -113,31 +123,42 @@ The following step heavily depends on the platform that you use, the machine typ
 Please review the [NodeConfig](../resources/nodeconfigs.md) and adjust it for your platform!
 :::
 
-:::::{tab-set}
+:::::{tabs}
 
-::::{tab-item} GKE (NVMe)
+::::{group-tab} GKE (NVMe)
+
+:::{caution}
+:::{include} ../.internal/gke-1-32-xfsprogs.md
+:::
+:::
+
 :::{code-block} shell
 :substitutions:
 kubectl -n=scylla-operator apply --server-side -f=https://raw.githubusercontent.com/{{repository}}/{{revision}}/examples/gke/nodeconfig-alpha.yaml
 :::
+
 ::::
 
-::::{tab-item} EKS (NVMe)
+::::{group-tab} EKS (NVMe)
+
 :::{code-block} shell
 :substitutions:
 kubectl -n=scylla-operator apply --server-side -f=https://raw.githubusercontent.com/{{repository}}/{{revision}}/examples/eks/nodeconfig-alpha.yaml
 :::
+
 ::::
 
-::::{tab-item} Any platform (Loop devices)
+::::{group-tab} Any platform (Loop devices)
 :::{caution}
 This NodeConfig sets up loop devices instead of NVMe disks and is only intended for development purposes when you don't have the NVMe disks available.
 Do not expect meaningful performance with this setup.
 :::
+
 :::{code-block} shell
 :substitutions:
 kubectl -n=scylla-operator apply --server-side -f=https://raw.githubusercontent.com/{{repository}}/{{revision}}/examples/generic/nodeconfig-alpha.yaml
 :::
+
 ::::
 
 :::::
@@ -146,16 +167,14 @@ kubectl -n=scylla-operator apply --server-side -f=https://raw.githubusercontent.
 Performance tuning is enabled for all nodes that are selected by [NodeConfig](../resources/nodeconfigs.md) by default, unless opted-out.
 :::
 
-:::{code-block} shell
-# Wait for NodeConfig to apply changes to the Kubernetes nodes.
-kubectl wait --for='condition=Reconciled' --timeout=10m nodeconfigs.scylla.scylladb.com/scylladb-nodepool-1
+After applying the manifest, wait for the NodeConfig to apply changes to the Kubernetes nodes.
+:::{include} ./../.internal/wait-for-status-conditions.nodeconfig.code-block.md
 :::
 
 ### Local CSI driver
 
 :::{code-block} shell
 :substitutions:
-
 kubectl -n=local-csi-driver apply --server-side -f=https://raw.githubusercontent.com/{{repository}}/{{revision}}/examples/common/local-volume-provisioner/local-csi-driver/{00_clusterrole_def,00_clusterrole_def_openshift,00_clusterrole,00_namespace,00_scylladb-local-xfs.storageclass,10_csidriver,10_serviceaccount,20_clusterrolebinding,50_daemonset}.yaml
 :::
 
@@ -169,20 +188,24 @@ kubectl -n=local-csi-driver rollout status --timeout=10m daemonset.apps/local-cs
 :::{include} ../.internal/manager-license-note.md
 :::
 
-:::::{tab-set}
+:::::{tabs}
 
-::::{tab-item} Production (sized)
+::::{group-tab} Production (sized)
+
 :::{code-block} shell
 :substitutions:
 kubectl -n=scylla-manager apply --server-side -f=https://raw.githubusercontent.com/{{repository}}/{{revision}}/deploy/manager-prod.yaml
 :::
+
 ::::
 
-::::{tab-item} Development (sized)
+::::{group-tab} Development (sized)
+
 :::{code-block} shell
 :substitutions:
 kubectl -n=scylla-manager apply --server-side -f=https://raw.githubusercontent.com/{{repository}}/{{revision}}/deploy/manager-dev.yaml
 :::
+
 ::::
 
 :::::
@@ -191,6 +214,10 @@ kubectl -n=scylla-manager apply --server-side -f=https://raw.githubusercontent.c
 # Wait for it to deploy.
 kubectl -n=scylla-manager rollout status --timeout=10m deployment.apps/scylla-manager
 :::
+
+### Monitoring stack
+
+Please refer to the [ScyllaDB Monitoring setup](../management/monitoring/setup.md) guide to learn how to configure the monitoring stack.
 
 ## Next steps
 

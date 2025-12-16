@@ -11,6 +11,8 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"regexp"
+	"strconv"
 	"sync"
 	"time"
 
@@ -18,17 +20,17 @@ import (
 	scyllav1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1"
 	scyllav1alpha1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1alpha1"
 	"github.com/scylladb/scylla-operator/pkg/api/scylla/validation"
+	"github.com/scylladb/scylla-operator/pkg/cmdutil"
 	"github.com/scylladb/scylla-operator/pkg/genericclioptions"
 	"github.com/scylladb/scylla-operator/pkg/kubeinterfaces"
 	"github.com/scylladb/scylla-operator/pkg/scheme"
 	"github.com/scylladb/scylla-operator/pkg/signals"
-	"github.com/scylladb/scylla-operator/pkg/version"
 	"github.com/spf13/cobra"
 	admissionv1 "k8s.io/api/admission/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	apimachineryutilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/apiserver/pkg/server/dynamiccertificates"
 	cliflag "k8s.io/component-base/cli/flag"
@@ -38,28 +40,52 @@ import (
 var (
 	DefaultValidators = map[schema.GroupVersionResource]Validator{
 		scyllav1.GroupVersion.WithResource("scyllaclusters"): &GenericValidator[*scyllav1.ScyllaCluster]{
-			ValidateCreateFunc: validation.ValidateScyllaCluster,
-			ValidateUpdateFunc: validation.ValidateScyllaClusterUpdate,
+			ValidateCreateFunc:      validation.ValidateScyllaCluster,
+			ValidateUpdateFunc:      validation.ValidateScyllaClusterUpdate,
+			GetWarningsOnCreateFunc: validation.GetWarningsOnScyllaClusterCreate,
+			GetWarningsOnUpdateFunc: validation.GetWarningsOnScyllaClusterUpdate,
 		},
 		scyllav1alpha1.GroupVersion.WithResource("nodeconfigs"): &GenericValidator[*scyllav1alpha1.NodeConfig]{
-			ValidateCreateFunc: validation.ValidateNodeConfig,
-			ValidateUpdateFunc: validation.ValidateNodeConfigUpdate,
+			ValidateCreateFunc:      validation.ValidateNodeConfig,
+			ValidateUpdateFunc:      validation.ValidateNodeConfigUpdate,
+			GetWarningsOnCreateFunc: validation.GetWarningsOnNodeConfigCreate,
+			GetWarningsOnUpdateFunc: validation.GetWarningsOnNodeConfigUpdate,
 		},
 		scyllav1alpha1.GroupVersion.WithResource("scyllaoperatorconfigs"): &GenericValidator[*scyllav1alpha1.ScyllaOperatorConfig]{
-			ValidateCreateFunc: validation.ValidateScyllaOperatorConfig,
-			ValidateUpdateFunc: validation.ValidateScyllaOperatorConfigUpdate,
+			ValidateCreateFunc:      validation.ValidateScyllaOperatorConfig,
+			ValidateUpdateFunc:      validation.ValidateScyllaOperatorConfigUpdate,
+			GetWarningsOnCreateFunc: validation.GetWarningsOnScyllaOperatorConfigCreate,
+			GetWarningsOnUpdateFunc: validation.GetWarningsOnScyllaOperatorConfigUpdate,
 		},
 		scyllav1alpha1.GroupVersion.WithResource("scylladbdatacenters"): &GenericValidator[*scyllav1alpha1.ScyllaDBDatacenter]{
-			ValidateCreateFunc: validation.ValidateScyllaDBDatacenter,
-			ValidateUpdateFunc: validation.ValidateScyllaDBDatacenterUpdate,
+			ValidateCreateFunc:      validation.ValidateScyllaDBDatacenter,
+			ValidateUpdateFunc:      validation.ValidateScyllaDBDatacenterUpdate,
+			GetWarningsOnCreateFunc: validation.GetWarningsOnScyllaDBDatacenterCreate,
+			GetWarningsOnUpdateFunc: validation.GetWarningsOnScyllaDBDatacenterUpdate,
 		},
 		scyllav1alpha1.GroupVersion.WithResource("scylladbclusters"): &GenericValidator[*scyllav1alpha1.ScyllaDBCluster]{
-			ValidateCreateFunc: validation.ValidateScyllaDBCluster,
-			ValidateUpdateFunc: validation.ValidateScyllaDBClusterUpdate,
+			ValidateCreateFunc:      validation.ValidateScyllaDBCluster,
+			ValidateUpdateFunc:      validation.ValidateScyllaDBClusterUpdate,
+			GetWarningsOnCreateFunc: validation.GetWarningsOnScyllaDBClusterCreate,
+			GetWarningsOnUpdateFunc: validation.GetWarningsOnScyllaDBClusterUpdate,
 		},
 		scyllav1alpha1.GroupVersion.WithResource("scylladbmanagerclusterregistrations"): &GenericValidator[*scyllav1alpha1.ScyllaDBManagerClusterRegistration]{
-			ValidateCreateFunc: validation.ValidateScyllaDBManagerClusterRegistration,
-			ValidateUpdateFunc: validation.ValidateScyllaDBManagerClusterRegistrationUpdate,
+			ValidateCreateFunc:      validation.ValidateScyllaDBManagerClusterRegistration,
+			ValidateUpdateFunc:      validation.ValidateScyllaDBManagerClusterRegistrationUpdate,
+			GetWarningsOnCreateFunc: validation.GetWarningsOnScyllaDBManagerClusterRegistrationCreate,
+			GetWarningsOnUpdateFunc: validation.GetWarningsOnScyllaDBManagerClusterRegistrationUpdate,
+		},
+		scyllav1alpha1.GroupVersion.WithResource("scylladbmanagertasks"): &GenericValidator[*scyllav1alpha1.ScyllaDBManagerTask]{
+			ValidateCreateFunc:      validation.ValidateScyllaDBManagerTask,
+			ValidateUpdateFunc:      validation.ValidateScyllaDBManagerTaskUpdate,
+			GetWarningsOnCreateFunc: validation.GetWarningsOnScyllaDBManagerTaskCreate,
+			GetWarningsOnUpdateFunc: validation.GetWarningsOnScyllaDBManagerTaskUpdate,
+		},
+		scyllav1alpha1.GroupVersion.WithResource("scylladbmonitorings"): &GenericValidator[*scyllav1alpha1.ScyllaDBMonitoring]{
+			ValidateCreateFunc:      validation.ValidateScyllaDBMonitoring,
+			ValidateUpdateFunc:      validation.ValidateScyllaDBMonitoringUpdate,
+			GetWarningsOnCreateFunc: validation.GetWarningsOnScyllaDBMonitoringCreate,
+			GetWarningsOnUpdateFunc: validation.GetWarningsOnScyllaDBMonitoringUpdate,
 		},
 	}
 )
@@ -69,11 +95,41 @@ type Validator interface {
 	ValidateUpdate(obj, oldObj runtime.Object) field.ErrorList
 	GetGroupKind(obj runtime.Object) schema.GroupKind
 	GetName(obj runtime.Object) string
+	GetWarningsOnCreate(obj runtime.Object) []string
+	GetWarningsOnUpdate(obj, oldObj runtime.Object) []string
+}
+
+// Container runtime may set env var (SCYLLA_OPERATOR_PORT) to either number or "tcp://<service-host>:<service-port>"
+var portFlagRe = regexp.MustCompile(`^(?:tcp://[^:]+:)?(\d+)$`)
+
+type portFlag int
+
+func (pf *portFlag) String() string {
+	return fmt.Sprintf("%d", pf)
+}
+
+func (pf *portFlag) Set(v string) error {
+	matches := portFlagRe.FindStringSubmatch(v)
+	if len(matches) < 2 {
+		return fmt.Errorf("invalid port format %q", v)
+	}
+
+	port, err := strconv.ParseInt(matches[1], 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid port %q", matches[1])
+	}
+
+	*pf = portFlag(port)
+	return nil
+}
+
+func (pf *portFlag) Type() string {
+	return "int"
 }
 
 type WebhookOptions struct {
 	TLSCertFile, TLSKeyFile        string
-	Port                           int
+	Port                           portFlag
 	InsecureGenerateLocalhostCerts bool
 
 	Validators map[schema.GroupVersionResource]Validator
@@ -129,7 +185,7 @@ func NewWebhookCmd(streams genericclioptions.IOStreams, validators map[schema.Gr
 
 	cmd.Flags().StringVarP(&o.TLSCertFile, "tls-cert-file", "", o.TLSCertFile, "File containing the default x509 Certificate for HTTPS. (CA cert, if any, concatenated after server cert).")
 	cmd.Flags().StringVarP(&o.TLSKeyFile, "tls-private-key-file", "", o.TLSKeyFile, "File containing the default x509 private key for matching cert file.")
-	cmd.Flags().IntVarP(&o.Port, "port", "", o.Port, "Secure port that the webhook listens on.")
+	cmd.Flags().VarP(&o.Port, "port", "", "Secure port that the webhook listens on.")
 
 	cmd.Flags().BoolVarP(&o.InsecureGenerateLocalhostCerts, "insecure-generate-localhost-cert", "", o.InsecureGenerateLocalhostCerts, "This will automatically generate self-signed certificate valid for localhost. Do not use this in production!")
 	return cmd
@@ -150,7 +206,7 @@ func (o *WebhookOptions) Validate() error {
 		return errors.New("port can't be zero")
 	}
 
-	return utilerrors.NewAggregate(errs)
+	return apimachineryutilerrors.NewAggregate(errs)
 }
 
 func (o *WebhookOptions) Complete() error {
@@ -215,7 +271,7 @@ func (o *WebhookOptions) Complete() error {
 }
 
 func (o *WebhookOptions) Run(streams genericclioptions.IOStreams, cmd *cobra.Command) error {
-	klog.Infof("%s version %s", cmd.Name(), version.Get())
+	cmdutil.LogCommandStarting(cmd)
 	cliflag.PrintFlags(cmd.Flags())
 
 	stopCh := signals.StopChannel()
@@ -244,7 +300,7 @@ func (o *WebhookOptions) run(ctx context.Context, streams genericclioptions.IOSt
 			klog.Error(err)
 		}
 	})
-	handler.Handle("/validate", admissionreview.NewHandler(func(review *admissionv1.AdmissionReview) error {
+	handler.Handle("/validate", admissionreview.NewHandler(func(review *admissionv1.AdmissionReview) ([]string, error) {
 		return validate(review, o.Validators)
 	}))
 
@@ -298,8 +354,10 @@ type ValidatableObject interface {
 }
 
 type GenericValidator[T ValidatableObject] struct {
-	ValidateCreateFunc func(obj T) field.ErrorList
-	ValidateUpdateFunc func(obj, oldObj T) field.ErrorList
+	ValidateCreateFunc      func(obj T) field.ErrorList
+	ValidateUpdateFunc      func(obj, oldObj T) field.ErrorList
+	GetWarningsOnCreateFunc func(obj T) []string
+	GetWarningsOnUpdateFunc func(obj, oldObj T) []string
 }
 
 func (v *GenericValidator[T]) ValidateCreate(obj runtime.Object) field.ErrorList {
@@ -318,7 +376,15 @@ func (v *GenericValidator[T]) GetName(obj runtime.Object) string {
 	return obj.(T).GetName()
 }
 
-func validate(ar *admissionv1.AdmissionReview, validators map[schema.GroupVersionResource]Validator) error {
+func (v *GenericValidator[T]) GetWarningsOnCreate(obj runtime.Object) []string {
+	return v.GetWarningsOnCreateFunc(obj.(T))
+}
+
+func (v *GenericValidator[T]) GetWarningsOnUpdate(obj, oldObj runtime.Object) []string {
+	return v.GetWarningsOnUpdateFunc(obj.(T), oldObj.(T))
+}
+
+func validate(ar *admissionv1.AdmissionReview, validators map[schema.GroupVersionResource]Validator) ([]string, error) {
 	gvr := schema.GroupVersionResource{
 		Group:    ar.Request.Resource.Group,
 		Version:  ar.Request.Resource.Version,
@@ -332,33 +398,40 @@ func validate(ar *admissionv1.AdmissionReview, validators map[schema.GroupVersio
 	if ar.Request.Object.Raw != nil {
 		obj, _, err = deserializer.Decode(ar.Request.Object.Raw, nil, nil)
 		if err != nil {
-			return fmt.Errorf("can't decode object %q: %w", gvr, err)
+			return nil, fmt.Errorf("can't decode object %q: %w", gvr, err)
 		}
 	}
 	if ar.Request.OldObject.Raw != nil {
 		oldObj, _, err = deserializer.Decode(ar.Request.OldObject.Raw, nil, nil)
 		if err != nil {
-			return fmt.Errorf("can't decode old object %q: %w", gvr, err)
+			return nil, fmt.Errorf("can't decode old object %q: %w", gvr, err)
 		}
 	}
 
 	validator, ok := validators[gvr]
 	if !ok {
-		return fmt.Errorf("unsupported GVR %q", gvr)
+		return nil, fmt.Errorf("unsupported GVR %q", gvr)
 	}
 
 	var errList field.ErrorList
+	var warnings []string
 	switch ar.Request.Operation {
 	case admissionv1.Create:
 		errList = validator.ValidateCreate(obj)
+		warnings = validator.GetWarningsOnCreate(obj)
+
 	case admissionv1.Update:
 		errList = validator.ValidateUpdate(obj, oldObj)
+		warnings = validator.GetWarningsOnUpdate(obj, oldObj)
+
 	default:
-		return fmt.Errorf("unsupported operation %q", ar.Request.Operation)
+		return nil, fmt.Errorf("unsupported operation %q", ar.Request.Operation)
+
 	}
 
 	if len(errList) > 0 {
-		return apierrors.NewInvalid(validator.GetGroupKind(obj), validator.GetName(obj), errList)
+		return warnings, apierrors.NewInvalid(validator.GetGroupKind(obj), validator.GetName(obj), errList)
 	}
-	return nil
+
+	return warnings, nil
 }

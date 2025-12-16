@@ -12,7 +12,11 @@ type ScyllaDBClusterExpansion interface{}
 
 type ScyllaDBDatacenterExpansion interface{}
 
+type ScyllaDBDatacenterNodesStatusReportExpansion interface{}
+
 type ScyllaDBManagerClusterRegistrationExpansion interface{}
+
+type ScyllaDBManagerTaskExpansion interface{}
 
 type ScyllaDBMonitoringExpansion interface{}
 

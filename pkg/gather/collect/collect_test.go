@@ -17,6 +17,7 @@ import (
 	dynamicfakeclient "k8s.io/client-go/dynamic/fake"
 	kubefakeclient "k8s.io/client-go/kubernetes/fake"
 	kubernetesscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
 )
 
@@ -30,6 +31,7 @@ func TestCollector_CollectObject(t *testing.T) {
 				{Name: "namespaces", Namespaced: false, Kind: "Namespace", Verbs: []string{"list"}},
 				{Name: "pods", Namespaced: true, Kind: "Pod", Verbs: []string{"list"}},
 				{Name: "secrets", Namespaced: true, Kind: "Secret", Verbs: []string{"list"}},
+				{Name: "configmaps", Namespaced: true, Kind: "ConfigMap", Verbs: []string{"list"}},
 			},
 		},
 		{
@@ -79,7 +81,6 @@ func TestCollector_CollectObject(t *testing.T) {
 apiVersion: v1
 kind: Pod
 metadata:
-  creationTimestamp: null
   name: my-pod
   namespace: test
 spec:
@@ -133,7 +134,6 @@ status: {}
 apiVersion: v1
 kind: Pod
 metadata:
-  creationTimestamp: null
   name: my-pod
   namespace: test
 spec:
@@ -223,7 +223,6 @@ status:
 apiVersion: v1
 kind: Pod
 metadata:
-  creationTimestamp: null
   name: my-pod
   namespace: test
 spec:
@@ -359,7 +358,6 @@ status:
 apiVersion: v1
 kind: Pod
 metadata:
-  creationTimestamp: null
   name: my-pod
   namespace: test
 spec:
@@ -445,6 +443,141 @@ status:
 			},
 		},
 		{
+			name: "fetches pod logs from terminated containers",
+			targetedObject: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test",
+					Name:      "my-pod",
+				},
+				Spec: corev1.PodSpec{
+					InitContainers: []corev1.Container{
+						{
+							Name: "my-init-container",
+						},
+					},
+					Containers: []corev1.Container{
+						{
+							Name: "my-container",
+						},
+					},
+					EphemeralContainers: []corev1.EphemeralContainer{
+						{
+							EphemeralContainerCommon: corev1.EphemeralContainerCommon{
+								Name: "my-ephemeral-container",
+							},
+						},
+					},
+				},
+				Status: corev1.PodStatus{
+					InitContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name: "my-init-container",
+							State: corev1.ContainerState{
+								Terminated: &corev1.ContainerStateTerminated{},
+								Running:    nil,
+							},
+						},
+					},
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name: "my-container",
+							State: corev1.ContainerState{
+								Terminated: &corev1.ContainerStateTerminated{},
+								Running:    nil,
+							},
+						},
+					},
+					EphemeralContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name: "my-ephemeral-container",
+							State: corev1.ContainerState{
+								Terminated: &corev1.ContainerStateTerminated{},
+								Running:    nil,
+							},
+						},
+					},
+				},
+			},
+			existingObjects:  nil,
+			relatedResources: false,
+			keepGoing:        false,
+			expectedError:    nil,
+			expectedDump: &testhelpers.GatherDump{
+				EmptyDirs: nil,
+				Files: []testhelpers.File{
+					{
+						Name: "namespaces/test/pods/my-pod.yaml",
+						Content: strings.TrimPrefix(`
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-pod
+  namespace: test
+spec:
+  containers:
+  - name: my-container
+    resources: {}
+  ephemeralContainers:
+  - name: my-ephemeral-container
+    resources: {}
+  initContainers:
+  - name: my-init-container
+    resources: {}
+status:
+  containerStatuses:
+  - image: ""
+    imageID: ""
+    lastState: {}
+    name: my-container
+    ready: false
+    restartCount: 0
+    state:
+      terminated:
+        exitCode: 0
+        finishedAt: null
+        startedAt: null
+  ephemeralContainerStatuses:
+  - image: ""
+    imageID: ""
+    lastState: {}
+    name: my-ephemeral-container
+    ready: false
+    restartCount: 0
+    state:
+      terminated:
+        exitCode: 0
+        finishedAt: null
+        startedAt: null
+  initContainerStatuses:
+  - image: ""
+    imageID: ""
+    lastState: {}
+    name: my-init-container
+    ready: false
+    restartCount: 0
+    state:
+      terminated:
+        exitCode: 0
+        finishedAt: null
+        startedAt: null
+`, "\n"),
+					},
+					{
+						Name:    "namespaces/test/pods/my-pod/my-container.terminated",
+						Content: "fake logs",
+					},
+					{
+						Name:    "namespaces/test/pods/my-pod/my-ephemeral-container.terminated",
+						Content: "fake logs",
+					},
+					{
+						Name:    "namespaces/test/pods/my-pod/my-init-container.terminated",
+						Content: "fake logs",
+					},
+				},
+			},
+		},
+		{
 			name: "namespace doesn't collect any extra resources if related resources are disabled",
 			targetedObject: &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
@@ -465,7 +598,6 @@ status:
 apiVersion: v1
 kind: Namespace
 metadata:
-  creationTimestamp: null
   name: my-namespace
   namespace: test
 spec: {}
@@ -483,13 +615,13 @@ status: {}
 				},
 			},
 			existingObjects: []runtime.Object{
-				&corev1.Secret{
+				&corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: "my-namespace",
-						Name:      "my-secret",
+						Name:      "my-configmap",
 					},
-					Data: map[string][]byte{
-						"secret-key": []byte("secret-value"),
+					Data: map[string]string{
+						"key": "value",
 					},
 				},
 			},
@@ -505,22 +637,20 @@ status: {}
 apiVersion: v1
 kind: Namespace
 metadata:
-  creationTimestamp: null
   name: my-namespace
 spec: {}
 status: {}
 `, "\n"),
 					},
 					{
-						Name: "namespaces/my-namespace/secrets/my-secret.yaml",
+						Name: "namespaces/my-namespace/configmaps/my-configmap.yaml",
 						Content: strings.TrimPrefix(`
 apiVersion: v1
 data:
-  secret-key: PHJlZGFjdGVkPg==
-kind: Secret
+  key: value
+kind: ConfigMap
 metadata:
-  creationTimestamp: null
-  name: my-secret
+  name: my-configmap
   namespace: my-namespace
 `, "\n"),
 					},
@@ -555,7 +685,6 @@ metadata:
 apiVersion: scylla.scylladb.com/v1
 kind: ScyllaCluster
 metadata:
-  creationTimestamp: null
   name: my-scyllacluster
   namespace: test
 spec:
@@ -585,16 +714,16 @@ status: {}
 						Name: "test",
 					},
 				},
-				&corev1.Secret{
+				&corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: "test",
-						Name:      "my-secret",
+						Name:      "my-configmap",
 					},
 				},
-				&corev1.Secret{
+				&corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: "other-namespace",
-						Name:      "other-secret",
+						Name:      "other-configmap",
 					},
 				},
 			},
@@ -610,10 +739,19 @@ status: {}
 apiVersion: v1
 kind: Namespace
 metadata:
-  creationTimestamp: null
   name: test
 spec: {}
 status: {}
+`, "\n"),
+					},
+					{
+						Name: "namespaces/test/configmaps/my-configmap.yaml",
+						Content: strings.TrimPrefix(`
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-configmap
+  namespace: test
 `, "\n"),
 					},
 					{
@@ -622,7 +760,6 @@ status: {}
 apiVersion: scylla.scylladb.com/v1
 kind: ScyllaCluster
 metadata:
-  creationTimestamp: null
   name: my-scyllacluster
   namespace: test
 spec:
@@ -635,15 +772,130 @@ spec:
 status: {}
 `, "\n"),
 					},
+				},
+			},
+		},
+		{
+			name: "namespace doesn't collect secrets even if related resources are enabled",
+			targetedObject: &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test",
+				},
+			},
+			existingObjects: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "my-secret",
+					},
+				},
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "my-configmap",
+					},
+				},
+			},
+			relatedResources: true,
+			keepGoing:        false,
+			expectedError:    nil,
+			expectedDump: &testhelpers.GatherDump{
+				EmptyDirs: nil,
+				Files: []testhelpers.File{
 					{
-						Name: "namespaces/test/secrets/my-secret.yaml",
+						Name: "cluster-scoped/namespaces/test.yaml",
 						Content: strings.TrimPrefix(`
 apiVersion: v1
-kind: Secret
+kind: Namespace
 metadata:
-  creationTimestamp: null
-  name: my-secret
+  name: test
+spec: {}
+status: {}
+`, "\n"),
+					},
+					{
+						Name: "namespaces/test/configmaps/my-configmap.yaml",
+						Content: strings.TrimPrefix(`
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-configmap
   namespace: test
+`, "\n"),
+					},
+				},
+			},
+		},
+		{
+			name: "scyllacluster doesn't collect secrets even if related resources are enabled",
+			targetedObject: &scyllav1.ScyllaCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "test",
+					Name:      "my-scyllacluster",
+				},
+			},
+			existingObjects: []runtime.Object{
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "my-secret",
+					},
+				},
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "my-configmap",
+					},
+				},
+			},
+			relatedResources: true,
+			keepGoing:        false,
+			expectedError:    nil,
+			expectedDump: &testhelpers.GatherDump{
+				EmptyDirs: nil,
+				Files: []testhelpers.File{
+					{
+						Name: "cluster-scoped/namespaces/test.yaml",
+						Content: strings.TrimPrefix(`
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: test
+spec: {}
+status: {}
+`, "\n"),
+					},
+					{
+						Name: "namespaces/test/configmaps/my-configmap.yaml",
+						Content: strings.TrimPrefix(`
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: my-configmap
+  namespace: test
+`, "\n"),
+					},
+					{
+						Name: "namespaces/test/scyllaclusters.scylla.scylladb.com/my-scyllacluster.yaml",
+						Content: strings.TrimPrefix(`
+apiVersion: scylla.scylladb.com/v1
+kind: ScyllaCluster
+metadata:
+  name: my-scyllacluster
+  namespace: test
+spec:
+  agentVersion: ""
+  datacenter:
+    name: ""
+    racks: null
+  network: {}
+  version: ""
+status: {}
 `, "\n"),
 					},
 				},
@@ -711,12 +963,20 @@ metadata:
 				existingUnstructuredObjects = append(existingUnstructuredObjects, u)
 			}
 			fakeDynamicClient := dynamicfakeclient.NewSimpleDynamicClient(scheme, existingUnstructuredObjects...)
+
+			discoverer := NewResourceDiscoverer(false, fakeDiscoveryClient)
+			discoveredResources, err := discoverer.DiscoverResources()
+			if err != nil {
+				t.Fatal(err)
+			}
+
 			collector := NewCollector(
 				tmpDir,
 				[]ResourcePrinterInterface{
 					&OmitManagedFieldsPrinter{Delegate: &YAMLPrinter{}},
 				},
-				fakeDiscoveryClient,
+				&rest.Config{},
+				discoveredResources,
 				fakeKubeClient.CoreV1(),
 				fakeDynamicClient,
 				tc.relatedResources,

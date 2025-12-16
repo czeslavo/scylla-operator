@@ -9,14 +9,76 @@ shopt -s inherit_errexit
 source "$( dirname "${BASH_SOURCE[0]}" )/../../lib/bash.sh"
 source "$( dirname "${BASH_SOURCE[0]}" )/../../lib/kube.sh"
 
-if [ -z "${KUBECONFIG_DIR+x}" ]; then
-  KUBECONFIGS=("${KUBECONFIG}")
-else
-  KUBECONFIGS=()
-  for f in $( find "$( realpath "${KUBECONFIG_DIR}" )" -maxdepth 1 -type f -name '*.kubeconfig' ); do
-    KUBECONFIGS+=("${f}")
-  done
+# WORKER_KUBECONFIGS is an associative array that maps worker cluster identifiers to their kubeconfig paths.
+# It is used in multi-datacenter setups.
+declare -A WORKER_KUBECONFIGS
+
+# WORKER_OBJECT_STORAGE_BUCKETS is an associative array that maps worker cluster identifiers to their object storage
+# bucket names. It is used in multi-datacenter setups.
+declare -A WORKER_OBJECT_STORAGE_BUCKETS
+
+# WORKER_S3_CREDENTIALS_PATHS is an associative array that maps worker cluster identifiers to their S3 credentials
+# file paths. It is used in multi-datacenter setups.
+declare -A WORKER_S3_CREDENTIALS_PATHS
+
+# WORKER_GCS_SERVICE_ACCOUNT_CREDENTIALS_PATHS is an associative array that maps worker cluster identifiers to their
+# GCS service account credentials file paths. It is used in multi-datacenter setups.
+declare -A WORKER_GCS_SERVICE_ACCOUNT_CREDENTIALS_PATHS
+
+# KUBECONFIG is the kubeconfig file used to connect to the cluster.
+# In multi-datacenter setups, it is the control plane cluster kubeconfig.
+if [ -z "${KUBECONFIG+x}" ]; then
+  echo "KUBECONFIG can't be empty" > /dev/stderr
+  exit 2
 fi
+
+# run-deploy-script-in-all-clusters runs the deployment script in all clusters.
+# In a single-datacenter setup, it deploys the operator stack in the only cluster using the KUBECONFIG environment variable.
+# In a multi-datacenter setup, it runs in the control plane cluster using the KUBECONFIG environment variable, and in all worker clusters using the WORKER_KUBECONFIGS associative array.
+# $1 - deployment script path
+function run-deploy-script-in-all-clusters {
+  if [ -z "${1+x}" ]; then
+    echo -e "Missing deployment script path.\nUsage: ${FUNCNAME[0]} deployment_script_path" > /dev/stderr
+    exit 2
+  fi
+
+  if [ -z "${SO_IMAGE+x}" ]; then
+    echo "SO_IMAGE can't be empty" > /dev/stderr
+    exit 2
+  fi
+
+  if [ -z "${ARTIFACTS+x}" ]; then
+    echo "ARTIFACTS can't be empty" > /dev/stderr
+    exit 2
+  fi
+
+  ARTIFACTS_DEPLOY_DIR="${ARTIFACTS}/deploy/cluster" \
+  timeout --foreground -v 10m "${1}" "${SO_IMAGE}" &
+  ci_deploy_bg_pids=( $! )
+
+  for name in "${!WORKER_KUBECONFIGS[@]}"; do
+    if [[ "${WORKER_KUBECONFIGS[$name]}" == "${KUBECONFIG}" ]]; then
+      # Skip if the control plane cluster is also among the worker clusters.
+      worker_as_control_plane="${name}"
+      continue
+    fi
+
+    KUBECONFIG="${WORKER_KUBECONFIGS[$name]}" \
+    ARTIFACTS_DEPLOY_DIR="${ARTIFACTS}/deploy/workers/${name}" \
+    SO_DISABLE_SCYLLADB_MANAGER_DEPLOYMENT=true \
+    timeout --foreground -v 10m "${1}" "${SO_IMAGE}" &
+    ci_deploy_bg_pids+=( $! )
+  done
+
+  for pid in "${ci_deploy_bg_pids[@]}"; do
+    wait "${pid}"
+  done
+
+  if [[ -n "${worker_as_control_plane+x}" ]]; then
+    mkdir -p "${ARTIFACTS}/deploy/workers"
+    cp -r ${REENTRANT:+-f} "${ARTIFACTS}/deploy/cluster" "${ARTIFACTS}/deploy/workers/${worker_as_control_plane}"
+  fi
+}
 
 # gather-artifacts is a self sufficient function that collects artifacts without depending on any external objects.
 # $1- target directory
@@ -69,7 +131,9 @@ spec:
   - name: artifacts
     emptyDir: {}
 EOF
-  kubectl -n=gather-artifacts wait --for=condition=Ready pod/must-gather
+  kubectl -n=gather-artifacts wait --timeout=300s --for=condition=Ready pod/must-gather ||
+    kubectl -n gather-artifacts describe pod must-gather && \
+    kubectl -n gather-artifacts logs pod/must-gather --all-containers=true
 
   exit_code="$( wait-for-container-exit-with-logs gather-artifacts must-gather must-gather )"
 
@@ -88,14 +152,28 @@ EOF
 function gather-artifacts-on-exit {
   ec=$?
 
-  for i in "${!KUBECONFIGS[@]}"; do
-    KUBECONFIG="${KUBECONFIGS[$i]}" gather-artifacts "${ARTIFACTS}/must-gather/${i}" &
-    gather_artifacts_bg_pids["${i}"]=$!
+  gather-artifacts "${ARTIFACTS}/must-gather/cluster" &
+  gather_artifacts_bg_pids=( $! )
+
+  for name in "${!WORKER_KUBECONFIGS[@]}"; do
+    if [[ "${WORKER_KUBECONFIGS[$name]}" == "${KUBECONFIG}" ]]; then
+      # Skip if the control plane cluster is also among the worker clusters.
+      worker_as_control_plane="${name}"
+      continue
+    fi
+
+    KUBECONFIG="${WORKER_KUBECONFIGS[$name]}" gather-artifacts "${ARTIFACTS}/must-gather/workers/${name}" &
+    gather_artifacts_bg_pids+=( $! )
   done
 
   for pid in "${gather_artifacts_bg_pids[@]}"; do
     wait "${pid}"
   done
+
+  if [[ -n "${worker_as_control_plane+x}" ]]; then
+    mkdir -p "${ARTIFACTS}/must-gather/workers"
+    cp -r ${REENTRANT:+-f} "${ARTIFACTS}/must-gather/cluster" "${ARTIFACTS}/must-gather/workers/${worker_as_control_plane}"
+  fi
 
   cleanup-bg-jobs "${ec}"
 }
@@ -105,12 +183,20 @@ function gracefully-shutdown-e2es {
   kubectl_cp -n=e2e e2e:/tmp/artifacts -c=wait-for-artifacts "${ARTIFACTS}" || true
 }
 
-function apply-e2e-workarounds {
-  if [ -z "${SO_IMAGE+x}" ]; then
-    echo "SO_IMAGE can't be empty" > /dev/stderr
-    exit 2
-  fi
+function apply-e2e-workarounds-in-all-clusters {
+  apply-e2e-workarounds
 
+  for name in "${!WORKER_KUBECONFIGS[@]}"; do
+    if [[ "${WORKER_KUBECONFIGS[$name]}" == "${KUBECONFIG}" ]]; then
+      # Skip if the control plane cluster is also among the worker clusters.
+      continue
+    fi
+
+    KUBECONFIG="${WORKER_KUBECONFIGS[$name]}" apply-e2e-workarounds
+  done
+}
+
+function apply-e2e-workarounds {
   # Allow admin to use ephemeralcontainers
   kubectl_create -f=- <<EOF
 apiVersion: rbac.authorization.k8s.io/v1
@@ -127,50 +213,6 @@ rules:
   verbs:
   - patch
 EOF
-
-  # FIXME: remove the workaround once https://github.com/scylladb/scylla-operator/issues/749 is done
-  kubectl_create -n=default -f=- <<EOF
-apiVersion: apps/v1
-kind: DaemonSet
-metadata:
-  name: sysctl
-spec:
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: sysctl
-  template:
-    metadata:
-      labels:
-        app.kubernetes.io/name: sysctl
-    spec:
-      containers:
-      - name: sysctl
-        securityContext:
-          privileged: true
-        image: "${SO_IMAGE}"
-        imagePullPolicy: IfNotPresent
-        command:
-        - /usr/bin/bash
-        - -euExo
-        - pipefail
-        - -O
-        - inherit_errexit
-        - -c
-        args:
-        - |
-          sysctl fs.aio-max-nr=0xffffffff
-
-          sleep infinity &
-          wait
-      nodeSelector:
-        scylla.scylladb.com/node-type: scylla
-      tolerations:
-      - effect: NoSchedule
-        key: scylla-operator.scylladb.com/dedicated
-        operator: Equal
-        value: scyllaclusters
-EOF
-  kubectl -n=default rollout status daemonset/sysctl
 }
 
 function run-e2e {
@@ -226,8 +268,22 @@ function run-e2e {
   kubectl create clusterrolebinding e2e --clusterrole=cluster-admin --serviceaccount=e2e:default --dry-run=client -o=yaml | kubectl_create -f=-
   kubectl create -n=e2e pdb my-pdb --selector='app=e2e' --min-available=1 --dry-run=client -o=yaml | kubectl_create -f=-
 
-  kubectl create -n=e2e secret generic kubeconfigs ${KUBECONFIGS[@]/#/--from-file=} --dry-run=client -o=yaml | kubectl_create -f=-
-  kubeconfigs_in_container_path=$( IFS=','; basenames=( "${KUBECONFIGS[@]##*/}" ) && in_container_paths="${basenames[@]/#//var/run/secrets/kubeconfigs/}" && echo "${in_container_paths[*]}" )
+  # Create a Secret with the main cluster's kubeconfig.
+  kubectl create -n=e2e secret generic kubeconfig --from-file=kubeconfig="${KUBECONFIG}" --dry-run=client -o=yaml | kubectl_create -f=-
+
+  # Create a Secret including _all_ workers' kubeconfigs (including the main cluster's kubeconfig if present in WORKER_KUBECONFIGS).
+  kubectl create -n=e2e secret generic worker-kubeconfigs ${WORKER_KUBECONFIGS[@]/#/--from-file=} --dry-run=client -o=yaml | kubectl_create -f=-
+  # Build a comma-separated string following a `<cluster_identifier>=<kubeconfig_path_in_container>` format expected by `--worker-kubeconfigs` flag.
+  worker_kubeconfigs_in_container_paths=$(
+    res=()
+    for key in "${!WORKER_KUBECONFIGS[@]}"; do
+      basename="${WORKER_KUBECONFIGS[$key]##*/}"
+      in_container_path="${basename/#//var/run/secrets/worker-kubeconfigs/}"
+      res+=( "${key}=${in_container_path}" )
+    done
+    IFS=','
+    echo "${res[*]}"
+  )
 
   gcs_sa_in_container_path=""
   if [[ -n "${SO_GCS_SERVICE_ACCOUNT_CREDENTIALS_PATH+x}" ]]; then
@@ -245,9 +301,89 @@ function run-e2e {
     kubectl create -n=e2e secret generic s3-credentials --dry-run=client -o=yaml | kubectl_create -f=-
   fi
 
+  # Build a comma-separated string following a `<cluster_identifier>=<bucket_name>` format expected by `--worker-object-storage-buckets` flag.
+  worker_object_storage_buckets=$(
+    res=()
+    for key in "${!WORKER_OBJECT_STORAGE_BUCKETS[@]}"; do
+      res+=( "${key}=${WORKER_OBJECT_STORAGE_BUCKETS[$key]}" )
+    done
+    IFS=','
+    echo "${res[*]}"
+  )
+
+  # Create a Secret including workers' S3 credentials files.
+  kubectl create -n=e2e secret generic worker-s3-credentials ${WORKER_S3_CREDENTIALS_PATHS[@]/#/--from-file=} --dry-run=client -o=yaml | kubectl_create -f=-
+  # Build a comma-separated string following a `<cluster_identifier>=<s3_credentials_path_in_container>` format expected by `--worker-s3-credentials-file-paths` flag.
+  worker_gcs_sa_in_container_paths=$(
+    res=()
+    for key in "${!WORKER_GCS_SERVICE_ACCOUNT_CREDENTIALS_PATHS[@]}"; do
+      basename="${WORKER_GCS_SERVICE_ACCOUNT_CREDENTIALS_PATHS[$key]##*/}"
+      in_container_path="/var/run/secrets/worker-gcs-service-account-credentials/${basename}"
+      res+=( "${key}=${in_container_path}" )
+    done
+    IFS=','
+    echo "${res[*]}"
+  )
+
+  # Create a Secret including workers' GCS service account credentials files.
+  kubectl create -n=e2e secret generic worker-gcs-service-account-credentials ${WORKER_GCS_SERVICE_ACCOUNT_CREDENTIALS_PATHS[@]/#/--from-file=} --dry-run=client -o=yaml | kubectl_create -f=-
+  # Build a comma-separated string following a `<cluster_identifier>=<gcs_service_account_path_in_container>` format expected by `--worker-gcs-service-account-key-paths` flag.
+  worker_s3_credentials_in_container_paths=$(
+    res=()
+    for key in "${!WORKER_S3_CREDENTIALS_PATHS[@]}"; do
+      basename="${WORKER_S3_CREDENTIALS_PATHS[$key]##*/}"
+      in_container_path="/var/run/secrets/worker-s3-credentials/${basename}"
+      res+=( "${key}=${in_container_path}" )
+    done
+    IFS=','
+    echo "${res[*]}"
+  )
+
   ingress_class_name='haproxy'
   ingress_custom_annotations='haproxy.org/ssl-passthrough=true,route.openshift.io/termination=passthrough'
   ingress_controller_address="$( kubectl -n=haproxy-ingress get svc haproxy-ingress --template='{{ .spec.clusterIP }}' ):9142"
+
+  e2e_command_args=(
+    "--skip=${SO_SKIPPED_TESTS}"
+    "--kubeconfig=/var/run/secrets/kubeconfig"
+    "--loglevel=2"
+    "--color=false"
+    "--artifacts-dir=/tmp/artifacts"
+    "--parallelism=${SO_E2E_PARALLELISM}"
+    "--timeout=${SO_E2E_TIMEOUT}"
+    "--feature-gates=${SCYLLA_OPERATOR_FEATURE_GATES}"
+    "--ingress-controller-address=${ingress_controller_address}"
+    "--ingress-controller-ingress-class-name=${ingress_class_name}"
+    "--ingress-controller-custom-annotations=${ingress_custom_annotations}"
+    "--scyllacluster-node-service-type=${SO_SCYLLACLUSTER_NODE_SERVICE_TYPE}"
+    "--scyllacluster-nodes-broadcast-address-type=${SO_SCYLLACLUSTER_NODES_BROADCAST_ADDRESS_TYPE}"
+    "--scyllacluster-clients-broadcast-address-type=${SO_SCYLLACLUSTER_CLIENTS_BROADCAST_ADDRESS_TYPE}"
+    "--scyllacluster-storageclass-name=${SO_SCYLLACLUSTER_STORAGECLASS_NAME}"
+    "--object-storage-bucket=${SO_BUCKET_NAME}"
+    "--gcs-service-account-key-path=${gcs_sa_in_container_path}"
+    "--s3-credentials-file-path=${s3_credentials_in_container_path}"
+    "--scylladb-version=${SCYLLADB_VERSION}"
+    "--scylladb-manager-version=${SCYLLADB_MANAGER_VERSION}"
+    "--scylladb-manager-agent-version=${SCYLLADB_MANAGER_AGENT_VERSION}"
+    "--scylladb-update-from-version=${SCYLLADB_UPDATE_FROM_VERSION}"
+    "--scylladb-upgrade-from-version=${SCYLLADB_UPGRADE_FROM_VERSION}"
+  )
+
+  if [[ -n "${worker_kubeconfigs_in_container_paths}" ]]; then
+    e2e_command_args+=( "--worker-kubeconfigs=${worker_kubeconfigs_in_container_paths}" )
+  fi
+
+  if [[ -n "${worker_gcs_sa_in_container_paths}" ]]; then
+    e2e_command_args+=( "--worker-gcs-service-account-key-paths=${worker_gcs_sa_in_container_paths}" )
+  fi
+
+  if [[ -n "${worker_s3_credentials_in_container_paths}" ]]; then
+    e2e_command_args+=( "--worker-s3-credentials-file-paths=${worker_s3_credentials_in_container_paths}" )
+  fi
+
+  if [[ -n "${worker_object_storage_buckets}" ]]; then
+    e2e_command_args+=( "--worker-object-storage-buckets=${worker_object_storage_buckets}" )
+  fi
 
   kubectl_create -n=e2e -f=- <<EOF
 apiVersion: v1
@@ -273,29 +409,7 @@ spec:
     - scylla-operator-tests
     - run
     - "${SO_SUITE}"
-    - "--skip=${SO_SKIPPED_TESTS}"
-    - "--kubeconfig=${kubeconfigs_in_container_path}"
-    - --loglevel=2
-    - --color=false
-    - --artifacts-dir=/tmp/artifacts
-    - "--parallelism=${SO_E2E_PARALLELISM}"
-    - "--timeout=${SO_E2E_TIMEOUT}"
-    - "--feature-gates=${SCYLLA_OPERATOR_FEATURE_GATES}"
-    - "--ingress-controller-address=${ingress_controller_address}"
-    - "--ingress-controller-ingress-class-name=${ingress_class_name}"
-    - "--ingress-controller-custom-annotations=${ingress_custom_annotations}"
-    - "--scyllacluster-node-service-type=${SO_SCYLLACLUSTER_NODE_SERVICE_TYPE}"
-    - "--scyllacluster-nodes-broadcast-address-type=${SO_SCYLLACLUSTER_NODES_BROADCAST_ADDRESS_TYPE}"
-    - "--scyllacluster-clients-broadcast-address-type=${SO_SCYLLACLUSTER_CLIENTS_BROADCAST_ADDRESS_TYPE}"
-    - "--scyllacluster-storageclass-name=${SO_SCYLLACLUSTER_STORAGECLASS_NAME}"
-    - "--object-storage-bucket=${SO_BUCKET_NAME}"
-    - "--gcs-service-account-key-path=${gcs_sa_in_container_path}"
-    - "--s3-credentials-file-path=${s3_credentials_in_container_path}"
-    - "--scylladb-version=${SCYLLADB_VERSION}"
-    - "--scylladb-manager-version=${SCYLLADB_MANAGER_VERSION}"
-    - "--scylladb-manager-agent-version=${SCYLLADB_MANAGER_AGENT_VERSION}"
-    - "--scylladb-update-from-version=${SCYLLADB_UPDATE_FROM_VERSION}"
-    - "--scylladb-upgrade-from-version=${SCYLLADB_UPGRADE_FROM_VERSION}"
+$(printf '    - "%s"\n' "${e2e_command_args[@]}")
     image: "${SO_IMAGE}"
     imagePullPolicy: Always
     volumeMounts:
@@ -305,8 +419,18 @@ spec:
       mountPath: /var/run/secrets/gcs-service-account-credentials
     - name: s3-credentials
       mountPath: /var/run/secrets/s3-credentials
-    - name: kubeconfigs
-      mountPath: /var/run/secrets/kubeconfigs
+    - name: kubeconfig
+      mountPath: /var/run/secrets/kubeconfig
+      subPath: kubeconfig
+      readOnly: true
+    - name: worker-kubeconfigs
+      mountPath: /var/run/secrets/worker-kubeconfigs
+      readOnly: true
+    - name: worker-gcs-service-account-credentials
+      mountPath: /var/run/secrets/worker-gcs-service-account-credentials
+      readOnly: true
+    - name: worker-s3-credentials
+      mountPath: /var/run/secrets/worker-s3-credentials
       readOnly: true
   volumes:
   - name: artifacts
@@ -317,9 +441,21 @@ spec:
   - name: s3-credentials
     secret:
       secretName: s3-credentials
-  - name: kubeconfigs
+  - name: kubeconfig
     secret:
-      secretName: kubeconfigs
+      secretName: kubeconfig
+      items:
+      - key: kubeconfig
+        path: kubeconfig
+  - name: worker-kubeconfigs
+    secret:
+      secretName: worker-kubeconfigs
+  - name : worker-gcs-service-account-credentials
+    secret:
+      secretName: worker-gcs-service-account-credentials
+  - name: worker-s3-credentials
+    secret:
+      secretName: worker-s3-credentials
 EOF
   kubectl -n=e2e wait --for=condition=Ready pod/e2e
 

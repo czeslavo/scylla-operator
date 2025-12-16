@@ -10,8 +10,8 @@ More over, {{productName}} implements additional features like performance tunin
 While we do our best to implement these routines as generically as possible, sometimes there isn't any low level API to base them on and they may work only on a subset of platforms.
 
 :::{caution}
-We *strongly* recommend using a [supported Kubernetes platform](../support/releases.md#supported-kubernetes-platforms).
-Issues on unsupported platforms are unlikely to be addressed.
+We *strongly* recommend using a [supported Kubernetes environment](../support/releases.md#supported-kubernetes-environments).
+Issues on unsupported environments are unlikely to be addressed.
 :::
 
 :::{note}
@@ -37,12 +37,12 @@ Depending on [which storage provisioner you choose](../architecture/storage/over
 
 {{productName}} contains the Kubernetes API extensions and corresponding controllers and admission hooks that run inside `scylla-operator` namespace.
 
-You can learn more about the APIs in [resources section](../resources/overview.md) and the [generated API reference](../api-reference/index.rst). 
+You can learn more about the APIs in [resources section](../resources/overview.md) and the [generated API reference](../reference/api/index.rst). 
 
 ### ScyllaDB Manager
 
-ScyllaDB Manager is a global deployment that is responsible for operating all [ScyllaClusters](../api-reference/groups/scylla.scylladb.com/scyllaclusters.rst) and runs inside `scylla-manager` namespace.
-There is a corresponding controller running in {{productName}} that syncs the [ScyllaCluster](../api-reference/groups/scylla.scylladb.com/scyllaclusters.rst) metadata, [backup](#api-scylla.scylladb.com-scyllaclusters-v1-.spec.backups[]) and [repair](#api-scylla.scylladb.com-scyllaclusters-v1-.spec.repairs[]) tasks into the manager (and vice versa) and avoids accessing the shared instance by users. Unfortunately, at this point, other task like restoring from a backup require executing into the shared ScyllaDB Manager deployment which effectively needs administrator privileges. 
+ScyllaDB Manager is a global deployment that is responsible for operating all [ScyllaClusters](../reference/api/groups/scylla.scylladb.com/scyllaclusters.rst) and runs inside `scylla-manager` namespace.
+{{productName}} syncs the [ScyllaCluster](../reference/api/groups/scylla.scylladb.com/scyllaclusters.rst) metadata, [backup](#api-scylla.scylladb.com-scyllaclusters-v1-.spec.backups[]) and [repair](#api-scylla.scylladb.com-scyllaclusters-v1-.spec.repairs[]) tasks into the manager (and vice versa). This way it allows avoiding direct access to the shared instance by users. Unfortunately, at this point, other task like restoring from a backup require executing into the shared ScyllaDB Manager deployment which effectively needs administrator privileges. 
 
 ScyllaDB Manager uses a small ScyllaCluster instance internally and thus depends on the {{productName}} deployment and the CRD it provides.
 
@@ -102,7 +102,4 @@ For details, please see the [dedicated section describing the deployment using H
 
 ## Upgrades
 
-{{productName}} supports N+1 upgrades only.
-That means to you can only update by 1 minor version at the time and wait for it to successfully roll out and then update all ScyllaClusters that also run using the image that's being updated. ({{productName}} injects it as a sidecar to help run and manage ScyllaDB.)
-
-We value the stability of our APIs and all API changes are backwards compatible.
+Please see the [dedicated section describing the upgrade process](./../management/upgrading/upgrade.md).

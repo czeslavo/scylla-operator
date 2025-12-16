@@ -12,6 +12,7 @@ import (
 
 	g "github.com/onsi/ginkgo/v2"
 	o "github.com/onsi/gomega"
+	configassets "github.com/scylladb/scylla-operator/assets/config"
 	scyllav1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1"
 	scyllav1alpha1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1alpha1"
 	"github.com/scylladb/scylla-operator/pkg/controllerhelpers"
@@ -20,7 +21,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/wait"
+	apimachineryutilwait "k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apiserver/pkg/storage/names"
 	"k8s.io/client-go/kubernetes"
 	restclient "k8s.io/client-go/rest"
@@ -36,10 +37,10 @@ const (
 type Framework struct {
 	FullClient
 
-	name            string
-	e2eArtifactsDir string
+	name string
 
-	clusters []*Cluster
+	cluster        *Cluster
+	workerClusters map[string]*Cluster
 }
 
 var _ FullClientInterface = &Framework{}
@@ -48,46 +49,61 @@ var _ ClusterInterface = &Framework{}
 func NewFramework(namePrefix string) *Framework {
 	var err error
 
-	f := &Framework{
-		name:            names.SimpleNameGenerator.GenerateName(fmt.Sprintf("%s-", namePrefix)),
-		e2eArtifactsDir: "",
-		FullClient:      FullClient{},
-		clusters:        make([]*Cluster, 0, len(TestContext.RestConfigs)),
-	}
-
+	e2eArtifactsDir := ""
 	if len(TestContext.ArtifactsDir) != 0 {
-		f.e2eArtifactsDir = path.Join(TestContext.ArtifactsDir, "e2e")
-		err = os.Mkdir(f.e2eArtifactsDir, 0777)
+		e2eArtifactsDir = path.Join(TestContext.ArtifactsDir, "e2e")
+		err = os.Mkdir(e2eArtifactsDir, 0777)
 		if !os.IsExist(err) {
 			o.Expect(err).NotTo(o.HaveOccurred())
 		}
 	}
 
-	o.Expect(TestContext.RestConfigs).NotTo(o.BeEmpty())
-	for i, restConfig := range TestContext.RestConfigs {
-		clusterName := fmt.Sprintf("%s-%d", f.name, i)
+	f := &Framework{
+		FullClient: FullClient{},
 
-		clusterE2EArtifactsDir := ""
-		if len(f.e2eArtifactsDir) != 0 {
-			clusterE2EArtifactsDir = path.Join(f.e2eArtifactsDir, fmt.Sprintf("cluster-%d", i))
-			err = os.Mkdir(clusterE2EArtifactsDir, 0777)
+		name: names.SimpleNameGenerator.GenerateName(fmt.Sprintf("%s-", namePrefix)),
+
+		workerClusters: map[string]*Cluster{},
+	}
+
+	clusterName := f.name
+	clusterE2EArtifactsDir := ""
+	if len(e2eArtifactsDir) != 0 {
+		clusterE2EArtifactsDir = path.Join(e2eArtifactsDir, "cluster")
+		err = os.Mkdir(clusterE2EArtifactsDir, 0777)
+		if !os.IsExist(err) {
+			o.Expect(err).NotTo(o.HaveOccurred())
+		}
+	}
+	f.cluster = NewCluster(
+		clusterName,
+		clusterE2EArtifactsDir,
+		TestContext.RestConfig,
+		func(ctx context.Context, adminClient kubernetes.Interface, adminClientConfig *restclient.Config) (*corev1.Namespace, Client) {
+			return createUserNamespace(ctx, clusterName, f.CommonLabels(), adminClient, adminClientConfig)
+		},
+	)
+	f.FullClient.AdminClient.Config = f.cluster.AdminClientConfig()
+
+	for workerClusterKey, workerClusterRestConfig := range TestContext.WorkerRestConfigs {
+		workerClusterE2EArtifactsDir := ""
+		if len(e2eArtifactsDir) != 0 {
+			workerClusterE2EArtifactsDir = path.Join(e2eArtifactsDir, "workers", workerClusterKey)
+			err = os.MkdirAll(workerClusterE2EArtifactsDir, 0777)
 			if !os.IsExist(err) {
 				o.Expect(err).NotTo(o.HaveOccurred())
 			}
 		}
-
-		c := NewCluster(
-			clusterName,
-			clusterE2EArtifactsDir,
-			restConfig,
+		workerClusterName := fmt.Sprintf("%s-%s", f.name, workerClusterKey)
+		f.workerClusters[workerClusterKey] = NewCluster(
+			workerClusterName,
+			workerClusterE2EArtifactsDir,
+			workerClusterRestConfig,
 			func(ctx context.Context, adminClient kubernetes.Interface, adminClientConfig *restclient.Config) (*corev1.Namespace, Client) {
-				return CreateUserNamespace(ctx, clusterName, f.CommonLabels(), adminClient, adminClientConfig)
+				return createUserNamespace(ctx, workerClusterName, f.CommonLabels(), adminClient, adminClientConfig)
 			},
 		)
-		f.clusters = append(f.clusters, c)
 	}
-
-	f.FullClient.AdminClient.Config = f.defaultCluster().AdminClientConfig()
 
 	g.BeforeEach(f.beforeEach)
 	g.JustAfterEach(f.justAfterEach)
@@ -96,21 +112,32 @@ func NewFramework(namePrefix string) *Framework {
 	return f
 }
 
-func (f *Framework) Cluster(idx int) ClusterInterface {
-	o.Expect(idx).NotTo(o.BeNumerically(">=", len(f.clusters)))
-	return f.clusters[idx]
+func (f *Framework) Cluster() ClusterInterface {
+	return f.cluster
+}
+
+func (f *Framework) WorkerClusters() map[string]ClusterInterface {
+	m := make(map[string]ClusterInterface, len(f.workerClusters))
+	for k, v := range f.workerClusters {
+		m[k] = v
+	}
+	return m
+}
+
+func (f *Framework) Name() string {
+	return f.cluster.Name()
 }
 
 func (f *Framework) Namespace() string {
-	return f.defaultCluster().defaultNamespace.Name
+	return f.cluster.defaultNamespace.Name
 }
 
 func (f *Framework) DefaultNamespaceIfAny() (*corev1.Namespace, Client, bool) {
-	return f.defaultCluster().DefaultNamespaceIfAny()
+	return f.cluster.DefaultNamespaceIfAny()
 }
 
 func (f *Framework) GetDefaultArtifactsDir() string {
-	return f.defaultCluster().GetArtifactsDir()
+	return f.cluster.GetArtifactsDir()
 }
 
 func (f *Framework) GetIngressAddress(hostname string) string {
@@ -167,12 +194,14 @@ func (f *Framework) GetDefaultZonalScyllaClusterWithThreeRacks() *scyllav1.Scyll
 
 func (f *Framework) GetDefaultScyllaDBDatacenter() *scyllav1alpha1.ScyllaDBDatacenter {
 	renderArgs := map[string]any{
-		"scyllaDBVersion":             TestContext.ScyllaDBVersion,
-		"scyllaDBManagerVersion":      TestContext.ScyllaDBManagerAgentVersion,
-		"nodeServiceType":             TestContext.ScyllaClusterOptions.ExposeOptions.NodeServiceType,
-		"nodesBroadcastAddressType":   TestContext.ScyllaClusterOptions.ExposeOptions.NodesBroadcastAddressType,
-		"clientsBroadcastAddressType": TestContext.ScyllaClusterOptions.ExposeOptions.ClientsBroadcastAddressType,
-		"storageClassName":            TestContext.ScyllaClusterOptions.StorageClassName,
+		"scyllaDBVersion":                TestContext.ScyllaDBVersion,
+		"scyllaDBManagerVersion":         TestContext.ScyllaDBManagerAgentVersion,
+		"nodeServiceType":                TestContext.ScyllaClusterOptions.ExposeOptions.NodeServiceType,
+		"nodesBroadcastAddressType":      TestContext.ScyllaClusterOptions.ExposeOptions.NodesBroadcastAddressType,
+		"clientsBroadcastAddressType":    TestContext.ScyllaClusterOptions.ExposeOptions.ClientsBroadcastAddressType,
+		"storageClassName":               TestContext.ScyllaClusterOptions.StorageClassName,
+		"scyllaDBRepository":             configassets.ScyllaDBImageRepository,
+		"scyllaDBManagerAgentRepository": configassets.ScyllaDBManagerAgentImageRepository,
 	}
 
 	sdc, _, err := scyllafixture.ScyllaDBDatacenterTemplate.RenderObject(renderArgs)
@@ -181,15 +210,17 @@ func (f *Framework) GetDefaultScyllaDBDatacenter() *scyllav1alpha1.ScyllaDBDatac
 	return sdc
 }
 
-func (f *Framework) GetDefaultScyllaDBCluster(rkcs []*scyllav1alpha1.RemoteKubernetesCluster) *scyllav1alpha1.ScyllaDBCluster {
+func (f *Framework) GetDefaultScyllaDBCluster(rkcMap map[string]*scyllav1alpha1.RemoteKubernetesCluster) *scyllav1alpha1.ScyllaDBCluster {
 	renderArgs := map[string]any{
-		"scyllaDBVersion":             TestContext.ScyllaDBVersion,
-		"scyllaDBManagerVersion":      TestContext.ScyllaDBManagerAgentVersion,
-		"nodeServiceType":             TestContext.ScyllaClusterOptions.ExposeOptions.NodeServiceType,
-		"nodesBroadcastAddressType":   TestContext.ScyllaClusterOptions.ExposeOptions.NodesBroadcastAddressType,
-		"clientsBroadcastAddressType": TestContext.ScyllaClusterOptions.ExposeOptions.ClientsBroadcastAddressType,
-		"storageClassName":            TestContext.ScyllaClusterOptions.StorageClassName,
-		"remoteKubernetesClusters":    rkcs,
+		"scyllaDBVersion":                TestContext.ScyllaDBVersion,
+		"scyllaDBManagerVersion":         TestContext.ScyllaDBManagerAgentVersion,
+		"nodeServiceType":                TestContext.ScyllaClusterOptions.ExposeOptions.NodeServiceType,
+		"nodesBroadcastAddressType":      TestContext.ScyllaClusterOptions.ExposeOptions.NodesBroadcastAddressType,
+		"clientsBroadcastAddressType":    TestContext.ScyllaClusterOptions.ExposeOptions.ClientsBroadcastAddressType,
+		"storageClassName":               TestContext.ScyllaClusterOptions.StorageClassName,
+		"remoteKubernetesClusterMap":     rkcMap,
+		"scyllaDBRepository":             configassets.ScyllaDBImageRepository,
+		"scyllaDBManagerAgentRepository": configassets.ScyllaDBManagerAgentImageRepository,
 	}
 
 	sc, _, err := scyllafixture.ScyllaDBClusterTemplate.RenderObject(renderArgs)
@@ -199,59 +230,41 @@ func (f *Framework) GetDefaultScyllaDBCluster(rkcs []*scyllav1alpha1.RemoteKuber
 }
 
 func (f *Framework) AddCleaners(cleaners ...Cleaner) {
-	f.defaultCluster().AddCleaners(cleaners...)
+	f.cluster.AddCleaners(cleaners...)
 }
 
 func (f *Framework) AddCollectors(collectors ...Collector) {
-	f.defaultCluster().AddCollectors(collectors...)
+	f.cluster.AddCollectors(collectors...)
 }
 
 func (f *Framework) CreateUserNamespace(ctx context.Context) (*corev1.Namespace, Client) {
-	return f.defaultCluster().CreateUserNamespace(ctx)
+	return f.cluster.CreateUserNamespace(ctx)
 }
 
-func (f *Framework) GetObjectStorageType() ObjectStorageType {
-	return TestContext.ObjectStorageType
-}
-
-func (f *Framework) GetObjectStorageProvider() string {
-	switch TestContext.ObjectStorageType {
-	case ObjectStorageTypeGCS:
-		return "gcs"
-	case ObjectStorageTypeS3:
-		return "s3"
-	default:
-		return ""
+func (f *Framework) GetClusterObjectStorageSettings() (ClusterObjectStorageSettings, bool) {
+	if TestContext.ClusterObjectStorageSettings == nil {
+		return ClusterObjectStorageSettings{}, false
 	}
+	return *TestContext.ClusterObjectStorageSettings, true
 }
 
-func (f *Framework) GetObjectStorageBucket() string {
-	return TestContext.ObjectStorageBucket
-}
-
-func (f *Framework) GetGCSServiceAccountKey() []byte {
-	return TestContext.GCSServiceAccountKey
-}
-
-func (f *Framework) GetS3CredentialsFile() []byte {
-	return TestContext.S3CredentialsFile
-}
-
-func (f *Framework) defaultCluster() *Cluster {
-	o.Expect(f.clusters).NotTo(o.BeEmpty())
-	return f.clusters[0]
+func (f *Framework) GetObjectStorageSettingsForWorkerCluster(workerName string) ClusterObjectStorageSettings {
+	settings, ok := TestContext.WorkerClusterObjectStorageSettings[workerName]
+	o.Expect(ok).To(o.BeTrue(), fmt.Sprintf("no object storage configured for worker %q", workerName))
+	return settings
 }
 
 func (f *Framework) beforeEach(ctx context.Context) {
-	ns, nsClient := f.defaultCluster().CreateUserNamespace(ctx)
-	f.defaultCluster().defaultNamespace = ns
-	f.defaultCluster().defaultClient = nsClient
+	ns, nsClient := f.CreateUserNamespace(ctx)
+	f.cluster.defaultNamespace = ns
+	f.cluster.defaultClient = nsClient
 	f.FullClient.Client = nsClient
 }
 
 func (f *Framework) justAfterEach(ctx context.Context) {
-	ginkgoNamespace := f.defaultCluster().defaultNamespace.Name
-	for _, c := range f.clusters {
+	ginkgoNamespace := f.cluster.defaultNamespace.Name
+	f.cluster.Collect(ctx, ginkgoNamespace)
+	for _, c := range f.workerClusters {
 		c.Collect(ctx, ginkgoNamespace)
 	}
 }
@@ -261,8 +274,8 @@ func (f *Framework) afterEach(ctx context.Context) {
 		Config: nil,
 	}
 
-	f.defaultCluster().defaultNamespace = nil
-	f.defaultCluster().defaultClient = nilClient
+	f.cluster.defaultNamespace = nil
+	f.cluster.defaultClient = nilClient
 	f.FullClient.Client = nilClient
 
 	shouldCleanup := true
@@ -279,13 +292,14 @@ func (f *Framework) afterEach(ctx context.Context) {
 	}
 
 	if shouldCleanup {
-		for _, c := range f.clusters {
+		f.cluster.Cleanup(ctx)
+		for _, c := range f.workerClusters {
 			c.Cleanup(ctx)
 		}
 	}
 }
 
-func CreateUserNamespace(ctx context.Context, clusterName string, labels map[string]string, adminClient kubernetes.Interface, adminClientConfig *restclient.Config) (*corev1.Namespace, Client) {
+func createUserNamespace(ctx context.Context, clusterName string, labels map[string]string, adminClient kubernetes.Interface, adminClientConfig *restclient.Config) (*corev1.Namespace, Client) {
 	g.By("Creating a new namespace")
 	var ns *corev1.Namespace
 	generateName := func() string {
@@ -293,7 +307,7 @@ func CreateUserNamespace(ctx context.Context, clusterName string, labels map[str
 	}
 	name := generateName()
 	sr := g.CurrentSpecReport()
-	err := wait.PollImmediate(2*time.Second, 30*time.Second, func() (bool, error) {
+	err := apimachineryutilwait.PollImmediate(2*time.Second, 30*time.Second, func() (bool, error) {
 		var err error
 		// We want to know the name ahead, even if the api call fails.
 		ns, err = adminClient.CoreV1().Namespaces().Create(

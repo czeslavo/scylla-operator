@@ -4,13 +4,12 @@ package remotekubernetescluster
 
 import (
 	"context"
-	"fmt"
 
 	g "github.com/onsi/ginkgo/v2"
 	o "github.com/onsi/gomega"
 	scyllav1alpha1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1alpha1"
 	"github.com/scylladb/scylla-operator/pkg/controllerhelpers"
-	"github.com/scylladb/scylla-operator/pkg/helpers/slices"
+	oslices "github.com/scylladb/scylla-operator/pkg/helpers/slices"
 	"github.com/scylladb/scylla-operator/test/e2e/framework"
 	"github.com/scylladb/scylla-operator/test/e2e/utils"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -24,18 +23,19 @@ var _ = g.Describe("RemoteKubernetesCluster finalizer", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 		defer cancel()
 
-		idx := 0
-		cluster := f.Cluster(idx)
-		userNs, _ := cluster.CreateUserNamespace(ctx)
+		cluster := f.Cluster()
+		userNs, _ := f.CreateUserNamespace(ctx)
 
-		rkcName := fmt.Sprintf("%s-%d", f.Namespace(), idx)
+		rkcClusterKey := "dc-1"
+		rkcName := cluster.Name()
 
-		framework.By("Creating RemoteKubernetesCluster %q with credentials to cluster #%d", rkcName, idx)
-		originalRKC, err := utils.GetRemoteKubernetesClusterWithOperatorClusterRole(ctx, cluster.KubeAdminClient(), cluster.AdminClientConfig(), rkcName, userNs.Name)
+		framework.By("Creating RemoteKubernetesCluster %q with credentials to cluster %q", rkcName, cluster.Name())
+		originalRKC, err := utils.GetRemoteKubernetesClusterWithOperatorClusterRole(ctx, f.KubeAdminClient(), f.AdminClientConfig(), rkcName, userNs.Name)
 		o.Expect(err).NotTo(o.HaveOccurred())
 
 		rc := framework.NewRestoringCleaner(
 			ctx,
+			f.AdminClientConfig(),
 			f.KubeAdminClient(),
 			f.DynamicAdminClient(),
 			remoteKubernetesClusterResourceInfo,
@@ -54,7 +54,7 @@ var _ = g.Describe("RemoteKubernetesCluster finalizer", func() {
 
 		const expectedFinalizer = "scylla-operator.scylladb.com/remotekubernetescluster-protection"
 		hasRKCFinalizer := func(rkc *scyllav1alpha1.RemoteKubernetesCluster) (bool, error) {
-			return slices.ContainsItem(rkc.Finalizers, expectedFinalizer), nil
+			return oslices.ContainsItem(rkc.Finalizers, expectedFinalizer), nil
 		}
 
 		rkc, err = controllerhelpers.WaitForRemoteKubernetesClusterState(waitCtx1, cluster.ScyllaAdminClient().ScyllaV1alpha1().RemoteKubernetesClusters(), rkc.Name, controllerhelpers.WaitForStateOptions{},
@@ -87,7 +87,7 @@ var _ = g.Describe("RemoteKubernetesCluster finalizer", func() {
 		o.Expect(err).NotTo(o.HaveOccurred())
 
 		framework.By("Creating ScyllaDBCluster using RemoteKubernetesCluster %q", rkcName)
-		sc1 := f.GetDefaultScyllaDBCluster([]*scyllav1alpha1.RemoteKubernetesCluster{rkc})
+		sc1 := f.GetDefaultScyllaDBCluster(map[string]*scyllav1alpha1.RemoteKubernetesCluster{rkcClusterKey: rkc})
 
 		sc1, err = cluster.ScyllaAdminClient().ScyllaV1alpha1().ScyllaDBClusters(f.Namespace()).Create(ctx, sc1, metav1.CreateOptions{})
 		o.Expect(err).NotTo(o.HaveOccurred())

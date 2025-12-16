@@ -3,15 +3,15 @@ kind: ScyllaCluster
 metadata:
   name: scylla-manager-cluster
   namespace: scylla-manager
+  annotations:
+    scylla-operator.scylladb.com/disable-global-scylladb-manager-integration: "true"
 spec:
-  version: 2025.1.2
-  agentVersion: 3.5.0@sha256:12755969f1b3258572c520aa82c2f18db52287b3dc7055a977072284f234da16
+  version: 2025.3.5
+  agentVersion: 3.7.0@sha256:bfceefaabeecc119ea8c39150314967c5b8efc22334c0ca3e020ed2ab9ca7e19
   repository: docker.io/scylladb/scylla
   agentRepository: docker.io/scylladb/scylla-manager-agent
   developerMode: true
   cpuset: false
-  sysctls:
-    - fs.aio-max-nr=30000000
   datacenter:
     name: manager-dc
     racks:

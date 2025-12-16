@@ -10,14 +10,13 @@ In this guide we'll be using `eksctl` to set up the cluster, and you'll need `ku
 
 If you don't have those already, or are not available through your package manager, you can try these links to learn more about installing them:
 - [eksctl](https://docs.aws.amazon.com/eks/latest/userguide/getting-started-eksctl.html)
-- [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
+- [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl)
 
 ## Creating an EKS cluster
 
 First, let's create a declarative config to used with eksctl
-:::{code-block} bash
+:::{code-block} shell
 :substitutions:
-
 curl --fail --retry 5 --retry-all-errors -o 'clusterconfig.eksctl.yaml' -L https://raw.githubusercontent.com/{{repository}}/{{revision}}/examples/eks/clusterconfig.eksctl.yaml
 :::
 
