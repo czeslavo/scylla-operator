@@ -9,11 +9,16 @@
   "enabledManagers": [
     "custom.regex"
   ],
+  "labels": [
+    "kind/dependency-bump",
+    "priority/important-soon"
+  ],
   "customManagers": [
     {
+      "description": "Custom manager for dependencies defined in assets/config/config.yaml with Renovate annotations.",
       "customType": "regex",
-      "fileMatch": [
-        "^assets/config/config\\.yaml$"
+      "managerFilePatterns": [
+        "/^assets/config/config\\.yaml$/"
       ],
       "matchStrings": [
         "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)(\\s+packageName=(?<packageName>\\S+))?(\\s+registryUrl=(?<registryUrl>\\S+))?(\\s+versioning=(?<versioning>\\S+))?\\s*\\n\\s*\\S+:\\s*\"?(?<currentValue>[^\"\\s]+)\"?"
