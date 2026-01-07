@@ -5,6 +5,7 @@ linters:
     - unused
     - govet
     - importas
+    - ginkgolinter
     # More linters can be added, see supported ones: https://golangci-lint.run/usage/linters/
   exclusions:
     presets:
@@ -31,8 +32,15 @@ linters:
           alias: oslices
         - pkg: github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1
           alias: monitoringv1
+    ginkgolinter:
+      forbid-focus-container: true
+      validate-async-intervals: true
 formatters:
   enable:
     - gofmt
     - goimports
     - gci
+
+run:
+  build-tags:
+    - envtest
