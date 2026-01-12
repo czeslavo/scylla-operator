@@ -7,8 +7,18 @@
     "before 5am every weekday"
   ],
   "enabledManagers": [
-    "custom.regex"
+    "custom.regex",
+    "gomod"
   ],
+  "postUpdateOptions": [
+    "gomodMassage",
+    "gomodTidy",
+    "gomodVendor",
+    "gomodUpdateImportPaths"
+  ],
+  "gomod": {
+    "groupName": "gomod"
+  },
   "labels": [
     "kind/dependency-bump",
     "priority/important-soon"
