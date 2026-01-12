@@ -8,7 +8,11 @@
     "priority/important-longterm"
   ],
   "gomod": {
-    "groupName": "gomod"
+    "groupName": "gomod",
+    "postUpdateOptions": [
+      "gomodTidy",
+      "gomodMassage"
+    ]
   },
   "packageRules": [
     {
