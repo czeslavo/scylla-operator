@@ -679,6 +679,13 @@ func StatefulSetForRack(rack scyllav1alpha1.RackSpec, sdc *scyllav1alpha1.Scylla
 									positionalArgs = append(positionalArgs, "--developer-mode=0")
 								}
 
+								// Tests speed up.
+								positionalArgs = append(positionalArgs,
+									"--unsafe-bypass-fsync=1",
+									"--kernel-page-cache=1",
+									"--commitlog-use-o-dsync=0",
+								)
+
 								cmd := []string{
 									"/usr/bin/bash",
 									"-euEo",

@@ -6,6 +6,8 @@ metadata:
 data:
   {{ .ManagedConfigName | printf "%q" }}: |
     cluster_name: "{{ .ClusterName }}"
+    ring_delay_ms: 0
+    flush_schema_tables_after_modification: false
     {{- if eq .IPFamily "IPv6" }}
     rpc_address: "::"
     api_address: "::"
