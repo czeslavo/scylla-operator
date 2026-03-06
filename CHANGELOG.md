@@ -23,6 +23,10 @@
 
 -  Fixed [#2990](https://github.com/scylladb/scylla-operator/issues/2990): set monitoring scrape intervals to: 5s in 
   `ServiceMonitor`, and 30s in Grafana. This overrides the global scrape interval set in Prometheus.
+- Fixed [#2778](https://github.com/scylladb/scylla-operator/issues/2778): `ScyllaDBDatacenter` controller now preserves
+  `volumeClaimTemplates` labels and annotations from the existing `StatefulSet` instead of recomputing them, preventing
+  immutable field update errors when `.spec.rackTemplate` is set on an existing `ScyllaDBDatacenter`.
+  [#3309]: https://github.com/scylladb/scylla-operator/pull/3309
 
 ## 1.20.0 and older
 
