@@ -1,0 +1,180 @@
+# OpenCode AI-powered PR review workflow.
+#
+# Triggered by commenting "/opencode review" on a pull request.
+# Optionally accepts a model flag: /opencode review --model=<name>
+#
+# Supported models (friendly name -> Copilot model ID):
+#   sonnet-4.6  -> github-copilot/claude-sonnet-4.6  (default)
+#   opus-4.6    -> github-copilot/claude-opus-4.6
+#
+# Authorization: only members of the scylladb/operator-team GitHub team
+# may trigger reviews.
+#
+# Required repository secrets:
+#   ORG_MEMBERSHIP_TOKEN   - GitHub PAT with read:org scope (for team membership checks)
+#   COPILOT_ACCESS_TOKEN   - GitHub Copilot OAuth access token (expires every 8h, auto-refreshed)
+#   COPILOT_REFRESH_TOKEN  - GitHub Copilot OAuth refresh token (expires every ~6 months)
+#
+# NOTE: Copilot OAuth tokens are inherently user-tied. There is no service-account
+# or app-level mechanism for Copilot authentication. When the refresh token expires
+# (~6 months), a team member must re-extract tokens via `opencode auth list` locally
+# and update the repository secrets.
+
+name: OpenCode PR Review
+run-name: "OpenCode review on PR #${{ github.event.issue.number }}"
+
+on:
+  issue_comment:
+    types: [created]
+
+# Only allow one review at a time per PR to avoid conflicts.
+concurrency:
+  group: opencode-review-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: AI Code Review
+    # Only run on PR comments that start with the trigger command.
+    if: >-
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/opencode review')
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Parse command and validate model
+        id: parse
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+        run: |
+          # Extract the first line of the comment (ignore any trailing text).
+          COMMAND_LINE=$(echo "$COMMENT_BODY" | head -n1)
+
+          # Default model.
+          FRIENDLY_NAME="sonnet-4.6"
+
+          # Check for --model flag.
+          if echo "$COMMAND_LINE" | grep -qoP -- '--model=\S+'; then
+            FRIENDLY_NAME=$(echo "$COMMAND_LINE" | grep -oP -- '--model=\K\S+')
+          fi
+
+          # Map friendly names to Copilot model IDs.
+          case "$FRIENDLY_NAME" in
+            sonnet-4.6)
+              MODEL_ID="github-copilot/claude-sonnet-4.6"
+              ;;
+            opus-4.6)
+              MODEL_ID="github-copilot/claude-opus-4.6"
+              ;;
+            *)
+              echo "invalid_model=true" >> "$GITHUB_OUTPUT"
+              echo "requested_model=$FRIENDLY_NAME" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+          esac
+
+          echo "model_id=$MODEL_ID" >> "$GITHUB_OUTPUT"
+          echo "friendly_name=$FRIENDLY_NAME" >> "$GITHUB_OUTPUT"
+          echo "invalid_model=false" >> "$GITHUB_OUTPUT"
+
+      - name: Reject invalid model
+        if: steps.parse.outputs.invalid_model == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REQUESTED_MODEL: ${{ steps.parse.outputs.requested_model }}
+        run: |
+          read -r -d '' BODY <<'INNEREOF' || true
+          **OpenCode Review: invalid model name** `PLACEHOLDER_MODEL`
+
+          Supported models:
+          | Name | Description |
+          |------|-------------|
+          | `sonnet-4.6` | Claude Sonnet 4.6 *(default)* |
+          | `opus-4.6` | Claude Opus 4.6 |
+
+          Usage: `/opencode review` or `/opencode review --model=opus-4.6`
+          INNEREOF
+          BODY="${BODY//PLACEHOLDER_MODEL/$REQUESTED_MODEL}"
+          gh api repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments \
+            -f body="$BODY"
+          exit 1
+
+      - name: Check team membership
+        id: auth
+        env:
+          GH_TOKEN: ${{ secrets.ORG_MEMBERSHIP_TOKEN }}
+          COMMENTER: ${{ github.event.comment.user.login }}
+        run: |
+          HTTP_CODE=$(curl -s -o /tmp/membership.json -w "%{http_code}" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/orgs/scylladb/teams/operator-team/memberships/$COMMENTER")
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "authorized=false" >> "$GITHUB_OUTPUT"
+          else
+            STATE=$(jq -r '.state' /tmp/membership.json)
+            if [ "$STATE" = "active" ]; then
+              echo "authorized=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "authorized=false" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Reject unauthorized user
+        if: steps.auth.outputs.authorized != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMENTER: ${{ github.event.comment.user.login }}
+        run: |
+          gh api repos/${{ github.repository }}/issues/${{ github.event.issue.number }}/comments \
+            -f body="@$COMMENTER you are not authorized to trigger OpenCode reviews. Only \`scylladb/operator-team\` members may use this command."
+          exit 1
+
+      - name: Acknowledge command
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions \
+            -f content="rocket"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ github.event.issue.number }}/head
+          fetch-depth: 0
+
+      - name: Seed Copilot auth tokens
+        env:
+          COPILOT_ACCESS_TOKEN: ${{ secrets.COPILOT_ACCESS_TOKEN }}
+          COPILOT_REFRESH_TOKEN: ${{ secrets.COPILOT_REFRESH_TOKEN }}
+        run: |
+          AUTH_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/opencode"
+          mkdir -p "$AUTH_DIR"
+          printf '{"github-copilot":{"access":"%s","refresh":"%s"}}' \
+            "$COPILOT_ACCESS_TOKEN" "$COPILOT_REFRESH_TOKEN" \
+            > "$AUTH_DIR/auth.json"
+
+      - name: Run OpenCode review
+        uses: anomalyco/opencode/github@latest
+        with:
+          use_github_token: true
+          model: ${{ steps.parse.outputs.model_id }}
+          prompt: |
+            Review this pull request thoroughly. Analyze the code changes for:
+            - Correctness and potential bugs
+            - Security concerns
+            - Performance implications
+            - Code style and consistency with the existing codebase
+            - Test coverage gaps
+
+            Provide constructive, actionable feedback. Focus on significant issues
+            rather than nitpicks. If the changes look good, say so concisely.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
