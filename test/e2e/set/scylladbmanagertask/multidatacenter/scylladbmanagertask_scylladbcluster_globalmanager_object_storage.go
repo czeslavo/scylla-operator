@@ -279,7 +279,7 @@ var _ = g.Describe("ScyllaDBManagerTask and ScyllaDBCluster integration with glo
 		framework.By("Waiting for the source ScyllaDBCluster to be deleted")
 		sourceSCDeletionCtx, sourceSCDeletionCtxCancel := context.WithTimeoutCause(
 			ctx,
-			utils.ScyllaDBTerminationTimeout,
+			utils.ScyllaDBMultiDatacenterClusterTerminationTimeout,
 			fmt.Errorf("source ScyllaDBCluster %q has not been deleted in time", naming.ObjRef(sourceSC)),
 		)
 		defer sourceSCDeletionCtxCancel()
@@ -322,16 +322,38 @@ var _ = g.Describe("ScyllaDBManagerTask and ScyllaDBCluster integration with glo
 		o.Expect(err).NotTo(o.HaveOccurred())
 		allTargetHosts := slices.Concat(slices.Collect(maps.Values(targetHostsByDC))...)
 		o.Expect(allTargetHosts).To(o.HaveLen(int(controllerhelpers.GetScyllaDBClusterNodeCount(targetSC))))
-		err = di.SetClientEndpoints(allTargetHosts)
-		o.Expect(err).NotTo(o.HaveOccurred())
-		err = di.AwaitSchemaAgreement(ctx)
-		o.Expect(err).NotTo(o.HaveOccurred())
-		_, err = di.Read()
-		o.Expect(err).To(o.HaveOccurred())
-		var gocqlErr gocql.RequestError
-		o.Expect(errors.As(err, &gocqlErr)).To(o.BeTrue())
-		o.Expect(gocqlErr.Code()).To(o.Equal(gocql.ErrCodeInvalid))
-		o.Expect(gocqlErr.Error()).To(o.And(o.HavePrefix("Keyspace"), o.HaveSuffix("does not exist")))
+
+		// After a fresh cluster is provisioned, nodes may still be finishing gossip stabilisation.
+		// During this window, CQL queries can receive transport-level errors instead of the expected
+		// protocol-level RequestError. Retry with a fresh session on each attempt until we get the
+		// correct protocol error confirming the keyspace does not yet exist.
+		cqlStabilisationCtx, cqlStabilisationCtxCancel := context.WithTimeoutCause(
+			ctx,
+			utils.ScyllaDBClusterCQLStabilizationTimeout,
+			fmt.Errorf("target ScyllaDBCluster %q did not reach CQL stability in time", naming.ObjRef(targetSC)),
+		)
+		defer cqlStabilisationCtxCancel()
+
+		// cqlFrameError is a local interface that matches frm.ErrorFrame (gocql/internal/frame),
+		// which is the concrete type returned for ErrCodeInvalid errors ("keyspace does not exist").
+		// The public gocql.RequestError interface requires Code()/Message(), but the vendored
+		// gocql library's concrete error types only expose GetCode()/GetMessage() from ErrorFrame,
+		// so errors.As(err, &gocql.RequestError{}) never matches.
+		type cqlFrameError interface {
+			error
+			GetCode() int
+			GetMessage() string
+		}
+		o.Eventually(func(eo o.Gomega) {
+			eo.Expect(di.SetClientEndpoints(allTargetHosts)).NotTo(o.HaveOccurred())
+			eo.Expect(di.AwaitSchemaAgreement(ctx)).NotTo(o.HaveOccurred())
+			_, readErr := di.Read()
+			eo.Expect(readErr).To(o.HaveOccurred())
+			var cqlErr cqlFrameError
+			eo.Expect(errors.As(readErr, &cqlErr)).To(o.BeTrue(), "expected a CQL frame error, got: %T %v", readErr, readErr)
+			eo.Expect(cqlErr.GetCode()).To(o.Equal(gocql.ErrCodeInvalid))
+			eo.Expect(cqlErr.GetMessage()).To(o.And(o.HavePrefix("Keyspace"), o.HaveSuffix("does not exist")))
+		}).WithContext(cqlStabilisationCtx).WithPolling(5 * time.Second).Should(o.Succeed())
 
 		// Close the existing session to avoid polluting the logs.
 		di.Close()

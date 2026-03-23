@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"time"
 
 	g "github.com/onsi/ginkgo/v2"
 	o "github.com/onsi/gomega"
@@ -123,8 +124,25 @@ var _ = g.Describe("ScyllaDBCluster", framework.MultiDatacenter, func() {
 			o.Expect(initialHostIDsByDC).To(o.HaveKeyWithValue(dc, o.ConsistOf(dcHostIDs)), "Host IDs in datacenter %q should not change after ScyllaDB image update", dc)
 		}
 
-		// Client shouldn't lose connection during the image update.
-		verification.VerifyCQLData(ctx, di)
+		// After a rolling image update, all pods are replaced and receive new IP addresses.
+		// The pre-update hosts in allInitialHosts are stale and unreachable; connecting to them
+		// causes gocql.CreateSession to block for ConnectTimeout per host before failing.
+		// Fetch current broadcast RPC addresses from the rolled-out cluster state.
+		targetHostsByDC, err := utilsv1alpha1.GetBroadcastRPCAddressesForScyllaDBCluster(ctx, rkcClusterMap, sc)
+		o.Expect(err).NotTo(o.HaveOccurred())
+		allTargetHosts := slices.Concat(slices.Collect(maps.Values(targetHostsByDC))...)
+		o.Expect(allTargetHosts).To(o.HaveLen(int(controllerhelpers.GetScyllaDBClusterNodeCount(sc))))
+
+		// After the rolling image update, nodes may still be finishing CQL initialisation.
+		// Recreate the session on every retry attempt to get a fresh transport connection.
+		framework.By("Verifying the data after rolling image update")
+		o.Eventually(func(eo o.Gomega) {
+			eo.Expect(di.SetClientEndpoints(allTargetHosts)).NotTo(o.HaveOccurred())
+			eo.Expect(di.AwaitSchemaAgreement(ctx)).NotTo(o.HaveOccurred())
+			data, err := di.Read()
+			eo.Expect(err).NotTo(o.HaveOccurred())
+			eo.Expect(data).To(o.Equal(di.GetExpected()))
+		}).WithContext(ctx).WithTimeout(utils.ScyllaDBClusterCQLStabilizationTimeout).WithPolling(5 * time.Second).Should(o.Succeed())
 
 		var targetScyllaClientReportedVersions []string
 		for _, dc := range sc.Spec.Datacenters {

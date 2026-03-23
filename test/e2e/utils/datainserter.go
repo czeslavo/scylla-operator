@@ -204,6 +204,10 @@ func (di *DataInserter) createSession(hosts []string) error {
 	clusterConfig := gocql.NewCluster(hosts...)
 	// Set a small reconnect interval to avoid flakes, if not reconnected in time.
 	clusterConfig.ReconnectInterval = 500 * time.Millisecond
+	// Shorten the per-host connect timeout so that CreateSession fails quickly when
+	// hosts are temporarily unreachable (e.g. during a rolling restart), rather than
+	// blocking for the default 60s per host before returning an error.
+	clusterConfig.ConnectTimeout = 10 * time.Second
 
 	session, err := gocqlx.WrapSession(clusterConfig.CreateSession())
 	if err != nil {
