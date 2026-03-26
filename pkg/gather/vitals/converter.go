@@ -272,6 +272,11 @@ func (c *Converter) convertPod(pd podDirectory) (*ConversionResult, error) {
 		return nil, nil
 	}
 
+	// Fill in SKIPPED entries for all collectors we don't produce, so that
+	// dependent analyzers in Scylla Doctor cascade to SKIPPED instead of
+	// FAILED with "results not found".
+	fillSkippedCollectors(vitals)
+
 	// Determine output path.
 	outputDir := c.outputDir
 	if pd.namespace != "unknown" {
@@ -370,6 +375,91 @@ func newSyntheticSystemConfigResult() CollectorResult {
 	}
 
 	return NewPassedResult(data, "Synthetic entry for Kubernetes (default Scylla API config)")
+}
+
+// allScyllaDoctorCollectors is the complete list of collector class names from
+// Scylla Doctor. Collectors that our converter doesn't produce data for will be
+// emitted with SKIPPED status so that dependent analyzers cascade to SKIPPED
+// (instead of FAILED with "results not found").
+//
+// This list was extracted from scylla-doctor/scylla-doctor/collectors.py and
+// should be updated when new collectors are added to Scylla Doctor.
+var allScyllaDoctorCollectors = []string{
+	"ClientConnectionCollector",
+	"ClockSourceCollector",
+	"ComputerArchitectureCollector",
+	"CoredumpCollector",
+	"CPUScalingCollector",
+	"CPUSetCollector",
+	"CPUSpecificationsCollector",
+	"CqlshCollector",
+	"FirewallRulesCollector",
+	"GossipInfoCollector",
+	"HypervisorTypeCollector",
+	"InfrastructureProviderCollector",
+	"IPAddressesCollector",
+	"IPRoutesCollector",
+	"KernelRingBufferCollector",
+	"LSPCICollector",
+	"MaintenanceEventsCollector",
+	"NICsCollector",
+	"NodePlatformCollector",
+	"NodetoolCFStatsCollector",
+	"NTPServicesCollector",
+	"NTPStatusCollector",
+	"OSCollector",
+	"PathsCollector",
+	"PerftuneSystemConfigurationCollector",
+	"PerftuneYamlDefaultCollector",
+	"ProcInterruptsCollector",
+	"RaftGroup0Collector",
+	"RaftTopologyRPCStatusCollector",
+	"RAIDSetupCollector",
+	"RAMCollector",
+	"RsyslogCollector",
+	"ScyllaBinaryCollector",
+	"ScyllaClusterSchemaCollector",
+	"ScyllaClusterSchemaDescriptionCollector",
+	"ScyllaClusterStatusCollector",
+	"ScyllaClusterSystemKeyspacesCollector",
+	"ScyllaClusterTablesDescriptionCollector",
+	"ScyllaConfigurationFileCollector",
+	"ScyllaConfigurationFileNoParsingCollector",
+	"ScyllaExtraConfigurationFilesCollector",
+	"ScyllaLimitNOFILECollector",
+	"ScyllaLogsCollector",
+	"ScyllaSeedsCollector",
+	"ScyllaServicesCollector",
+	"ScyllaSSTablesCollector",
+	"ScyllaSystemConfigurationFilesCollector",
+	"ScyllaTablesCompressionInfoCollector",
+	"ScyllaTablesUsedDiskCollector",
+	"ScyllaVersionCollector",
+	"SDVersionCollector",
+	"SeastarCPUMapCollector",
+	"SELinuxCollector",
+	"ServiceManagerCollector",
+	"StorageConfigurationCollector",
+	"SwapCollector",
+	"SysctlCollector",
+	"SystemClusterStatusCollector",
+	"SystemConfigCollector",
+	"SystemPeersLocalCollector",
+	"SystemTopologyCollector",
+	"TCPConnectionsCollector",
+	"TokenMetadataHostsMappingCollector",
+}
+
+// fillSkippedCollectors adds SKIPPED entries for all known Scylla Doctor
+// collectors that are not already present in the vitals map. This ensures
+// that dependent analyzers cascade to SKIPPED (clean output) rather than
+// FAILED with "results not found" (noisy output).
+func fillSkippedCollectors(vitals map[string]CollectorResult) {
+	for _, name := range allScyllaDoctorCollectors {
+		if _, exists := vitals[name]; !exists {
+			vitals[name] = NewSkippedResult("Not available in Kubernetes must-gather collection")
+		}
+	}
 }
 
 // podNameFromDir extracts a human-readable identifier from a pod directory path.

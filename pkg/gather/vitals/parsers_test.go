@@ -509,7 +509,7 @@ func TestConverterConvert(t *testing.T) {
 	artifacts := map[string]string{
 		"uname.log":          "Linux scylla-dc-rack-0 5.15.0-91-generic #101-Ubuntu SMP x86_64 x86_64 x86_64 GNU/Linux\n",
 		"os-release.log":     "ID=ubuntu\nVERSION_ID=\"22.04\"\n",
-		"cpuinfo.log":          "Architecture:          x86_64\nCPU(s):                4\nFlags:                 sse sse2 sse4_2 avx\n",
+		"cpuinfo.log":        "Architecture:          x86_64\nCPU(s):                4\nFlags:                 sse sse2 sse4_2 avx\n",
 		"free.log":           "              total        used        free\nMem:       16384000     8192000     4096000\n",
 		"scylla-version.log": "5.4.0-0.20231113.b4f3f037c635\n",
 	}
@@ -548,15 +548,16 @@ func TestConverterConvert(t *testing.T) {
 		t.Fatalf("can't unmarshal vitals JSON: %v", err)
 	}
 
-	// We should have 5 collectors (matching the 5 artifacts we wrote).
-	expectedCollectors := []string{
+	// We should have 5 PASSED collectors (matching the 5 artifacts we wrote)
+	// plus SKIPPED entries for all other known Scylla Doctor collectors.
+	expectedPassed := []string{
 		"ComputerArchitectureCollector",
 		"OSCollector",
 		"CPUSpecificationsCollector",
 		"RAMCollector",
 		"ScyllaVersionCollector",
 	}
-	for _, name := range expectedCollectors {
+	for _, name := range expectedPassed {
 		cr, ok := vitals[name]
 		if !ok {
 			t.Errorf("expected collector %q in vitals", name)
@@ -565,6 +566,29 @@ func TestConverterConvert(t *testing.T) {
 		if cr.Status != StatusPassed {
 			t.Errorf("expected collector %q to have PASSED status, got %d", name, cr.Status)
 		}
+	}
+
+	// Verify SKIPPED entries exist for collectors we don't produce.
+	skippedExamples := []string{
+		"SwapCollector",
+		"SysctlCollector",
+		"NTPStatusCollector",
+		"GossipInfoCollector",
+	}
+	for _, name := range skippedExamples {
+		cr, ok := vitals[name]
+		if !ok {
+			t.Errorf("expected SKIPPED collector %q in vitals", name)
+			continue
+		}
+		if cr.Status != StatusSkipped {
+			t.Errorf("expected collector %q to have SKIPPED status, got %d", name, cr.Status)
+		}
+	}
+
+	// Total count: all known collectors should be present.
+	if len(vitals) != len(allScyllaDoctorCollectors) {
+		t.Errorf("expected %d total collectors in vitals, got %d", len(allScyllaDoctorCollectors), len(vitals))
 	}
 }
 
@@ -615,6 +639,21 @@ func TestConverterConvertWithSchemaVersions(t *testing.T) {
 	}
 	if _, ok := vitals["ScyllaClusterSchemaCollector"]; !ok {
 		t.Errorf("expected ScyllaClusterSchemaCollector entry")
+	}
+
+	// Verify that SKIPPED entries are present for non-produced collectors.
+	var cr struct {
+		Status int `json:"status"`
+	}
+	if raw, ok := vitals["SwapCollector"]; ok {
+		if err := json.Unmarshal(raw, &cr); err != nil {
+			t.Fatalf("can't unmarshal SwapCollector: %v", err)
+		}
+		if cr.Status != StatusSkipped {
+			t.Errorf("expected SwapCollector to have SKIPPED status, got %d", cr.Status)
+		}
+	} else {
+		t.Errorf("expected SKIPPED SwapCollector in vitals")
 	}
 }
 
@@ -715,5 +754,68 @@ func TestNormalizeYAMLValue(t *testing.T) {
 	}
 	if nested["nested"] != 42 {
 		t.Errorf("expected nested=42, got %v", nested["nested"])
+	}
+}
+
+func TestFillSkippedCollectors(t *testing.T) {
+	t.Parallel()
+
+	vitals := map[string]CollectorResult{
+		"ComputerArchitectureCollector": NewPassedResult(map[string]interface{}{"architecture": "x86_64"}, "ok"),
+		"RAMCollector":                  NewPassedResult(map[string]interface{}{"total": 16384000}, "ok"),
+	}
+
+	fillSkippedCollectors(vitals)
+
+	// Existing PASSED entries must not be overwritten.
+	if vitals["ComputerArchitectureCollector"].Status != StatusPassed {
+		t.Errorf("expected ComputerArchitectureCollector to remain PASSED, got %d", vitals["ComputerArchitectureCollector"].Status)
+	}
+	if vitals["RAMCollector"].Status != StatusPassed {
+		t.Errorf("expected RAMCollector to remain PASSED, got %d", vitals["RAMCollector"].Status)
+	}
+
+	// Non-produced collectors must be SKIPPED.
+	for _, name := range allScyllaDoctorCollectors {
+		cr, ok := vitals[name]
+		if !ok {
+			t.Errorf("expected collector %q to be present in vitals", name)
+			continue
+		}
+		if name == "ComputerArchitectureCollector" || name == "RAMCollector" {
+			continue // already checked above
+		}
+		if cr.Status != StatusSkipped {
+			t.Errorf("expected collector %q to have SKIPPED status, got %d", name, cr.Status)
+		}
+		if cr.Message != "Not available in Kubernetes must-gather collection" {
+			t.Errorf("expected collector %q message to be 'Not available in Kubernetes must-gather collection', got %q", name, cr.Message)
+		}
+	}
+
+	// Total count must equal the known set.
+	if len(vitals) != len(allScyllaDoctorCollectors) {
+		t.Errorf("expected %d collectors, got %d", len(allScyllaDoctorCollectors), len(vitals))
+	}
+}
+
+func TestFillSkippedCollectorsDoesNotOverwriteFailedEntries(t *testing.T) {
+	t.Parallel()
+
+	vitals := map[string]CollectorResult{
+		"SwapCollector": {
+			Status:  StatusFailed,
+			Data:    map[string]interface{}{},
+			Output:  []OutputEntry{},
+			Message: "Parse error: something broke",
+			Mask:    []interface{}{},
+		},
+	}
+
+	fillSkippedCollectors(vitals)
+
+	// FAILED entries must not be overwritten with SKIPPED.
+	if vitals["SwapCollector"].Status != StatusFailed {
+		t.Errorf("expected SwapCollector to remain FAILED, got %d", vitals["SwapCollector"].Status)
 	}
 }
