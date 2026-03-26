@@ -52,7 +52,7 @@ var artifactMappings = []artifactMapping{
 		Parser:        parseOsRelease,
 	},
 	{
-		Filename:      "lscpu.log",
+		Filename:      "cpuinfo.log",
 		CollectorName: "CPUSpecificationsCollector",
 		Parser:        parseLscpu,
 	},

@@ -87,8 +87,15 @@ func NewPodCollector(restConfig *rest.Config, corev1Client corev1client.CoreV1In
 			Collect: pc.collectContainerCommandOutputFunc(naming.ScyllaContainerName, "os-release.log", []string{"cat", "/etc/os-release"}),
 		},
 		{
-			Filter:  controllerhelpers.IsScyllaContainerRunning,
-			Collect: pc.collectContainerCommandOutputFunc(naming.ScyllaContainerName, "lscpu.log", []string{"lscpu"}),
+			Filter: controllerhelpers.IsScyllaContainerRunning,
+			Collect: pc.collectContainerCommandOutputFunc(naming.ScyllaContainerName, "cpuinfo.log", []string{
+				"bash",
+				"-euEo",
+				"pipefail",
+				"-O",
+				"inherit_errexit",
+				"-c",
+				`echo "CPU(s):                $(nproc)" && echo "Flags:                 $(grep -m1 '^flags' /proc/cpuinfo | cut -d: -f2)"`}),
 		},
 		{
 			Filter:  controllerhelpers.IsScyllaContainerRunning,
@@ -107,7 +114,7 @@ func NewPodCollector(restConfig *rest.Config, corev1Client corev1client.CoreV1In
 				"-O",
 				"inherit_errexit",
 				"-c",
-				`for f in /etc/scylla.d/*; do echo "=== $f ==="; cat "$f"; done`}),
+				`for f in /etc/scylla.d/*; do echo "=== $f ==="; cat "$f" 2>/dev/null || echo "(file not readable)"; done`}),
 		},
 		{
 			Filter: controllerhelpers.IsScyllaContainerRunning,

@@ -509,7 +509,7 @@ func TestConverterConvert(t *testing.T) {
 	artifacts := map[string]string{
 		"uname.log":          "Linux scylla-dc-rack-0 5.15.0-91-generic #101-Ubuntu SMP x86_64 x86_64 x86_64 GNU/Linux\n",
 		"os-release.log":     "ID=ubuntu\nVERSION_ID=\"22.04\"\n",
-		"lscpu.log":          "Architecture:          x86_64\nCPU(s):                4\nFlags:                 sse sse2 sse4_2 avx\n",
+		"cpuinfo.log":          "Architecture:          x86_64\nCPU(s):                4\nFlags:                 sse sse2 sse4_2 avx\n",
 		"free.log":           "              total        used        free\nMem:       16384000     8192000     4096000\n",
 		"scylla-version.log": "5.4.0-0.20231113.b4f3f037c635\n",
 	}
