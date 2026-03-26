@@ -77,6 +77,49 @@ func NewPodCollector(restConfig *rest.Config, corev1Client corev1client.CoreV1In
 				"-c",
 				`prlimit --pid=$(pidof scylla)`}),
 		},
+		// Diagnostic collectors for Scylla Doctor vitals conversion.
+		{
+			Filter:  controllerhelpers.IsScyllaContainerRunning,
+			Collect: pc.collectContainerCommandOutputFunc(naming.ScyllaContainerName, "uname.log", []string{"uname", "--all"}),
+		},
+		{
+			Filter:  controllerhelpers.IsScyllaContainerRunning,
+			Collect: pc.collectContainerCommandOutputFunc(naming.ScyllaContainerName, "os-release.log", []string{"cat", "/etc/os-release"}),
+		},
+		{
+			Filter:  controllerhelpers.IsScyllaContainerRunning,
+			Collect: pc.collectContainerCommandOutputFunc(naming.ScyllaContainerName, "lscpu.log", []string{"lscpu"}),
+		},
+		{
+			Filter:  controllerhelpers.IsScyllaContainerRunning,
+			Collect: pc.collectContainerCommandOutputFunc(naming.ScyllaContainerName, "free.log", []string{"free"}),
+		},
+		{
+			Filter:  controllerhelpers.IsScyllaContainerRunning,
+			Collect: pc.collectContainerCommandOutputFunc(naming.ScyllaContainerName, "scylla-version.log", []string{"scylla", "--version"}),
+		},
+		{
+			Filter: controllerhelpers.IsScyllaContainerRunning,
+			Collect: pc.collectContainerCommandOutputFunc(naming.ScyllaContainerName, "scylla.d-contents.log", []string{
+				"bash",
+				"-euEo",
+				"pipefail",
+				"-O",
+				"inherit_errexit",
+				"-c",
+				`for f in /etc/scylla.d/*; do echo "=== $f ==="; cat "$f"; done`}),
+		},
+		{
+			Filter: controllerhelpers.IsScyllaContainerRunning,
+			Collect: pc.collectContainerCommandOutputFunc(naming.ScyllaContainerName, "scylla-api-schema-versions.log", []string{
+				"bash",
+				"-euEo",
+				"pipefail",
+				"-O",
+				"inherit_errexit",
+				"-c",
+				`curl -s http://localhost:10000/storage_proxy/schema_versions`}),
+		},
 		{
 			Filter:  controllerhelpers.IsNodeConfigPod,
 			Collect: pc.collectContainerCommandOutputFunc(naming.NodeConfigAppName, "kubelet-cpu_manager_state.log", []string{"cat", "/host/var/lib/kubelet/cpu_manager_state"}),
