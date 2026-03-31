@@ -161,6 +161,7 @@ func (f *FakeCollector) Collect(ctx context.Context, params engine.CollectorPara
 type FakeAnalyzer struct {
 	IDValue        engine.AnalyzerID
 	NameValue      string
+	ScopeValue     engine.AnalyzerScope
 	DependsOnValue []engine.CollectorID
 
 	// Result is returned by Analyze. If nil, a default PASSED result is returned.
@@ -174,6 +175,7 @@ type FakeAnalyzer struct {
 
 func (f *FakeAnalyzer) ID() engine.AnalyzerID           { return f.IDValue }
 func (f *FakeAnalyzer) Name() string                    { return f.NameValue }
+func (f *FakeAnalyzer) Scope() engine.AnalyzerScope     { return f.ScopeValue }
 func (f *FakeAnalyzer) DependsOn() []engine.CollectorID { return f.DependsOnValue }
 
 func (f *FakeAnalyzer) Analyze(params engine.AnalyzerParams) *engine.AnalyzerResult {
