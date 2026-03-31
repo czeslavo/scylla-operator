@@ -554,14 +554,23 @@ type fsArtifactWriterFactory struct {
 	baseDir string
 }
 
+// collectorScopeDirName maps CollectorScope values to the kebab-case directory
+// names used under the collectors/ prefix in the output directory.
+var collectorScopeDirName = map[engine.CollectorScope]string{
+	engine.ClusterWide:      "cluster-wide",
+	engine.PerScyllaCluster: "per-scylla-cluster",
+	engine.PerPod:           "per-pod",
+}
+
 func (f *fsArtifactWriterFactory) NewWriter(collectorID engine.CollectorID, scope engine.CollectorScope, scopeKey engine.ScopeKey) engine.ArtifactWriter {
+	scopeDir := collectorScopeDirName[scope]
 	var dir string
 	if scopeKey.IsEmpty() {
 		// ClusterWide scope: no scope key subdirectory.
-		dir = filepath.Join(f.baseDir, scope.String(), string(collectorID))
+		dir = filepath.Join(f.baseDir, "collectors", scopeDir, string(collectorID))
 	} else {
 		// PerScyllaCluster/PerPod: include namespace/name as path components.
-		dir = filepath.Join(f.baseDir, scope.String(), scopeKey.Namespace, scopeKey.Name, string(collectorID))
+		dir = filepath.Join(f.baseDir, "collectors", scopeDir, scopeKey.Namespace, scopeKey.Name, string(collectorID))
 	}
 	return &fsArtifactWriter{dir: dir}
 }
