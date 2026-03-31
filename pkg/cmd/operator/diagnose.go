@@ -296,6 +296,12 @@ func (o *DiagnoseOptions) Run(streams genericclioptions.IOStreams, cmd *cobra.Co
 		return fmt.Errorf("writing report.json: %w", err)
 	}
 
+	// Write README.md — a self-describing index of the output directory.
+	if err := o.writeIndexFile(result, clusterInfos, podsByCluster); err != nil {
+		// Non-fatal: log and continue so the rest of the output is still usable.
+		klog.V(2).InfoS("Failed to write README.md", "error", err)
+	}
+
 	fmt.Fprintf(streams.Out, "\nArtifacts written to: %s\n", o.OutputDir)
 	klog.InfoS("Diagnostics complete", "ArtifactDir", o.OutputDir)
 
@@ -362,6 +368,39 @@ func (o *DiagnoseOptions) writeReportJSON(result *engine.EngineResult, clusters 
 	}
 
 	klog.V(2).InfoS("Wrote report.json", "path", path)
+	return nil
+}
+
+// writeIndexFile writes a README.md to the output directory that describes the
+// contents of the artifact bundle and provides instructions for offline re-analysis.
+func (o *DiagnoseOptions) writeIndexFile(result *engine.EngineResult, clusters []engine.ScyllaClusterInfo, pods map[engine.ScopeKey][]engine.PodInfo) error {
+	allCollectorMap := collectors.AllCollectorsMap()
+	allAnalyzerMap := analyzers.AllAnalyzersMap()
+
+	collectorNames := make(map[engine.CollectorID]string, len(allCollectorMap))
+	for id, c := range allCollectorMap {
+		collectorNames[id] = c.Name()
+	}
+	analyzerNames := make(map[engine.AnalyzerID]string, len(allAnalyzerMap))
+	for id, a := range allAnalyzerMap {
+		analyzerNames[id] = a.Name()
+	}
+
+	params := output.IndexParams{
+		ProfileName:    o.ProfileName,
+		Clusters:       clusters,
+		Pods:           pods,
+		Result:         result,
+		CollectorNames: collectorNames,
+		AnalyzerNames:  analyzerNames,
+		OutputDir:      o.OutputDir,
+	}
+
+	if err := output.WriteIndexFile(o.OutputDir, params); err != nil {
+		return err
+	}
+
+	klog.V(2).InfoS("Wrote README.md", "path", filepath.Join(o.OutputDir, "README.md"))
 	return nil
 }
 
