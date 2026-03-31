@@ -33,8 +33,9 @@ func NewOSSupportAnalyzer() engine.Analyzer {
 	return &osSupportAnalyzer{}
 }
 
-func (a *osSupportAnalyzer) ID() engine.AnalyzerID { return OSSupportAnalyzerID }
-func (a *osSupportAnalyzer) Name() string          { return "OS support check" }
+func (a *osSupportAnalyzer) ID() engine.AnalyzerID       { return OSSupportAnalyzerID }
+func (a *osSupportAnalyzer) Name() string                { return "OS support check" }
+func (a *osSupportAnalyzer) Scope() engine.AnalyzerScope { return engine.AnalyzerPerScyllaCluster }
 func (a *osSupportAnalyzer) DependsOn() []engine.CollectorID {
 	return []engine.CollectorID{collectors.OSInfoCollectorID}
 }

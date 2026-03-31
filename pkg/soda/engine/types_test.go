@@ -151,8 +151,8 @@ func TestNewVitals(t *testing.T) {
 	if v.ClusterWide == nil {
 		t.Fatal("NewVitals().ClusterWide is nil")
 	}
-	if v.PerCluster == nil {
-		t.Fatal("NewVitals().PerCluster is nil")
+	if v.PerScyllaCluster == nil {
+		t.Fatal("NewVitals().PerScyllaCluster is nil")
 	}
 	if v.PerPod == nil {
 		t.Fatal("NewVitals().PerPod is nil")
@@ -304,7 +304,7 @@ func TestVitalsClusterKeys(t *testing.T) {
 	v.Store("ScyllaClusterStatusCollector", PerScyllaCluster, ScopeKey{Namespace: "other", Name: "cluster-a"}, &CollectorResult{})
 	v.Store("ScyllaClusterStatusCollector", PerScyllaCluster, ScopeKey{Namespace: "scylla", Name: "cluster-a"}, &CollectorResult{})
 
-	keys := v.ClusterKeys()
+	keys := v.ScyllaClusterKeys()
 	if len(keys) != 3 {
 		t.Fatalf("expected 3 cluster keys, got %d", len(keys))
 	}
@@ -316,7 +316,7 @@ func TestVitalsClusterKeys(t *testing.T) {
 	}
 	for i, k := range keys {
 		if k != expected[i] {
-			t.Errorf("ClusterKeys()[%d] = %v, want %v", i, k, expected[i])
+			t.Errorf("ScyllaClusterKeys()[%d] = %v, want %v", i, k, expected[i])
 		}
 	}
 }
@@ -329,7 +329,7 @@ func TestVitalsEmptyKeys(t *testing.T) {
 		t.Errorf("expected 0 pod keys, got %d", len(podKeys))
 	}
 
-	clusterKeys := v.ClusterKeys()
+	clusterKeys := v.ScyllaClusterKeys()
 	if len(clusterKeys) != 0 {
 		t.Errorf("expected 0 cluster keys, got %d", len(clusterKeys))
 	}
@@ -469,16 +469,16 @@ func TestVitalsToSerializable_AllScopes(t *testing.T) {
 		t.Errorf("ClusterWide data = %s, want %s", string(cwResult.Data), `{"node_count":3}`)
 	}
 
-	// Check PerCluster.
-	if len(sv.PerCluster) != 1 {
-		t.Fatalf("PerCluster length = %d, want 1", len(sv.PerCluster))
+	// Check PerScyllaCluster.
+	if len(sv.PerScyllaCluster) != 1 {
+		t.Fatalf("PerScyllaCluster length = %d, want 1", len(sv.PerScyllaCluster))
 	}
-	pcResult := sv.PerCluster[clusterKey]["cluster-status"]
+	pcResult := sv.PerScyllaCluster[clusterKey]["cluster-status"]
 	if pcResult == nil {
-		t.Fatal("PerCluster[cluster-status] is nil")
+		t.Fatal("PerScyllaCluster[cluster-status] is nil")
 	}
 	if string(pcResult.Data) != `{"status":"ready"}` {
-		t.Errorf("PerCluster data = %s, want %s", string(pcResult.Data), `{"status":"ready"}`)
+		t.Errorf("PerScyllaCluster data = %s, want %s", string(pcResult.Data), `{"status":"ready"}`)
 	}
 
 	// Check PerPod.
@@ -505,8 +505,8 @@ func TestVitalsToSerializable_Empty(t *testing.T) {
 	if len(sv.ClusterWide) != 0 {
 		t.Errorf("ClusterWide length = %d, want 0", len(sv.ClusterWide))
 	}
-	if len(sv.PerCluster) != 0 {
-		t.Errorf("PerCluster length = %d, want 0", len(sv.PerCluster))
+	if len(sv.PerScyllaCluster) != 0 {
+		t.Errorf("PerScyllaCluster length = %d, want 0", len(sv.PerScyllaCluster))
 	}
 	if len(sv.PerPod) != 0 {
 		t.Errorf("PerPod length = %d, want 0", len(sv.PerPod))

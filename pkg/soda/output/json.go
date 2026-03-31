@@ -11,10 +11,10 @@ import (
 
 // JSONReport is the top-level structure for JSON diagnostic output.
 type JSONReport struct {
-	Metadata   JSONMetadata                              `json:"metadata"`
-	Targets    JSONTargets                               `json:"targets"`
-	Collectors JSONCollectors                            `json:"collectors"`
-	Analysis   map[engine.AnalyzerID]*JSONAnalyzerResult `json:"analysis"`
+	Metadata   JSONMetadata                                         `json:"metadata"`
+	Targets    JSONTargets                                          `json:"targets"`
+	Collectors JSONCollectors                                       `json:"collectors"`
+	Analysis   map[engine.AnalyzerID]map[string]*JSONAnalyzerResult `json:"analysis"`
 }
 
 // JSONMetadata holds report metadata.
@@ -24,13 +24,13 @@ type JSONMetadata struct {
 	Profile     string `json:"profile"`
 }
 
-// JSONTargets holds information about targeted clusters.
+// JSONTargets holds information about targeted ScyllaClusters.
 type JSONTargets struct {
-	Clusters []JSONClusterTarget `json:"clusters"`
+	ScyllaClusters []JSONScyllaClusterTarget `json:"scylla_clusters"`
 }
 
-// JSONClusterTarget holds a single cluster target for JSON output.
-type JSONClusterTarget struct {
+// JSONScyllaClusterTarget holds a single ScyllaCluster target for JSON output.
+type JSONScyllaClusterTarget struct {
 	Name      string   `json:"name"`
 	Namespace string   `json:"namespace"`
 	Kind      string   `json:"kind"`
@@ -39,9 +39,9 @@ type JSONClusterTarget struct {
 
 // JSONCollectors holds all collector results grouped by scope.
 type JSONCollectors struct {
-	ClusterWide map[engine.CollectorID]*JSONCollectorResult            `json:"cluster_wide"`
-	PerCluster  map[string]map[engine.CollectorID]*JSONCollectorResult `json:"per_cluster"`
-	PerPod      map[string]map[engine.CollectorID]*JSONCollectorResult `json:"per_pod"`
+	ClusterWide      map[engine.CollectorID]*JSONCollectorResult            `json:"cluster_wide"`
+	PerScyllaCluster map[string]map[engine.CollectorID]*JSONCollectorResult `json:"per_scylla_cluster"`
+	PerPod           map[string]map[engine.CollectorID]*JSONCollectorResult `json:"per_pod"`
 }
 
 // JSONCollectorResult represents a single collector result in JSON output.
@@ -70,7 +70,7 @@ func NewJSONWriter(w io.Writer, toolVersion string) *JSONWriter {
 }
 
 // WriteReport writes the full diagnostic report as JSON.
-func (j *JSONWriter) WriteReport(result *engine.EngineResult, profileName string, clusters []engine.ClusterInfo, pods map[engine.ScopeKey][]engine.PodInfo) error {
+func (j *JSONWriter) WriteReport(result *engine.EngineResult, profileName string, clusters []engine.ScyllaClusterInfo, pods map[engine.ScopeKey][]engine.PodInfo) error {
 	report := j.BuildReport(result, profileName, clusters, pods)
 
 	encoder := json.NewEncoder(j.w)
@@ -83,7 +83,7 @@ func (j *JSONWriter) WriteReport(result *engine.EngineResult, profileName string
 
 // BuildReport constructs the full JSONReport structure from engine results.
 // This is useful for both writing to stdout and persisting as report.json.
-func (j *JSONWriter) BuildReport(result *engine.EngineResult, profileName string, clusters []engine.ClusterInfo, pods map[engine.ScopeKey][]engine.PodInfo) *JSONReport {
+func (j *JSONWriter) BuildReport(result *engine.EngineResult, profileName string, clusters []engine.ScyllaClusterInfo, pods map[engine.ScopeKey][]engine.PodInfo) *JSONReport {
 	report := &JSONReport{
 		Metadata: JSONMetadata{
 			Timestamp:   time.Now().UTC().Format(time.RFC3339),
@@ -97,9 +97,9 @@ func (j *JSONWriter) BuildReport(result *engine.EngineResult, profileName string
 	return report
 }
 
-func (j *JSONWriter) buildTargets(clusters []engine.ClusterInfo, pods map[engine.ScopeKey][]engine.PodInfo) JSONTargets {
+func (j *JSONWriter) buildTargets(clusters []engine.ScyllaClusterInfo, pods map[engine.ScopeKey][]engine.PodInfo) JSONTargets {
 	targets := JSONTargets{
-		Clusters: make([]JSONClusterTarget, 0, len(clusters)),
+		ScyllaClusters: make([]JSONScyllaClusterTarget, 0, len(clusters)),
 	}
 
 	for _, cluster := range clusters {
@@ -109,7 +109,7 @@ func (j *JSONWriter) buildTargets(clusters []engine.ClusterInfo, pods map[engine
 			podNames = append(podNames, pod.Name)
 		}
 
-		targets.Clusters = append(targets.Clusters, JSONClusterTarget{
+		targets.ScyllaClusters = append(targets.ScyllaClusters, JSONScyllaClusterTarget{
 			Name:      cluster.Name,
 			Namespace: cluster.Namespace,
 			Kind:      cluster.Kind,
@@ -122,9 +122,9 @@ func (j *JSONWriter) buildTargets(clusters []engine.ClusterInfo, pods map[engine
 
 func (j *JSONWriter) buildCollectors(result *engine.EngineResult) JSONCollectors {
 	collectors := JSONCollectors{
-		ClusterWide: make(map[engine.CollectorID]*JSONCollectorResult),
-		PerCluster:  make(map[string]map[engine.CollectorID]*JSONCollectorResult),
-		PerPod:      make(map[string]map[engine.CollectorID]*JSONCollectorResult),
+		ClusterWide:      make(map[engine.CollectorID]*JSONCollectorResult),
+		PerScyllaCluster: make(map[string]map[engine.CollectorID]*JSONCollectorResult),
+		PerPod:           make(map[string]map[engine.CollectorID]*JSONCollectorResult),
 	}
 
 	// ClusterWide.
@@ -132,12 +132,12 @@ func (j *JSONWriter) buildCollectors(result *engine.EngineResult) JSONCollectors
 		collectors.ClusterWide[id] = toJSONCollectorResult(res)
 	}
 
-	// PerCluster.
-	for key, perCluster := range result.Vitals.PerCluster {
+	// PerScyllaCluster.
+	for key, perScyllaCluster := range result.Vitals.PerScyllaCluster {
 		keyStr := key.String()
-		collectors.PerCluster[keyStr] = make(map[engine.CollectorID]*JSONCollectorResult)
-		for id, res := range perCluster {
-			collectors.PerCluster[keyStr][id] = toJSONCollectorResult(res)
+		collectors.PerScyllaCluster[keyStr] = make(map[engine.CollectorID]*JSONCollectorResult)
+		for id, res := range perScyllaCluster {
+			collectors.PerScyllaCluster[keyStr][id] = toJSONCollectorResult(res)
 		}
 	}
 
@@ -153,13 +153,17 @@ func (j *JSONWriter) buildCollectors(result *engine.EngineResult) JSONCollectors
 	return collectors
 }
 
-func (j *JSONWriter) buildAnalysis(result *engine.EngineResult) map[engine.AnalyzerID]*JSONAnalyzerResult {
-	analysis := make(map[engine.AnalyzerID]*JSONAnalyzerResult, len(result.AnalyzerResults))
-	for id, res := range result.AnalyzerResults {
-		analysis[id] = &JSONAnalyzerResult{
-			Status:  statusToString(res.Status),
-			Message: res.Message,
+func (j *JSONWriter) buildAnalysis(result *engine.EngineResult) map[engine.AnalyzerID]map[string]*JSONAnalyzerResult {
+	analysis := make(map[engine.AnalyzerID]map[string]*JSONAnalyzerResult, len(result.AnalyzerResults))
+	for id, byScope := range result.AnalyzerResults {
+		inner := make(map[string]*JSONAnalyzerResult, len(byScope))
+		for scopeKey, res := range byScope {
+			inner[scopeKey.String()] = &JSONAnalyzerResult{
+				Status:  statusToString(res.Status),
+				Message: res.Message,
+			}
 		}
+		analysis[id] = inner
 	}
 	return analysis
 }

@@ -69,25 +69,25 @@ func (f *FakeNodeLister) ListNodes(_ context.Context) ([]corev1.Node, error) {
 	return f.Nodes, f.Err
 }
 
-// FakeScyllaClusterLister returns preconfigured ClusterInfo lists per namespace.
+// FakeScyllaClusterLister returns preconfigured ScyllaClusterInfo lists per namespace.
 type FakeScyllaClusterLister struct {
-	// Clusters maps namespace to the list of clusters in that namespace.
+	// ScyllaClusters maps namespace to the list of ScyllaClusters in that namespace.
 	// An empty string key matches all-namespaces queries.
-	Clusters map[string][]engine.ClusterInfo
-	Err      error
+	ScyllaClusters map[string][]engine.ScyllaClusterInfo
+	Err            error
 }
 
-func (f *FakeScyllaClusterLister) ListScyllaClusters(_ context.Context, namespace string) ([]engine.ClusterInfo, error) {
+func (f *FakeScyllaClusterLister) ListScyllaClusters(_ context.Context, namespace string) ([]engine.ScyllaClusterInfo, error) {
 	if f.Err != nil {
 		return nil, f.Err
 	}
-	if clusters, ok := f.Clusters[namespace]; ok {
+	if clusters, ok := f.ScyllaClusters[namespace]; ok {
 		return clusters, nil
 	}
 	// If namespace is empty, return all clusters across all namespaces.
 	if namespace == "" {
-		var all []engine.ClusterInfo
-		for _, clusters := range f.Clusters {
+		var all []engine.ScyllaClusterInfo
+		for _, clusters := range f.ScyllaClusters {
 			all = append(all, clusters...)
 		}
 		return all, nil

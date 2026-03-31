@@ -37,18 +37,24 @@ func testEngineResult() *engine.EngineResult {
 
 	return &engine.EngineResult{
 		Vitals: vitals,
-		AnalyzerResults: map[engine.AnalyzerID]*engine.AnalyzerResult{
+		AnalyzerResults: map[engine.AnalyzerID]map[engine.ScopeKey]*engine.AnalyzerResult{
 			"ScyllaVersionSupportAnalyzer": {
-				Status:  engine.AnalyzerPassed,
-				Message: "ScyllaDB 6.2.2 is supported",
+				clusterKey: {
+					Status:  engine.AnalyzerPassed,
+					Message: "ScyllaDB 6.2.2 is supported",
+				},
 			},
 			"SchemaAgreementAnalyzer": {
-				Status:  engine.AnalyzerWarning,
-				Message: "No schema version information available",
+				clusterKey: {
+					Status:  engine.AnalyzerWarning,
+					Message: "No schema version information available",
+				},
 			},
 			"OSSupportAnalyzer": {
-				Status:  engine.AnalyzerFailed,
-				Message: "Unknown OS: Alpine Linux",
+				clusterKey: {
+					Status:  engine.AnalyzerFailed,
+					Message: "Unknown OS: Alpine Linux",
+				},
 			},
 		},
 		ResolvedCollectors: []engine.CollectorID{
@@ -65,8 +71,8 @@ func testEngineResult() *engine.EngineResult {
 	}
 }
 
-func testClusters() []engine.ClusterInfo {
-	return []engine.ClusterInfo{
+func testClusters() []engine.ScyllaClusterInfo {
+	return []engine.ScyllaClusterInfo{
 		{Name: "my-cluster", Namespace: "scylla", Kind: "ScyllaCluster"},
 	}
 }
@@ -97,7 +103,7 @@ func TestConsoleWriter_WriteReport(t *testing.T) {
 	}
 
 	// Check targets section.
-	if !strings.Contains(output, "Target clusters:") {
+	if !strings.Contains(output, "Scylla Clusters:") {
 		t.Errorf("missing targets section, got:\n%s", output)
 	}
 	if !strings.Contains(output, "scylla/my-cluster (ScyllaCluster, 1 pods)") {
@@ -155,7 +161,7 @@ func TestConsoleWriter_NoClusters(t *testing.T) {
 
 	result := &engine.EngineResult{
 		Vitals:          engine.NewVitals(),
-		AnalyzerResults: map[engine.AnalyzerID]*engine.AnalyzerResult{},
+		AnalyzerResults: map[engine.AnalyzerID]map[engine.ScopeKey]*engine.AnalyzerResult{},
 	}
 
 	err := cw.WriteReport(result, "full", nil, nil)
@@ -164,7 +170,7 @@ func TestConsoleWriter_NoClusters(t *testing.T) {
 	}
 
 	output := buf.String()
-	if strings.Contains(output, "Target clusters:") {
+	if strings.Contains(output, "Scylla Clusters:") {
 		t.Errorf("should not show targets section when no clusters, got:\n%s", output)
 	}
 }
@@ -175,11 +181,11 @@ func TestConsoleWriter_AllStatusColors(t *testing.T) {
 
 	result := &engine.EngineResult{
 		Vitals: engine.NewVitals(),
-		AnalyzerResults: map[engine.AnalyzerID]*engine.AnalyzerResult{
-			"A1": {Status: engine.AnalyzerPassed, Message: "ok"},
-			"A2": {Status: engine.AnalyzerWarning, Message: "warn"},
-			"A3": {Status: engine.AnalyzerFailed, Message: "fail"},
-			"A4": {Status: engine.AnalyzerSkipped, Message: "skip"},
+		AnalyzerResults: map[engine.AnalyzerID]map[engine.ScopeKey]*engine.AnalyzerResult{
+			"A1": {engine.ScopeKey{}: {Status: engine.AnalyzerPassed, Message: "ok"}},
+			"A2": {engine.ScopeKey{}: {Status: engine.AnalyzerWarning, Message: "warn"}},
+			"A3": {engine.ScopeKey{}: {Status: engine.AnalyzerFailed, Message: "fail"}},
+			"A4": {engine.ScopeKey{}: {Status: engine.AnalyzerSkipped, Message: "skip"}},
 		},
 		ResolvedAnalyzers: []engine.AnalyzerID{"A1", "A2", "A3", "A4"},
 	}
@@ -214,7 +220,7 @@ func TestConsoleWriter_CollectorStatuses(t *testing.T) {
 
 	result := &engine.EngineResult{
 		Vitals:             vitals,
-		AnalyzerResults:    map[engine.AnalyzerID]*engine.AnalyzerResult{},
+		AnalyzerResults:    map[engine.AnalyzerID]map[engine.ScopeKey]*engine.AnalyzerResult{},
 		ResolvedCollectors: []engine.CollectorID{"C1", "C2", "C3"},
 	}
 
@@ -232,7 +238,7 @@ func TestConsoleWriter_CollectorStatuses(t *testing.T) {
 func TestConsoleWriter_SummaryCount(t *testing.T) {
 	tests := []struct {
 		name         string
-		results      map[engine.AnalyzerID]*engine.AnalyzerResult
+		results      map[engine.AnalyzerID]map[engine.ScopeKey]*engine.AnalyzerResult
 		wantPassed   string
 		wantWarnings string
 		wantFailed   string
@@ -240,9 +246,9 @@ func TestConsoleWriter_SummaryCount(t *testing.T) {
 	}{
 		{
 			name: "all passed",
-			results: map[engine.AnalyzerID]*engine.AnalyzerResult{
-				"A1": {Status: engine.AnalyzerPassed},
-				"A2": {Status: engine.AnalyzerPassed},
+			results: map[engine.AnalyzerID]map[engine.ScopeKey]*engine.AnalyzerResult{
+				"A1": {engine.ScopeKey{}: {Status: engine.AnalyzerPassed}},
+				"A2": {engine.ScopeKey{}: {Status: engine.AnalyzerPassed}},
 			},
 			wantPassed:   "2 passed",
 			wantWarnings: "0 warnings",
@@ -251,7 +257,7 @@ func TestConsoleWriter_SummaryCount(t *testing.T) {
 		},
 		{
 			name:         "empty",
-			results:      map[engine.AnalyzerID]*engine.AnalyzerResult{},
+			results:      map[engine.AnalyzerID]map[engine.ScopeKey]*engine.AnalyzerResult{},
 			wantPassed:   "0 passed",
 			wantWarnings: "0 warnings",
 			wantFailed:   "0 failed",
@@ -288,8 +294,8 @@ func TestConsoleWriterWithColor(t *testing.T) {
 
 	result := &engine.EngineResult{
 		Vitals: engine.NewVitals(),
-		AnalyzerResults: map[engine.AnalyzerID]*engine.AnalyzerResult{
-			"A1": {Status: engine.AnalyzerPassed, Message: "ok"},
+		AnalyzerResults: map[engine.AnalyzerID]map[engine.ScopeKey]*engine.AnalyzerResult{
+			"A1": {engine.ScopeKey{}: {Status: engine.AnalyzerPassed, Message: "ok"}},
 		},
 		ResolvedAnalyzers: []engine.AnalyzerID{"A1"},
 	}

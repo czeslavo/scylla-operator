@@ -24,6 +24,9 @@ func NewSchemaAgreementAnalyzer() engine.Analyzer {
 
 func (a *schemaAgreementAnalyzer) ID() engine.AnalyzerID { return SchemaAgreementAnalyzerID }
 func (a *schemaAgreementAnalyzer) Name() string          { return "Schema agreement check" }
+func (a *schemaAgreementAnalyzer) Scope() engine.AnalyzerScope {
+	return engine.AnalyzerPerScyllaCluster
+}
 func (a *schemaAgreementAnalyzer) DependsOn() []engine.CollectorID {
 	return []engine.CollectorID{collectors.SchemaVersionsCollectorID}
 }

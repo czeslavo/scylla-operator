@@ -78,25 +78,25 @@ func (c *scyllaClusterStatusCollector) Scope() engine.CollectorScope    { return
 func (c *scyllaClusterStatusCollector) DependsOn() []engine.CollectorID { return nil }
 
 func (c *scyllaClusterStatusCollector) Collect(_ context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
-	if params.Cluster == nil {
+	if params.ScyllaCluster == nil {
 		return nil, fmt.Errorf("cluster info not provided")
 	}
 
 	var statusResult *ScyllaClusterStatusResult
 
-	switch obj := params.Cluster.Object.(type) {
+	switch obj := params.ScyllaCluster.Object.(type) {
 	case *scyllav1.ScyllaCluster:
 		statusResult = extractScyllaClusterStatus(obj)
 	case *scyllav1alpha1.ScyllaDBDatacenter:
 		statusResult = extractScyllaDBDatacenterStatus(obj)
 	default:
-		return nil, fmt.Errorf("unsupported cluster object type: %T", params.Cluster.Object)
+		return nil, fmt.Errorf("unsupported cluster object type: %T", params.ScyllaCluster.Object)
 	}
 
 	// Write artifact.
 	var artifacts []engine.Artifact
 	if params.ArtifactWriter != nil {
-		yamlBytes, err := yaml.Marshal(params.Cluster.Object)
+		yamlBytes, err := yaml.Marshal(params.ScyllaCluster.Object)
 		if err != nil {
 			return nil, fmt.Errorf("marshaling cluster manifest to YAML: %w", err)
 		}

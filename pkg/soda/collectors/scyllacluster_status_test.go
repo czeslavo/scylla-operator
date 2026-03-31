@@ -36,7 +36,7 @@ func TestScyllaClusterStatusCollector_ScyllaCluster(t *testing.T) {
 	}
 
 	fakeWriter := sodatesting.NewFakeArtifactWriter()
-	cluster := &engine.ClusterInfo{
+	cluster := &engine.ScyllaClusterInfo{
 		Name:      "my-cluster",
 		Namespace: "scylla",
 		Kind:      "ScyllaCluster",
@@ -46,7 +46,7 @@ func TestScyllaClusterStatusCollector_ScyllaCluster(t *testing.T) {
 	collector := NewScyllaClusterStatusCollector()
 	result, err := collector.Collect(context.Background(), engine.CollectorParams{
 		Vitals:         engine.NewVitals(),
-		Cluster:        cluster,
+		ScyllaCluster:  cluster,
 		ArtifactWriter: fakeWriter,
 	})
 
@@ -112,7 +112,7 @@ func TestScyllaClusterStatusCollector_ScyllaDBDatacenter(t *testing.T) {
 		},
 	}
 
-	cluster := &engine.ClusterInfo{
+	cluster := &engine.ScyllaClusterInfo{
 		Name:      "my-dc",
 		Namespace: "scylla",
 		Kind:      "ScyllaDBDatacenter",
@@ -121,8 +121,8 @@ func TestScyllaClusterStatusCollector_ScyllaDBDatacenter(t *testing.T) {
 
 	collector := NewScyllaClusterStatusCollector()
 	result, err := collector.Collect(context.Background(), engine.CollectorParams{
-		Vitals:  engine.NewVitals(),
-		Cluster: cluster,
+		Vitals:        engine.NewVitals(),
+		ScyllaCluster: cluster,
 	})
 
 	if err != nil {
@@ -161,14 +161,14 @@ func TestScyllaClusterStatusCollector_NilPointers(t *testing.T) {
 		Status:     scyllav1.ScyllaClusterStatus{},
 	}
 
-	cluster := &engine.ClusterInfo{
+	cluster := &engine.ScyllaClusterInfo{
 		Name: "empty", Namespace: "ns", Kind: "ScyllaCluster", Object: sc,
 	}
 
 	collector := NewScyllaClusterStatusCollector()
 	result, err := collector.Collect(context.Background(), engine.CollectorParams{
-		Vitals:  engine.NewVitals(),
-		Cluster: cluster,
+		Vitals:        engine.NewVitals(),
+		ScyllaCluster: cluster,
 	})
 
 	if err != nil {

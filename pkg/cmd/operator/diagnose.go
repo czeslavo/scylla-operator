@@ -223,8 +223,8 @@ func (o *DiagnoseOptions) Run(streams genericclioptions.IOStreams, cmd *cobra.Co
 		Enable:      enableIDs,
 		Disable:     disableIDs,
 
-		Clusters: clusterInfos,
-		Pods:     podsByCluster,
+		ScyllaClusters: clusterInfos,
+		Pods:           podsByCluster,
 
 		PodExecutor:         &k8sPodExecutor{restConfig: o.restConfig, kubeClient: o.kubeClient},
 		ScyllaClusterLister: clusterLister,
@@ -286,7 +286,7 @@ func (o *DiagnoseOptions) writeVitalsJSON(result *engine.EngineResult) error {
 
 // writeReportJSON builds the full JSONReport and writes it to report.json
 // in the output directory root.
-func (o *DiagnoseOptions) writeReportJSON(result *engine.EngineResult, clusters []engine.ClusterInfo, pods map[engine.ScopeKey][]engine.PodInfo) error {
+func (o *DiagnoseOptions) writeReportJSON(result *engine.EngineResult, clusters []engine.ScyllaClusterInfo, pods map[engine.ScopeKey][]engine.PodInfo) error {
 	jw := output.NewJSONWriter(nil, "0.1.0-poc")
 	report := jw.BuildReport(result, o.ProfileName, clusters, pods)
 
@@ -305,7 +305,7 @@ func (o *DiagnoseOptions) writeReportJSON(result *engine.EngineResult, clusters 
 }
 
 // discoverClusters finds ScyllaCluster and ScyllaDBDatacenter resources.
-func (o *DiagnoseOptions) discoverClusters(ctx context.Context, lister engine.ScyllaClusterLister) ([]engine.ClusterInfo, error) {
+func (o *DiagnoseOptions) discoverClusters(ctx context.Context, lister engine.ScyllaClusterLister) ([]engine.ScyllaClusterInfo, error) {
 	namespace := ""
 	if o.ConfigFlags.Namespace != nil && *o.ConfigFlags.Namespace != "" {
 		namespace = *o.ConfigFlags.Namespace
@@ -324,7 +324,7 @@ func (o *DiagnoseOptions) discoverClusters(ctx context.Context, lister engine.Sc
 		return allClusters, nil
 	}
 
-	var filtered []engine.ClusterInfo
+	var filtered []engine.ScyllaClusterInfo
 	for _, c := range allClusters {
 		if c.Name == o.ClusterName {
 			filtered = append(filtered, c)
@@ -334,7 +334,7 @@ func (o *DiagnoseOptions) discoverClusters(ctx context.Context, lister engine.Sc
 }
 
 // discoverPods finds Scylla pods for each cluster.
-func (o *DiagnoseOptions) discoverPods(ctx context.Context, lister engine.PodLister, clusterInfos []engine.ClusterInfo) (map[engine.ScopeKey][]engine.PodInfo, error) {
+func (o *DiagnoseOptions) discoverPods(ctx context.Context, lister engine.PodLister, clusterInfos []engine.ScyllaClusterInfo) (map[engine.ScopeKey][]engine.PodInfo, error) {
 	result := make(map[engine.ScopeKey][]engine.PodInfo)
 
 	for _, cluster := range clusterInfos {
@@ -408,8 +408,8 @@ type k8sScyllaClusterLister struct {
 	scyllaClient scyllaversionedclient.Interface
 }
 
-func (l *k8sScyllaClusterLister) ListScyllaClusters(ctx context.Context, namespace string) ([]engine.ClusterInfo, error) {
-	var result []engine.ClusterInfo
+func (l *k8sScyllaClusterLister) ListScyllaClusters(ctx context.Context, namespace string) ([]engine.ScyllaClusterInfo, error) {
+	var result []engine.ScyllaClusterInfo
 
 	// List ScyllaClusters (v1).
 	scList, err := l.scyllaClient.ScyllaV1().ScyllaClusters(namespace).List(ctx, metav1.ListOptions{})
@@ -419,7 +419,7 @@ func (l *k8sScyllaClusterLister) ListScyllaClusters(ctx context.Context, namespa
 	} else {
 		for i := range scList.Items {
 			sc := &scList.Items[i]
-			result = append(result, engine.ClusterInfo{
+			result = append(result, engine.ScyllaClusterInfo{
 				Name:       sc.Name,
 				Namespace:  sc.Namespace,
 				Kind:       "ScyllaCluster",
@@ -442,7 +442,7 @@ func (l *k8sScyllaClusterLister) ListScyllaClusters(ctx context.Context, namespa
 				klog.V(4).InfoS("Skipping ScyllaDBDatacenter owned by ScyllaCluster", "namespace", sdc.Namespace, "name", sdc.Name)
 				continue
 			}
-			result = append(result, engine.ClusterInfo{
+			result = append(result, engine.ScyllaClusterInfo{
 				Name:       sdc.Name,
 				Namespace:  sdc.Namespace,
 				Kind:       "ScyllaDBDatacenter",

@@ -24,6 +24,9 @@ func NewScyllaVersionSupportAnalyzer() engine.Analyzer {
 
 func (a *scyllaVersionSupportAnalyzer) ID() engine.AnalyzerID { return ScyllaVersionSupportAnalyzerID }
 func (a *scyllaVersionSupportAnalyzer) Name() string          { return "Scylla version support check" }
+func (a *scyllaVersionSupportAnalyzer) Scope() engine.AnalyzerScope {
+	return engine.AnalyzerPerScyllaCluster
+}
 func (a *scyllaVersionSupportAnalyzer) DependsOn() []engine.CollectorID {
 	return []engine.CollectorID{collectors.ScyllaVersionCollectorID}
 }

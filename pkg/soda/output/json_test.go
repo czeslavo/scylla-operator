@@ -37,20 +37,20 @@ func TestJSONWriter_WriteReport(t *testing.T) {
 	}
 
 	// Verify targets.
-	if len(report.Targets.Clusters) != 1 {
-		t.Fatalf("clusters count = %d, want 1", len(report.Targets.Clusters))
+	if len(report.Targets.ScyllaClusters) != 1 {
+		t.Fatalf("clusters count = %d, want 1", len(report.Targets.ScyllaClusters))
 	}
-	if report.Targets.Clusters[0].Name != "my-cluster" {
-		t.Errorf("cluster name = %q, want 'my-cluster'", report.Targets.Clusters[0].Name)
+	if report.Targets.ScyllaClusters[0].Name != "my-cluster" {
+		t.Errorf("cluster name = %q, want 'my-cluster'", report.Targets.ScyllaClusters[0].Name)
 	}
-	if report.Targets.Clusters[0].Namespace != "scylla" {
-		t.Errorf("cluster namespace = %q, want 'scylla'", report.Targets.Clusters[0].Namespace)
+	if report.Targets.ScyllaClusters[0].Namespace != "scylla" {
+		t.Errorf("cluster namespace = %q, want 'scylla'", report.Targets.ScyllaClusters[0].Namespace)
 	}
-	if report.Targets.Clusters[0].Kind != "ScyllaCluster" {
-		t.Errorf("cluster kind = %q, want 'ScyllaCluster'", report.Targets.Clusters[0].Kind)
+	if report.Targets.ScyllaClusters[0].Kind != "ScyllaCluster" {
+		t.Errorf("cluster kind = %q, want 'ScyllaCluster'", report.Targets.ScyllaClusters[0].Kind)
 	}
-	if len(report.Targets.Clusters[0].Pods) != 1 || report.Targets.Clusters[0].Pods[0] != "my-cluster-0" {
-		t.Errorf("cluster pods = %v, want [my-cluster-0]", report.Targets.Clusters[0].Pods)
+	if len(report.Targets.ScyllaClusters[0].Pods) != 1 || report.Targets.ScyllaClusters[0].Pods[0] != "my-cluster-0" {
+		t.Errorf("cluster pods = %v, want [my-cluster-0]", report.Targets.ScyllaClusters[0].Pods)
 	}
 
 	// Verify collectors.
@@ -68,8 +68,8 @@ func TestJSONWriter_WriteReport(t *testing.T) {
 		t.Error("missing NodeResourcesCollector in cluster_wide")
 	}
 
-	if _, ok := report.Collectors.PerCluster["scylla/my-cluster"]; !ok {
-		t.Error("missing scylla/my-cluster in per_cluster")
+	if _, ok := report.Collectors.PerScyllaCluster["scylla/my-cluster"]; !ok {
+		t.Error("missing scylla/my-cluster in per_scylla_cluster")
 	}
 
 	if _, ok := report.Collectors.PerPod["scylla/my-cluster-0"]; !ok {
@@ -82,8 +82,13 @@ func TestJSONWriter_WriteReport(t *testing.T) {
 	}
 
 	if res, ok := report.Analysis["ScyllaVersionSupportAnalyzer"]; ok {
-		if res.Status != "passed" {
-			t.Errorf("ScyllaVersionSupportAnalyzer status = %q, want 'passed'", res.Status)
+		clusterKey := "scylla/my-cluster"
+		if clusterRes, ok := res[clusterKey]; ok {
+			if clusterRes.Status != "passed" {
+				t.Errorf("ScyllaVersionSupportAnalyzer status = %q, want 'passed'", clusterRes.Status)
+			}
+		} else {
+			t.Errorf("missing scope key %q for ScyllaVersionSupportAnalyzer", clusterKey)
 		}
 	} else {
 		t.Error("missing ScyllaVersionSupportAnalyzer in analysis")
@@ -127,7 +132,7 @@ func TestJSONWriter_EmptyResult(t *testing.T) {
 
 	result := &engine.EngineResult{
 		Vitals:          engine.NewVitals(),
-		AnalyzerResults: map[engine.AnalyzerID]*engine.AnalyzerResult{},
+		AnalyzerResults: map[engine.AnalyzerID]map[engine.ScopeKey]*engine.AnalyzerResult{},
 	}
 
 	if err := jw.WriteReport(result, "empty", nil, nil); err != nil {
@@ -139,8 +144,8 @@ func TestJSONWriter_EmptyResult(t *testing.T) {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 
-	if len(report.Targets.Clusters) != 0 {
-		t.Errorf("expected empty clusters, got %d", len(report.Targets.Clusters))
+	if len(report.Targets.ScyllaClusters) != 0 {
+		t.Errorf("expected empty clusters, got %d", len(report.Targets.ScyllaClusters))
 	}
 	if len(report.Collectors.ClusterWide) != 0 {
 		t.Errorf("expected empty cluster_wide collectors, got %d", len(report.Collectors.ClusterWide))
@@ -168,8 +173,8 @@ func TestJSONWriter_AnalyzerStatuses(t *testing.T) {
 
 			result := &engine.EngineResult{
 				Vitals: engine.NewVitals(),
-				AnalyzerResults: map[engine.AnalyzerID]*engine.AnalyzerResult{
-					"TestAnalyzer": {Status: tt.status, Message: "test"},
+				AnalyzerResults: map[engine.AnalyzerID]map[engine.ScopeKey]*engine.AnalyzerResult{
+					"TestAnalyzer": {engine.ScopeKey{}: {Status: tt.status, Message: "test"}},
 				},
 			}
 
@@ -178,9 +183,13 @@ func TestJSONWriter_AnalyzerStatuses(t *testing.T) {
 			var report JSONReport
 			json.Unmarshal(buf.Bytes(), &report)
 
-			if res, ok := report.Analysis["TestAnalyzer"]; ok {
-				if res.Status != tt.want {
-					t.Errorf("status = %q, want %q", res.Status, tt.want)
+			if byScope, ok := report.Analysis["TestAnalyzer"]; ok {
+				if res, ok := byScope[""]; ok {
+					if res.Status != tt.want {
+						t.Errorf("status = %q, want %q", res.Status, tt.want)
+					}
+				} else {
+					t.Error("missing empty scope key for TestAnalyzer")
 				}
 			} else {
 				t.Error("missing TestAnalyzer in analysis")
@@ -212,7 +221,7 @@ func TestJSONWriter_CollectorStatuses(t *testing.T) {
 
 			result := &engine.EngineResult{
 				Vitals:          vitals,
-				AnalyzerResults: map[engine.AnalyzerID]*engine.AnalyzerResult{},
+				AnalyzerResults: map[engine.AnalyzerID]map[engine.ScopeKey]*engine.AnalyzerResult{},
 			}
 
 			jw.WriteReport(result, "test", nil, nil)
@@ -249,7 +258,7 @@ func TestJSONWriter_CollectorDataSerialized(t *testing.T) {
 
 	result := &engine.EngineResult{
 		Vitals:          vitals,
-		AnalyzerResults: map[engine.AnalyzerID]*engine.AnalyzerResult{},
+		AnalyzerResults: map[engine.AnalyzerID]map[engine.ScopeKey]*engine.AnalyzerResult{},
 	}
 
 	jw.WriteReport(result, "test", nil, nil)
@@ -286,7 +295,7 @@ func TestJSONWriter_CollectorArtifacts(t *testing.T) {
 
 	result := &engine.EngineResult{
 		Vitals:          vitals,
-		AnalyzerResults: map[engine.AnalyzerID]*engine.AnalyzerResult{},
+		AnalyzerResults: map[engine.AnalyzerID]map[engine.ScopeKey]*engine.AnalyzerResult{},
 	}
 
 	jw.WriteReport(result, "test", nil, nil)

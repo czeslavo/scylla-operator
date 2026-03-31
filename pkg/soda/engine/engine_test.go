@@ -60,6 +60,7 @@ type simpleAnalyzer struct {
 
 func (a *simpleAnalyzer) ID() AnalyzerID           { return a.id }
 func (a *simpleAnalyzer) Name() string             { return string(a.id) }
+func (a *simpleAnalyzer) Scope() AnalyzerScope     { return AnalyzerClusterWide }
 func (a *simpleAnalyzer) DependsOn() []CollectorID { return a.deps }
 func (a *simpleAnalyzer) Analyze(params AnalyzerParams) *AnalyzerResult {
 	if a.fn != nil {
@@ -152,8 +153,8 @@ func TestEngineTopoOrder(t *testing.T) {
 	}
 
 	// Analyzer should have passed.
-	if result.AnalyzerResults["A1"].Status != AnalyzerPassed {
-		t.Errorf("analyzer A1 status = %v, want PASSED", result.AnalyzerResults["A1"].Status)
+	if result.AnalyzerResults["A1"][ScopeKey{}].Status != AnalyzerPassed {
+		t.Errorf("analyzer A1 status = %v, want PASSED", result.AnalyzerResults["A1"][ScopeKey{}].Status)
 	}
 }
 
@@ -203,8 +204,8 @@ func TestEngineCascadeSkip(t *testing.T) {
 	}
 
 	// Analyzer should also be skipped.
-	if result.AnalyzerResults["A1"].Status != AnalyzerSkipped {
-		t.Errorf("analyzer A1 status = %v, want SKIPPED", result.AnalyzerResults["A1"].Status)
+	if result.AnalyzerResults["A1"][ScopeKey{}].Status != AnalyzerSkipped {
+		t.Errorf("analyzer A1 status = %v, want SKIPPED", result.AnalyzerResults["A1"][ScopeKey{}].Status)
 	}
 }
 
@@ -252,8 +253,8 @@ func TestEngineCascadeFail(t *testing.T) {
 	}
 
 	// Analyzer should be failed.
-	if result.AnalyzerResults["A1"].Status != AnalyzerFailed {
-		t.Errorf("analyzer A1 status = %v, want FAILED", result.AnalyzerResults["A1"].Status)
+	if result.AnalyzerResults["A1"][ScopeKey{}].Status != AnalyzerFailed {
+		t.Errorf("analyzer A1 status = %v, want FAILED", result.AnalyzerResults["A1"][ScopeKey{}].Status)
 	}
 }
 
@@ -272,7 +273,7 @@ func TestEngineScopeIteration(t *testing.T) {
 		"test": {Name: "test", Analyzers: []AnalyzerID{"A1"}},
 	}
 
-	clusters := []ClusterInfo{
+	clusters := []ScyllaClusterInfo{
 		{Name: "cluster-a", Namespace: "ns1"},
 		{Name: "cluster-b", Namespace: "ns2"},
 	}
@@ -288,12 +289,12 @@ func TestEngineScopeIteration(t *testing.T) {
 	}
 
 	eng := NewEngine(EngineConfig{
-		AllCollectors: collectors,
-		AllAnalyzers:  analyzers,
-		AllProfiles:   profiles,
-		ProfileName:   "test",
-		Clusters:      clusters,
-		Pods:          pods,
+		AllCollectors:  collectors,
+		AllAnalyzers:   analyzers,
+		AllProfiles:    profiles,
+		ProfileName:    "test",
+		ScyllaClusters: clusters,
+		Pods:           pods,
 	})
 
 	_, err := eng.Run(context.Background())
@@ -339,7 +340,7 @@ func TestEngineCrossScopeDep(t *testing.T) {
 		"test": {Name: "test", Analyzers: []AnalyzerID{"A1"}},
 	}
 
-	clusters := []ClusterInfo{{Name: "cluster-a", Namespace: "ns1"}}
+	clusters := []ScyllaClusterInfo{{Name: "cluster-a", Namespace: "ns1"}}
 	pods := map[ScopeKey][]PodInfo{
 		{Namespace: "ns1", Name: "cluster-a"}: {
 			{Name: "pod-0", Namespace: "ns1", ClusterName: "cluster-a"},
@@ -347,12 +348,12 @@ func TestEngineCrossScopeDep(t *testing.T) {
 	}
 
 	eng := NewEngine(EngineConfig{
-		AllCollectors: collectors,
-		AllAnalyzers:  analyzers,
-		AllProfiles:   profiles,
-		ProfileName:   "test",
-		Clusters:      clusters,
-		Pods:          pods,
+		AllCollectors:  collectors,
+		AllAnalyzers:   analyzers,
+		AllProfiles:    profiles,
+		ProfileName:    "test",
+		ScyllaClusters: clusters,
+		Pods:           pods,
 	})
 
 	result, err := eng.Run(context.Background())
@@ -415,8 +416,8 @@ func TestEngineCollectorError(t *testing.T) {
 	}
 
 	// Analyzer should be failed since its dependency failed.
-	if result.AnalyzerResults["A1"].Status != AnalyzerFailed {
-		t.Errorf("analyzer A1 status = %v, want FAILED", result.AnalyzerResults["A1"].Status)
+	if result.AnalyzerResults["A1"][ScopeKey{}].Status != AnalyzerFailed {
+		t.Errorf("analyzer A1 status = %v, want FAILED", result.AnalyzerResults["A1"][ScopeKey{}].Status)
 	}
 }
 
@@ -457,7 +458,7 @@ func TestEngineAllCollectorsFail(t *testing.T) {
 		"test": {Name: "test", Analyzers: []AnalyzerID{"A1"}},
 	}
 
-	clusters := []ClusterInfo{{Name: "cluster", Namespace: "ns"}}
+	clusters := []ScyllaClusterInfo{{Name: "cluster", Namespace: "ns"}}
 	pods := map[ScopeKey][]PodInfo{
 		{Namespace: "ns", Name: "cluster"}: {
 			{Name: "pod-0", Namespace: "ns"},
@@ -466,12 +467,12 @@ func TestEngineAllCollectorsFail(t *testing.T) {
 	}
 
 	eng := NewEngine(EngineConfig{
-		AllCollectors: collectors,
-		AllAnalyzers:  analyzers,
-		AllProfiles:   profiles,
-		ProfileName:   "test",
-		Clusters:      clusters,
-		Pods:          pods,
+		AllCollectors:  collectors,
+		AllAnalyzers:   analyzers,
+		AllProfiles:    profiles,
+		ProfileName:    "test",
+		ScyllaClusters: clusters,
+		Pods:           pods,
 	})
 
 	result, err := eng.Run(context.Background())
@@ -492,8 +493,8 @@ func TestEngineAllCollectorsFail(t *testing.T) {
 	}
 
 	// Analyzer should be FAILED.
-	if result.AnalyzerResults["A1"].Status != AnalyzerFailed {
-		t.Errorf("analyzer A1 status = %v, want FAILED", result.AnalyzerResults["A1"].Status)
+	if result.AnalyzerResults["A1"][ScopeKey{}].Status != AnalyzerFailed {
+		t.Errorf("analyzer A1 status = %v, want FAILED", result.AnalyzerResults["A1"][ScopeKey{}].Status)
 	}
 }
 
@@ -549,7 +550,7 @@ func TestEngineArtifactWriterAssignment(t *testing.T) {
 		"test": {Name: "test", Analyzers: []AnalyzerID{"A1"}},
 	}
 
-	clusters := []ClusterInfo{{Name: "cluster", Namespace: "ns"}}
+	clusters := []ScyllaClusterInfo{{Name: "cluster", Namespace: "ns"}}
 	pods := map[ScopeKey][]PodInfo{
 		{Namespace: "ns", Name: "cluster"}: {
 			{Name: "pod-0", Namespace: "ns"},
@@ -561,7 +562,7 @@ func TestEngineArtifactWriterAssignment(t *testing.T) {
 		AllAnalyzers:          analyzers,
 		AllProfiles:           profiles,
 		ProfileName:           "test",
-		Clusters:              clusters,
+		ScyllaClusters:        clusters,
 		Pods:                  pods,
 		ArtifactWriterFactory: factory,
 	})
@@ -652,7 +653,7 @@ func TestEngineAnalyzerReceivesVitals(t *testing.T) {
 		"test": {Name: "test", Analyzers: []AnalyzerID{"A1"}},
 	}
 
-	clusters := []ClusterInfo{{Name: "cluster", Namespace: "ns"}}
+	clusters := []ScyllaClusterInfo{{Name: "cluster", Namespace: "ns"}}
 	pods := map[ScopeKey][]PodInfo{
 		{Namespace: "ns", Name: "cluster"}: {
 			{Name: "pod-0", Namespace: "ns"},
@@ -662,12 +663,12 @@ func TestEngineAnalyzerReceivesVitals(t *testing.T) {
 	}
 
 	eng := NewEngine(EngineConfig{
-		AllCollectors: collectors,
-		AllAnalyzers:  analyzers,
-		AllProfiles:   profiles,
-		ProfileName:   "test",
-		Clusters:      clusters,
-		Pods:          pods,
+		AllCollectors:  collectors,
+		AllAnalyzers:   analyzers,
+		AllProfiles:    profiles,
+		ProfileName:    "test",
+		ScyllaClusters: clusters,
+		Pods:           pods,
 	})
 
 	result, err := eng.Run(context.Background())
@@ -679,7 +680,7 @@ func TestEngineAnalyzerReceivesVitals(t *testing.T) {
 		t.Errorf("analyzer saw %d pod keys, want 3", analyzerPodCount)
 	}
 
-	a1 := result.AnalyzerResults["A1"]
+	a1 := result.AnalyzerResults["A1"][ScopeKey{}]
 	if a1.Status != AnalyzerPassed {
 		t.Errorf("analyzer A1 status = %v, want PASSED", a1.Status)
 	}
@@ -715,7 +716,7 @@ func TestEngineAnalyzerMixedCollectorResults(t *testing.T) {
 		"test": {Name: "test", Analyzers: []AnalyzerID{"A1"}},
 	}
 
-	clusters := []ClusterInfo{{Name: "cluster", Namespace: "ns"}}
+	clusters := []ScyllaClusterInfo{{Name: "cluster", Namespace: "ns"}}
 	pods := map[ScopeKey][]PodInfo{
 		{Namespace: "ns", Name: "cluster"}: {
 			{Name: "pod-0", Namespace: "ns"},
@@ -725,12 +726,12 @@ func TestEngineAnalyzerMixedCollectorResults(t *testing.T) {
 	}
 
 	eng := NewEngine(EngineConfig{
-		AllCollectors: collectors,
-		AllAnalyzers:  analyzers,
-		AllProfiles:   profiles,
-		ProfileName:   "test",
-		Clusters:      clusters,
-		Pods:          pods,
+		AllCollectors:  collectors,
+		AllAnalyzers:   analyzers,
+		AllProfiles:    profiles,
+		ProfileName:    "test",
+		ScyllaClusters: clusters,
+		Pods:           pods,
 	})
 
 	result, err := eng.Run(context.Background())
@@ -739,8 +740,8 @@ func TestEngineAnalyzerMixedCollectorResults(t *testing.T) {
 	}
 
 	// Analyzer should still run since pods 0 and 2 passed.
-	if result.AnalyzerResults["A1"].Status != AnalyzerPassed {
-		t.Errorf("analyzer A1 status = %v, want PASSED (mixed results)", result.AnalyzerResults["A1"].Status)
+	if result.AnalyzerResults["A1"][ScopeKey{}].Status != AnalyzerPassed {
+		t.Errorf("analyzer A1 status = %v, want PASSED (mixed results)", result.AnalyzerResults["A1"][ScopeKey{}].Status)
 	}
 }
 

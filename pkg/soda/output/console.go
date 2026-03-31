@@ -3,6 +3,7 @@ package output
 import (
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"github.com/fatih/color"
@@ -50,7 +51,7 @@ func NewConsoleWriterNoColor(w io.Writer) *ConsoleWriter {
 }
 
 // WriteReport writes the full diagnostic report.
-func (c *ConsoleWriter) WriteReport(result *engine.EngineResult, profileName string, clusters []engine.ClusterInfo, pods map[engine.ScopeKey][]engine.PodInfo) error {
+func (c *ConsoleWriter) WriteReport(result *engine.EngineResult, profileName string, clusters []engine.ScyllaClusterInfo, pods map[engine.ScopeKey][]engine.PodInfo) error {
 	c.writeHeader(profileName)
 	c.writeTargets(clusters, pods)
 	c.writeCollectors(result)
@@ -63,12 +64,12 @@ func (c *ConsoleWriter) writeHeader(profileName string) {
 	fmt.Fprintf(c.w, "%s\n\n", c.boldFn("ScyllaDB Diagnostics (profile: %s)", profileName))
 }
 
-func (c *ConsoleWriter) writeTargets(clusters []engine.ClusterInfo, pods map[engine.ScopeKey][]engine.PodInfo) {
+func (c *ConsoleWriter) writeTargets(clusters []engine.ScyllaClusterInfo, pods map[engine.ScopeKey][]engine.PodInfo) {
 	if len(clusters) == 0 {
 		return
 	}
 
-	fmt.Fprintf(c.w, "Target clusters:\n")
+	fmt.Fprintf(c.w, "Scylla Clusters:\n")
 	for _, cluster := range clusters {
 		clusterKey := engine.ScopeKey{Namespace: cluster.Namespace, Name: cluster.Name}
 		podCount := len(pods[clusterKey])
@@ -86,10 +87,10 @@ func (c *ConsoleWriter) writeCollectors(result *engine.EngineResult) {
 			c.writeCollectorLine(collectorID, "", res)
 		}
 
-		// PerCluster results.
-		for _, key := range result.Vitals.ClusterKeys() {
-			if perCluster, ok := result.Vitals.PerCluster[key]; ok {
-				if res, ok := perCluster[collectorID]; ok {
+		// PerScyllaCluster results.
+		for _, key := range result.Vitals.ScyllaClusterKeys() {
+			if perScyllaCluster, ok := result.Vitals.PerScyllaCluster[key]; ok {
+				if res, ok := perScyllaCluster[collectorID]; ok {
 					c.writeCollectorLine(collectorID, key.String(), res)
 				}
 			}
@@ -121,9 +122,30 @@ func (c *ConsoleWriter) writeAnalyzers(result *engine.EngineResult) {
 	fmt.Fprintf(c.w, "Analysis:\n")
 
 	for _, analyzerID := range result.ResolvedAnalyzers {
-		if res, ok := result.AnalyzerResults[analyzerID]; ok {
+		byScope, ok := result.AnalyzerResults[analyzerID]
+		if !ok {
+			continue
+		}
+
+		// ClusterWide: single entry under an empty ScopeKey — no scope prefix.
+		if res, ok := byScope[engine.ScopeKey{}]; ok && len(byScope) == 1 {
 			statusStr := c.colorAnalyzerStatus(res.Status)
 			fmt.Fprintf(c.w, "  [%s]  %-35s %s\n", statusStr, analyzerID, res.Message)
+			continue
+		}
+
+		// PerScyllaCluster: one entry per cluster — print scope prefix on each line.
+		// Sort keys for deterministic output.
+		keys := make([]engine.ScopeKey, 0, len(byScope))
+		for k := range byScope {
+			keys = append(keys, k)
+		}
+		sortScopeKeys(keys)
+		for _, scopeKey := range keys {
+			res := byScope[scopeKey]
+			statusStr := c.colorAnalyzerStatus(res.Status)
+			message := scopeKey.String() + ": " + res.Message
+			fmt.Fprintf(c.w, "  [%s]  %-35s %s\n", statusStr, analyzerID, message)
 		}
 	}
 
@@ -133,16 +155,18 @@ func (c *ConsoleWriter) writeAnalyzers(result *engine.EngineResult) {
 func (c *ConsoleWriter) writeSummary(result *engine.EngineResult) {
 	var passed, warnings, failed, skipped int
 
-	for _, res := range result.AnalyzerResults {
-		switch res.Status {
-		case engine.AnalyzerPassed:
-			passed++
-		case engine.AnalyzerWarning:
-			warnings++
-		case engine.AnalyzerFailed:
-			failed++
-		case engine.AnalyzerSkipped:
-			skipped++
+	for _, byScope := range result.AnalyzerResults {
+		for _, res := range byScope {
+			switch res.Status {
+			case engine.AnalyzerPassed:
+				passed++
+			case engine.AnalyzerWarning:
+				warnings++
+			case engine.AnalyzerFailed:
+				failed++
+			case engine.AnalyzerSkipped:
+				skipped++
+			}
 		}
 	}
 
@@ -182,4 +206,13 @@ func (c *ConsoleWriter) colorAnalyzerStatus(status engine.AnalyzerStatus) string
 	default:
 		return status.String()
 	}
+}
+
+func sortScopeKeys(keys []engine.ScopeKey) {
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].Namespace != keys[j].Namespace {
+			return keys[i].Namespace < keys[j].Namespace
+		}
+		return keys[i].Name < keys[j].Name
+	})
 }

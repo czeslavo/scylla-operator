@@ -19,8 +19,8 @@ type EngineConfig struct {
 	Disable     []AnalyzerID
 
 	// Targets
-	Clusters []ClusterInfo
-	Pods     map[ScopeKey][]PodInfo // ClusterKey → pods for that cluster
+	ScyllaClusters []ScyllaClusterInfo
+	Pods           map[ScopeKey][]PodInfo // ScyllaCluster key → pods for that cluster
 
 	// Dependency-injected capabilities
 	PodExecutor         PodExecutor
@@ -44,8 +44,11 @@ type ArtifactWriterFactory interface {
 
 // EngineResult holds the complete results of a diagnostic engine run.
 type EngineResult struct {
-	Vitals          *Vitals
-	AnalyzerResults map[AnalyzerID]*AnalyzerResult
+	Vitals *Vitals
+	// AnalyzerResults maps analyzer ID → scope key → result.
+	// For AnalyzerClusterWide analyzers the inner map has a single entry with an empty ScopeKey.
+	// For AnalyzerPerScyllaCluster analyzers the inner map has one entry per ScyllaCluster.
+	AnalyzerResults map[AnalyzerID]map[ScopeKey]*AnalyzerResult
 
 	// Metadata for output.
 	ResolvedCollectors []CollectorID
@@ -113,13 +116,13 @@ func (e *Engine) executeCollectors(ctx context.Context, sortedCollectors []Colle
 			e.executeClusterWideCollector(ctx, collector, vitals)
 
 		case PerScyllaCluster:
-			for _, cluster := range e.config.Clusters {
+			for _, cluster := range e.config.ScyllaClusters {
 				clusterKey := ScopeKey{Namespace: cluster.Namespace, Name: cluster.Name}
-				e.executePerClusterCollector(ctx, collector, &cluster, clusterKey, vitals)
+				e.executePerScyllaClusterCollector(ctx, collector, &cluster, clusterKey, vitals)
 			}
 
 		case PerPod:
-			for _, cluster := range e.config.Clusters {
+			for _, cluster := range e.config.ScyllaClusters {
 				clusterKey := ScopeKey{Namespace: cluster.Namespace, Name: cluster.Name}
 				pods := e.config.Pods[clusterKey]
 				for _, pod := range pods {
@@ -165,7 +168,7 @@ func (e *Engine) executeClusterWideCollector(ctx context.Context, collector Coll
 	vitals.Store(collector.ID(), ClusterWide, scopeKey, result)
 }
 
-func (e *Engine) executePerClusterCollector(ctx context.Context, collector Collector, cluster *ClusterInfo, clusterKey ScopeKey, vitals *Vitals) {
+func (e *Engine) executePerScyllaClusterCollector(ctx context.Context, collector Collector, cluster *ScyllaClusterInfo, clusterKey ScopeKey, vitals *Vitals) {
 	if result := e.checkCascade(collector, vitals, clusterKey); result != nil {
 		vitals.Store(collector.ID(), PerScyllaCluster, clusterKey, result)
 		return
@@ -178,7 +181,7 @@ func (e *Engine) executePerClusterCollector(ctx context.Context, collector Colle
 
 	params := CollectorParams{
 		Vitals:              vitals,
-		Cluster:             cluster,
+		ScyllaCluster:       cluster,
 		PodExecutor:         e.config.PodExecutor,
 		ScyllaClusterLister: e.config.ScyllaClusterLister,
 		NodeLister:          e.config.NodeLister,
@@ -197,7 +200,7 @@ func (e *Engine) executePerClusterCollector(ctx context.Context, collector Colle
 	vitals.Store(collector.ID(), PerScyllaCluster, clusterKey, result)
 }
 
-func (e *Engine) executePerPodCollector(ctx context.Context, collector Collector, cluster *ClusterInfo, pod *PodInfo, podKey ScopeKey, vitals *Vitals) {
+func (e *Engine) executePerPodCollector(ctx context.Context, collector Collector, cluster *ScyllaClusterInfo, pod *PodInfo, podKey ScopeKey, vitals *Vitals) {
 	if result := e.checkCascade(collector, vitals, podKey); result != nil {
 		vitals.Store(collector.ID(), PerPod, podKey, result)
 		return
@@ -210,7 +213,7 @@ func (e *Engine) executePerPodCollector(ctx context.Context, collector Collector
 
 	params := CollectorParams{
 		Vitals:              vitals,
-		Cluster:             cluster,
+		ScyllaCluster:       cluster,
 		Pod:                 pod,
 		PodExecutor:         e.config.PodExecutor,
 		ScyllaClusterLister: e.config.ScyllaClusterLister,
@@ -270,24 +273,58 @@ func (e *Engine) checkCascade(collector Collector, vitals *Vitals, scopeKey Scop
 }
 
 // executeAnalyzers runs all enabled analyzers against the collected vitals.
-func (e *Engine) executeAnalyzers(analyzerIDs []AnalyzerID, vitals *Vitals) map[AnalyzerID]*AnalyzerResult {
-	results := make(map[AnalyzerID]*AnalyzerResult, len(analyzerIDs))
+// For AnalyzerClusterWide analyzers the result is stored under an empty ScopeKey.
+// For AnalyzerPerScyllaCluster analyzers the analyzer is invoked once per ScyllaCluster
+// with vitals filtered to that cluster's pods only.
+func (e *Engine) executeAnalyzers(analyzerIDs []AnalyzerID, vitals *Vitals) map[AnalyzerID]map[ScopeKey]*AnalyzerResult {
+	results := make(map[AnalyzerID]map[ScopeKey]*AnalyzerResult, len(analyzerIDs))
 
 	for _, analyzerID := range analyzerIDs {
 		analyzer := e.config.AllAnalyzers[analyzerID]
 
-		// Check analyzer dependencies.
-		if result := e.checkAnalyzerDeps(analyzer, vitals); result != nil {
-			results[analyzerID] = result
-			continue
-		}
+		switch analyzer.Scope() {
+		case AnalyzerPerScyllaCluster:
+			inner := make(map[ScopeKey]*AnalyzerResult, len(e.config.ScyllaClusters))
+			for _, cluster := range e.config.ScyllaClusters {
+				clusterKey := ScopeKey{Namespace: cluster.Namespace, Name: cluster.Name}
+				podKeys := make([]ScopeKey, 0, len(e.config.Pods[clusterKey]))
+				for _, pod := range e.config.Pods[clusterKey] {
+					podKeys = append(podKeys, ScopeKey{Namespace: pod.Namespace, Name: pod.Name})
+				}
+				scopedVitals := vitals.ForScyllaCluster(clusterKey, podKeys)
 
-		params := AnalyzerParams{
-			Vitals: vitals,
-			// ArtifactReader is set by the CLI layer when needed.
-		}
+				if result := e.checkAnalyzerDeps(analyzer, scopedVitals); result != nil {
+					inner[clusterKey] = result
+					continue
+				}
 
-		results[analyzerID] = analyzer.Analyze(params)
+				clusterCopy := cluster
+				params := AnalyzerParams{
+					Vitals:        scopedVitals,
+					ScyllaCluster: &clusterCopy,
+				}
+				inner[clusterKey] = analyzer.Analyze(params)
+			}
+			// If no ScyllaClusters configured, produce a single skipped result.
+			if len(e.config.ScyllaClusters) == 0 {
+				inner[ScopeKey{}] = &AnalyzerResult{
+					Status:  AnalyzerSkipped,
+					Message: "no ScyllaClusters configured",
+				}
+			}
+			results[analyzerID] = inner
+
+		default: // AnalyzerClusterWide
+			if result := e.checkAnalyzerDeps(analyzer, vitals); result != nil {
+				results[analyzerID] = map[ScopeKey]*AnalyzerResult{ScopeKey{}: result}
+				continue
+			}
+
+			params := AnalyzerParams{
+				Vitals: vitals,
+			}
+			results[analyzerID] = map[ScopeKey]*AnalyzerResult{ScopeKey{}: analyzer.Analyze(params)}
+		}
 	}
 
 	return results
@@ -323,7 +360,7 @@ func (e *Engine) checkAnalyzerDeps(analyzer Analyzer, vitals *Vitals) *AnalyzerR
 			}
 
 		case PerScyllaCluster:
-			for _, key := range vitals.ClusterKeys() {
+			for _, key := range vitals.ScyllaClusterKeys() {
 				if result, ok := vitals.Get(depID, key); ok {
 					hasAnyResult = true
 					switch result.Status {

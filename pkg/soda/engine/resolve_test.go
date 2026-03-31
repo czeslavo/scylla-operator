@@ -29,6 +29,7 @@ type stubAnalyzer struct {
 
 func (s *stubAnalyzer) ID() AnalyzerID           { return s.id }
 func (s *stubAnalyzer) Name() string             { return string(s.id) }
+func (s *stubAnalyzer) Scope() AnalyzerScope     { return AnalyzerClusterWide }
 func (s *stubAnalyzer) DependsOn() []CollectorID { return s.deps }
 func (s *stubAnalyzer) Analyze(_ AnalyzerParams) *AnalyzerResult {
 	return nil
