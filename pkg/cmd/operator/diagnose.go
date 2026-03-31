@@ -77,6 +77,7 @@ type DiagnoseOptions struct {
 	DryRun      bool
 	KeepGoing   bool
 	FromArchive string // Path to a previous output directory (or .tar.gz archive) for offline re-analysis.
+	Archive     bool   // When true, pack the output directory into a .tar.gz file after collection.
 
 	// Resolved at Complete() time.
 	restConfig   *rest.Config
@@ -104,6 +105,7 @@ func (o *DiagnoseOptions) AddFlags(flagset *pflag.FlagSet) {
 	flagset.BoolVar(&o.DryRun, "dry-run", o.DryRun, "Print what would be collected and analyzed without connecting to the cluster.")
 	flagset.BoolVar(&o.KeepGoing, "keep-going", o.KeepGoing, "Continue running diagnostics even if some collectors fail.")
 	flagset.StringVar(&o.FromArchive, "from-archive", o.FromArchive, "Path to a previous output directory (or .tar.gz archive) to re-analyze offline without connecting to the cluster.")
+	flagset.BoolVar(&o.Archive, "archive", o.Archive, "Pack the artifact output directory into a .tar.gz file. The archive path is printed to stdout.")
 }
 
 // NewDiagnoseCmd creates the diagnose cobra command.
@@ -153,6 +155,9 @@ func (o *DiagnoseOptions) Validate() error {
 		}
 		if kubeconfig != "" {
 			return fmt.Errorf("--from-archive and --kubeconfig are mutually exclusive")
+		}
+		if o.Archive {
+			return fmt.Errorf("--from-archive and --archive are mutually exclusive")
 		}
 	}
 
@@ -293,6 +298,28 @@ func (o *DiagnoseOptions) Run(streams genericclioptions.IOStreams, cmd *cobra.Co
 
 	fmt.Fprintf(streams.Out, "\nArtifacts written to: %s\n", o.OutputDir)
 	klog.InfoS("Diagnostics complete", "ArtifactDir", o.OutputDir)
+
+	// --archive: pack the output directory into a .tar.gz and clean up.
+	if o.Archive {
+		archiveName := filepath.Base(o.OutputDir) + ".tar.gz"
+		archivePath, err := filepath.Abs(archiveName)
+		if err != nil {
+			return fmt.Errorf("resolving archive path: %w", err)
+		}
+
+		if err := createTarGz(o.OutputDir, archivePath); err != nil {
+			return fmt.Errorf("creating archive %s: %w", archivePath, err)
+		}
+
+		// Remove the unpacked output directory — the archive is self-contained.
+		if err := os.RemoveAll(o.OutputDir); err != nil {
+			klog.V(2).InfoS("Failed to remove temp output directory after archiving", "dir", o.OutputDir, "error", err)
+		}
+
+		fmt.Fprintf(streams.Out, "Archive written to: %s\n", archivePath)
+		fmt.Fprintf(streams.Out, "To re-analyze offline: scylla-operator diagnose --from-archive=%s\n", archivePath)
+	}
+
 	return nil
 }
 
@@ -769,6 +796,60 @@ func clusterTopologyFromVitals(vitals *engine.Vitals) ([]engine.ScyllaClusterInf
 	}
 
 	return clusterInfos, podsByCluster
+}
+
+// createTarGz creates a .tar.gz archive at destPath containing all files under
+// srcDir. The archive entries use paths relative to srcDir.
+func createTarGz(srcDir, destPath string) error {
+	out, err := os.Create(destPath)
+	if err != nil {
+		return fmt.Errorf("creating archive file: %w", err)
+	}
+	defer out.Close()
+
+	gz := gzip.NewWriter(out)
+	defer gz.Close()
+
+	tw := tar.NewWriter(gz)
+	defer tw.Close()
+
+	return filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Compute the path inside the archive relative to srcDir.
+		rel, err := filepath.Rel(srcDir, path)
+		if err != nil {
+			return err
+		}
+
+		header, err := tar.FileInfoHeader(info, "")
+		if err != nil {
+			return fmt.Errorf("creating tar header for %s: %w", path, err)
+		}
+		header.Name = filepath.ToSlash(rel)
+
+		if err := tw.WriteHeader(header); err != nil {
+			return fmt.Errorf("writing tar header for %s: %w", path, err)
+		}
+
+		if info.IsDir() {
+			return nil
+		}
+
+		f, err := os.Open(path)
+		if err != nil {
+			return fmt.Errorf("opening file %s: %w", path, err)
+		}
+		defer f.Close()
+
+		if _, err := io.Copy(tw, f); err != nil {
+			return fmt.Errorf("writing file %s to archive: %w", path, err)
+		}
+
+		return nil
+	})
 }
 
 // extractTarGz extracts a .tar.gz archive to the given destination directory.
