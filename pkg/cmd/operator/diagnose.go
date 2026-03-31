@@ -394,12 +394,18 @@ func (l *k8sScyllaClusterLister) ListScyllaClusters(ctx context.Context, namespa
 	}
 
 	// List ScyllaDBDatacenters (v1alpha1).
+	// Skip ScyllaDBDatacenters that are owned by a ScyllaCluster — we already
+	// discovered the parent above so diagnosing the child would be a duplicate.
 	sdcList, err := l.scyllaClient.ScyllaV1alpha1().ScyllaDBDatacenters(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		klog.V(4).InfoS("Error listing ScyllaDBDatacenters", "error", err)
 	} else {
 		for i := range sdcList.Items {
 			sdc := &sdcList.Items[i]
+			if hasControllerOwnerOfKind(sdc.OwnerReferences, "ScyllaCluster") {
+				klog.V(4).InfoS("Skipping ScyllaDBDatacenter owned by ScyllaCluster", "namespace", sdc.Namespace, "name", sdc.Name)
+				continue
+			}
 			result = append(result, engine.ClusterInfo{
 				Name:       sdc.Name,
 				Namespace:  sdc.Namespace,
@@ -411,6 +417,17 @@ func (l *k8sScyllaClusterLister) ListScyllaClusters(ctx context.Context, namespa
 	}
 
 	return result, nil
+}
+
+// hasControllerOwnerOfKind returns true if any of the ownerReferences has the
+// given kind and is marked as the controller.
+func hasControllerOwnerOfKind(refs []metav1.OwnerReference, kind string) bool {
+	for _, ref := range refs {
+		if ref.Kind == kind && ref.Controller != nil && *ref.Controller {
+			return true
+		}
+	}
+	return false
 }
 
 // k8sNodeLister implements engine.NodeLister using the Kubernetes API.
