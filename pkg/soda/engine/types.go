@@ -417,10 +417,38 @@ type SerializableCollectorResult struct {
 	DurationMs int64           `json:"duration_ms,omitempty"` // Wall-clock milliseconds spent in Collect()
 }
 
+// SerializableClusterTopology stores the cluster and pod topology discovered
+// during a live run so that offline re-analysis can reconstruct it faithfully
+// from vitals.json without connecting to the cluster.
+type SerializableClusterTopology struct {
+	Clusters []SerializableClusterInfo          `json:"clusters"`
+	Pods     map[ScopeKey][]SerializablePodInfo `json:"pods"`
+}
+
+// SerializableClusterInfo is the JSON-safe subset of ScyllaClusterInfo.
+type SerializableClusterInfo struct {
+	Namespace  string `json:"namespace"`
+	Name       string `json:"name"`
+	Kind       string `json:"kind,omitempty"`
+	APIVersion string `json:"api_version,omitempty"`
+}
+
+// SerializablePodInfo is the JSON-safe subset of PodInfo.
+type SerializablePodInfo struct {
+	Namespace      string `json:"namespace"`
+	Name           string `json:"name"`
+	ClusterName    string `json:"cluster_name,omitempty"`
+	DatacenterName string `json:"datacenter_name,omitempty"`
+	RackName       string `json:"rack_name,omitempty"`
+}
+
 // SerializableVitals is the JSON-safe version of Vitals for persistence
 // to vitals.json. It mirrors the Vitals structure but uses
 // SerializableCollectorResult so that Data is preserved as raw JSON.
+// The Topology field stores the cluster/pod topology discovered during collection
+// so that offline re-analysis can reconstruct it without a live cluster connection.
 type SerializableVitals struct {
+	Topology         *SerializableClusterTopology                              `json:"topology,omitempty"`
 	ClusterWide      map[CollectorID]*SerializableCollectorResult              `json:"cluster_wide"`
 	PerScyllaCluster map[ScopeKey]map[CollectorID]*SerializableCollectorResult `json:"per_scylla_cluster"`
 	PerPod           map[ScopeKey]map[CollectorID]*SerializableCollectorResult `json:"per_pod"`

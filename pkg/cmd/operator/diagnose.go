@@ -287,7 +287,7 @@ func (o *DiagnoseOptions) Run(streams genericclioptions.IOStreams, cmd *cobra.Co
 	}
 
 	// Persist vitals.json — the full collector results with data, enabling offline analysis.
-	if err := o.writeVitalsJSON(result); err != nil {
+	if err := o.writeVitalsJSON(result, clusterInfos, podsByCluster); err != nil {
 		return fmt.Errorf("writing vitals.json: %w", err)
 	}
 
@@ -330,12 +330,42 @@ func (o *DiagnoseOptions) Run(streams genericclioptions.IOStreams, cmd *cobra.Co
 }
 
 // writeVitalsJSON serializes the Vitals store (including collector Data) to
-// vitals.json in the output directory root.
-func (o *DiagnoseOptions) writeVitalsJSON(result *engine.EngineResult) error {
+// vitals.json in the output directory root. The clusterInfos and podsByCluster
+// arguments are embedded in a Topology field so that offline re-analysis can
+// reconstruct the cluster/pod topology without connecting to the cluster.
+func (o *DiagnoseOptions) writeVitalsJSON(result *engine.EngineResult, clusterInfos []engine.ScyllaClusterInfo, podsByCluster map[engine.ScopeKey][]engine.PodInfo) error {
 	sv, err := result.Vitals.ToSerializable()
 	if err != nil {
 		return fmt.Errorf("converting vitals to serializable form: %w", err)
 	}
+
+	// Embed the cluster/pod topology so it survives the serialization round-trip.
+	topo := &engine.SerializableClusterTopology{
+		Clusters: make([]engine.SerializableClusterInfo, 0, len(clusterInfos)),
+		Pods:     make(map[engine.ScopeKey][]engine.SerializablePodInfo, len(podsByCluster)),
+	}
+	for _, ci := range clusterInfos {
+		topo.Clusters = append(topo.Clusters, engine.SerializableClusterInfo{
+			Namespace:  ci.Namespace,
+			Name:       ci.Name,
+			Kind:       ci.Kind,
+			APIVersion: ci.APIVersion,
+		})
+	}
+	for key, pods := range podsByCluster {
+		spods := make([]engine.SerializablePodInfo, 0, len(pods))
+		for _, pod := range pods {
+			spods = append(spods, engine.SerializablePodInfo{
+				Namespace:      pod.Namespace,
+				Name:           pod.Name,
+				ClusterName:    pod.ClusterName,
+				DatacenterName: pod.DatacenterName,
+				RackName:       pod.RackName,
+			})
+		}
+		topo.Pods[key] = spods
+	}
+	sv.Topology = topo
 
 	data, err := json.MarshalIndent(sv, "", "  ")
 	if err != nil {
@@ -772,7 +802,7 @@ func (o *DiagnoseOptions) runOffline(ctx context.Context, streams genericcliopti
 
 	// Reconstruct the cluster/pod topology from the vitals store so that the
 	// per-cluster analyzer dispatch works correctly.
-	clusterInfos, podsByCluster := clusterTopologyFromVitals(vitals)
+	clusterInfos, podsByCluster := clusterTopologyFromVitals(&sv, vitals)
 
 	config := engine.EngineConfig{
 		AllCollectors: collectors.AllCollectorsMap(),
@@ -803,11 +833,43 @@ func (o *DiagnoseOptions) runOffline(ctx context.Context, streams genericcliopti
 	return nil
 }
 
-// clusterTopologyFromVitals reconstructs the minimal ScyllaClusterInfo and pod
-// topology from the keys present in the Vitals store. The ScyllaClusterInfo
-// objects will only have Namespace and Name populated (sufficient for analyzer
-// dispatch); the full Kubernetes objects are not available offline.
-func clusterTopologyFromVitals(vitals *engine.Vitals) ([]engine.ScyllaClusterInfo, map[engine.ScopeKey][]engine.PodInfo) {
+// clusterTopologyFromVitals reconstructs the ScyllaClusterInfo and pod topology
+// needed for offline analyzer dispatch. It prefers the Topology embedded in
+// SerializableVitals (populated during a live run) for accuracy. When Topology
+// is absent (older archives), it falls back to inferring one cluster per distinct
+// namespace from the PerPod keys — a best-effort approximation sufficient for
+// single-cluster namespaces.
+func clusterTopologyFromVitals(sv *engine.SerializableVitals, vitals *engine.Vitals) ([]engine.ScyllaClusterInfo, map[engine.ScopeKey][]engine.PodInfo) {
+	// Preferred path: use the stored topology from the live run.
+	if sv.Topology != nil && len(sv.Topology.Clusters) > 0 {
+		clusterInfos := make([]engine.ScyllaClusterInfo, 0, len(sv.Topology.Clusters))
+		for _, ci := range sv.Topology.Clusters {
+			clusterInfos = append(clusterInfos, engine.ScyllaClusterInfo{
+				Namespace:  ci.Namespace,
+				Name:       ci.Name,
+				Kind:       ci.Kind,
+				APIVersion: ci.APIVersion,
+			})
+		}
+		podsByCluster := make(map[engine.ScopeKey][]engine.PodInfo, len(sv.Topology.Pods))
+		for key, spods := range sv.Topology.Pods {
+			pods := make([]engine.PodInfo, 0, len(spods))
+			for _, sp := range spods {
+				pods = append(pods, engine.PodInfo{
+					Namespace:      sp.Namespace,
+					Name:           sp.Name,
+					ClusterName:    sp.ClusterName,
+					DatacenterName: sp.DatacenterName,
+					RackName:       sp.RackName,
+				})
+			}
+			podsByCluster[key] = pods
+		}
+		return clusterInfos, podsByCluster
+	}
+
+	// Fallback: infer topology from PerScyllaCluster keys (if any) and PerPod keys.
+	// This handles archives produced before topology was stored in vitals.json.
 	clusterKeys := vitals.ScyllaClusterKeys()
 	clusterInfos := make([]engine.ScyllaClusterInfo, 0, len(clusterKeys))
 	for _, key := range clusterKeys {
@@ -818,11 +880,29 @@ func clusterTopologyFromVitals(vitals *engine.Vitals) ([]engine.ScyllaClusterInf
 	}
 
 	podKeys := vitals.PodKeys()
+
+	// If there are no PerScyllaCluster keys, synthesize one cluster per distinct
+	// namespace seen in the PerPod keys.  This is the common case when only
+	// PerPod-scope collectors ran (e.g. the default full profile today).
+	if len(clusterKeys) == 0 && len(podKeys) > 0 {
+		seen := make(map[string]bool)
+		for _, podKey := range podKeys {
+			if !seen[podKey.Namespace] {
+				seen[podKey.Namespace] = true
+				syntheticKey := engine.ScopeKey{Namespace: podKey.Namespace, Name: podKey.Namespace}
+				clusterKeys = append(clusterKeys, syntheticKey)
+				clusterInfos = append(clusterInfos, engine.ScyllaClusterInfo{
+					Namespace: podKey.Namespace,
+					Name:      podKey.Namespace, // best-effort; real name not available
+				})
+			}
+		}
+	}
+
 	podsByCluster := make(map[engine.ScopeKey][]engine.PodInfo)
 	for _, podKey := range podKeys {
 		// Pods are associated with clusters that share the same namespace.
-		// This is a best-effort reconstruction; if multiple clusters share a
-		// namespace, pods are assigned to the first matching cluster key.
+		// If multiple clusters share a namespace, pods go to the first match.
 		for _, clusterKey := range clusterKeys {
 			if clusterKey.Namespace == podKey.Namespace {
 				podsByCluster[clusterKey] = append(podsByCluster[clusterKey], engine.PodInfo{
