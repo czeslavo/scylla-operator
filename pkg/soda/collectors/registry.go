@@ -29,3 +29,17 @@ func AllCollectorsMap() map[engine.CollectorID]engine.Collector {
 	}
 	return m
 }
+
+// ResultTypeRegistry returns a map from CollectorID to a zero-value pointer of
+// the concrete result type produced by that collector. It is used by the offline
+// analysis path to unmarshal the JSON Data field in vitals.json back into the
+// correct Go type so that typed accessors (GetXxxResult) work without change.
+func ResultTypeRegistry() map[engine.CollectorID]any {
+	return map[engine.CollectorID]any{
+		NodeResourcesCollectorID:       &NodeResourcesResult{},
+		ScyllaClusterStatusCollectorID: &ScyllaClusterStatusResult{},
+		OSInfoCollectorID:              &OSInfoResult{},
+		ScyllaVersionCollectorID:       &ScyllaVersionResult{},
+		SchemaVersionsCollectorID:      &SchemaVersionsResult{},
+	}
+}

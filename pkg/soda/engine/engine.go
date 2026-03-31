@@ -125,7 +125,9 @@ func (e *Engine) Run(ctx context.Context) (*EngineResult, error) {
 	e.executeCollectors(ctx, sortedCollectors, vitals)
 
 	// Step 4: Execute analyzers.
-	analyzerResults := e.executeAnalyzers(resolvedAnalyzers, vitals)
+	// In live mode there is no pre-existing artifact reader; analyzers that need
+	// to read artifacts written by collectors can implement that access directly.
+	analyzerResults := e.executeAnalyzers(resolvedAnalyzers, vitals, nil)
 
 	return &EngineResult{
 		Vitals:             vitals,
@@ -326,11 +328,46 @@ func (e *Engine) checkCascade(collector Collector, vitals *Vitals, scopeKey Scop
 	return nil // All dependencies passed.
 }
 
+// OfflineRun skips the collection phase entirely and runs analyzers against
+// pre-loaded vitals (typically deserialized from a vitals.json stored in a
+// previous live run or archive). The artifactReader is passed through to each
+// analyzer so they can access raw artifact files written during the original run.
+//
+// The EngineConfig must still have AllCollectors, AllAnalyzers, AllProfiles,
+// ProfileName, Enable, Disable, ScyllaClusters, and Pods populated (they are
+// used for profile resolution and per-cluster analyzer dispatch). The Kubernetes
+// client fields and ArtifactWriterFactory are not used.
+func (e *Engine) OfflineRun(ctx context.Context, vitals *Vitals, artifactReader ArtifactReader) (*EngineResult, error) {
+	// Resolve the profile to determine which analyzers to run.
+	resolvedCollectors, resolvedAnalyzers, err := ResolveProfile(
+		e.config.ProfileName,
+		e.config.AllProfiles,
+		e.config.Enable,
+		e.config.Disable,
+		e.config.AllAnalyzers,
+		e.config.AllCollectors,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("resolving profile: %w", err)
+	}
+
+	// Run analyzers against the pre-loaded vitals.
+	analyzerResults := e.executeAnalyzers(resolvedAnalyzers, vitals, artifactReader)
+
+	return &EngineResult{
+		Vitals:             vitals,
+		AnalyzerResults:    analyzerResults,
+		ResolvedCollectors: resolvedCollectors,
+		ResolvedAnalyzers:  resolvedAnalyzers,
+	}, nil
+}
+
 // executeAnalyzers runs all enabled analyzers against the collected vitals.
 // For AnalyzerClusterWide analyzers the result is stored under an empty ScopeKey.
 // For AnalyzerPerScyllaCluster analyzers the analyzer is invoked once per ScyllaCluster
 // with vitals filtered to that cluster's pods only.
-func (e *Engine) executeAnalyzers(analyzerIDs []AnalyzerID, vitals *Vitals) map[AnalyzerID]map[ScopeKey]*AnalyzerResult {
+// artifactReader may be nil (live mode), in which case analyzers receive a nil reader.
+func (e *Engine) executeAnalyzers(analyzerIDs []AnalyzerID, vitals *Vitals, artifactReader ArtifactReader) map[AnalyzerID]map[ScopeKey]*AnalyzerResult {
 	results := make(map[AnalyzerID]map[ScopeKey]*AnalyzerResult, len(analyzerIDs))
 
 	for _, analyzerID := range analyzerIDs {
@@ -354,8 +391,9 @@ func (e *Engine) executeAnalyzers(analyzerIDs []AnalyzerID, vitals *Vitals) map[
 
 				clusterCopy := cluster
 				params := AnalyzerParams{
-					Vitals:        scopedVitals,
-					ScyllaCluster: &clusterCopy,
+					Vitals:         scopedVitals,
+					ScyllaCluster:  &clusterCopy,
+					ArtifactReader: artifactReader,
 				}
 				inner[clusterKey] = analyzer.Analyze(params)
 			}
@@ -375,7 +413,8 @@ func (e *Engine) executeAnalyzers(analyzerIDs []AnalyzerID, vitals *Vitals) map[
 			}
 
 			params := AnalyzerParams{
-				Vitals: vitals,
+				Vitals:         vitals,
+				ArtifactReader: artifactReader,
 			}
 			results[analyzerID] = map[ScopeKey]*AnalyzerResult{ScopeKey{}: analyzer.Analyze(params)}
 		}

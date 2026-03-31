@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -410,8 +411,80 @@ type SerializableVitals struct {
 	PerPod           map[ScopeKey]map[CollectorID]*SerializableCollectorResult `json:"per_pod"`
 }
 
-// toSerializableResult converts a CollectorResult to its serializable form,
-// marshaling the Data field to json.RawMessage.
+// FromSerializable reconstructs a *Vitals from a *SerializableVitals by
+// unmarshaling the Data field of each result back into a concrete Go type.
+// The typeRegistry maps CollectorID to a zero-value pointer of the expected
+// result struct (e.g. &NodeResourcesResult{}). Collectors whose ID is not
+// present in the registry will have Data set to nil (the result is still
+// usable for status/message/artifacts, but typed accessors will fail).
+func FromSerializable(sv *SerializableVitals, typeRegistry map[CollectorID]any) (*Vitals, error) {
+	v := NewVitals()
+
+	for id, sr := range sv.ClusterWide {
+		result, err := fromSerializableResult(id, sr, typeRegistry)
+		if err != nil {
+			return nil, fmt.Errorf("deserializing ClusterWide %s: %w", id, err)
+		}
+		v.ClusterWide[id] = result
+	}
+
+	for key, perCluster := range sv.PerScyllaCluster {
+		for id, sr := range perCluster {
+			result, err := fromSerializableResult(id, sr, typeRegistry)
+			if err != nil {
+				return nil, fmt.Errorf("deserializing PerScyllaCluster %s/%s: %w", key, id, err)
+			}
+			if v.PerScyllaCluster[key] == nil {
+				v.PerScyllaCluster[key] = make(map[CollectorID]*CollectorResult)
+			}
+			v.PerScyllaCluster[key][id] = result
+		}
+	}
+
+	for key, perPod := range sv.PerPod {
+		for id, sr := range perPod {
+			result, err := fromSerializableResult(id, sr, typeRegistry)
+			if err != nil {
+				return nil, fmt.Errorf("deserializing PerPod %s/%s: %w", key, id, err)
+			}
+			if v.PerPod[key] == nil {
+				v.PerPod[key] = make(map[CollectorID]*CollectorResult)
+			}
+			v.PerPod[key][id] = result
+		}
+	}
+
+	return v, nil
+}
+
+// fromSerializableResult converts a single SerializableCollectorResult back
+// to a CollectorResult, using the typeRegistry to unmarshal the Data field.
+func fromSerializableResult(id CollectorID, sr *SerializableCollectorResult, typeRegistry map[CollectorID]any) (*CollectorResult, error) {
+	result := &CollectorResult{
+		Status:    sr.Status,
+		Message:   sr.Message,
+		Artifacts: sr.Artifacts,
+		Duration:  time.Duration(sr.DurationMs) * time.Millisecond,
+	}
+
+	if len(sr.Data) > 0 {
+		prototype, ok := typeRegistry[id]
+		if ok {
+			// Allocate a fresh value of the same type as the prototype.
+			// prototype is already a pointer (e.g. *NodeResourcesResult).
+			// We need a new instance of the pointed-to type.
+			typedPtr := reflect.New(reflect.TypeOf(prototype).Elem()).Interface()
+			if err := json.Unmarshal(sr.Data, typedPtr); err != nil {
+				return nil, fmt.Errorf("unmarshaling data for %s: %w", id, err)
+			}
+			result.Data = typedPtr
+		}
+		// If no prototype is registered, Data stays nil; the result is still
+		// usable for status/message/artifacts checks.
+	}
+
+	return result, nil
+}
 func toSerializableResult(r *CollectorResult) (*SerializableCollectorResult, error) {
 	sr := &SerializableCollectorResult{
 		Status:     r.Status,

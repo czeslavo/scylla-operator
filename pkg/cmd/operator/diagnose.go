@@ -1,7 +1,9 @@
 package operator
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -71,9 +73,10 @@ type DiagnoseOptions struct {
 	Disable     []string
 
 	// Output flags.
-	OutputDir string
-	DryRun    bool
-	KeepGoing bool
+	OutputDir   string
+	DryRun      bool
+	KeepGoing   bool
+	FromArchive string // Path to a previous output directory (or .tar.gz archive) for offline re-analysis.
 
 	// Resolved at Complete() time.
 	restConfig   *rest.Config
@@ -100,6 +103,7 @@ func (o *DiagnoseOptions) AddFlags(flagset *pflag.FlagSet) {
 	flagset.StringVar(&o.OutputDir, "output-dir", o.OutputDir, "Directory to write artifacts. If empty, artifacts are written to a temp directory.")
 	flagset.BoolVar(&o.DryRun, "dry-run", o.DryRun, "Print what would be collected and analyzed without connecting to the cluster.")
 	flagset.BoolVar(&o.KeepGoing, "keep-going", o.KeepGoing, "Continue running diagnostics even if some collectors fail.")
+	flagset.StringVar(&o.FromArchive, "from-archive", o.FromArchive, "Path to a previous output directory (or .tar.gz archive) to re-analyze offline without connecting to the cluster.")
 }
 
 // NewDiagnoseCmd creates the diagnose cobra command.
@@ -139,6 +143,19 @@ func (o *DiagnoseOptions) Validate() error {
 		return fmt.Errorf("unknown profile %q, available profiles: %s", o.ProfileName, strings.Join(available, ", "))
 	}
 
+	if o.FromArchive != "" {
+		if o.ClusterName != "" {
+			return fmt.Errorf("--from-archive and --cluster-name are mutually exclusive")
+		}
+		kubeconfig := ""
+		if o.ConfigFlags.KubeConfig != nil {
+			kubeconfig = *o.ConfigFlags.KubeConfig
+		}
+		if kubeconfig != "" {
+			return fmt.Errorf("--from-archive and --kubeconfig are mutually exclusive")
+		}
+	}
+
 	return nil
 }
 
@@ -146,19 +163,22 @@ func (o *DiagnoseOptions) Validate() error {
 func (o *DiagnoseOptions) Complete() error {
 	var err error
 
-	o.restConfig, err = o.ConfigFlags.ToRESTConfig()
-	if err != nil {
-		return fmt.Errorf("creating REST config: %w", err)
-	}
+	// Skip cluster connectivity when running in offline mode.
+	if o.FromArchive == "" {
+		o.restConfig, err = o.ConfigFlags.ToRESTConfig()
+		if err != nil {
+			return fmt.Errorf("creating REST config: %w", err)
+		}
 
-	o.kubeClient, err = kubernetes.NewForConfig(o.restConfig)
-	if err != nil {
-		return fmt.Errorf("creating Kubernetes client: %w", err)
-	}
+		o.kubeClient, err = kubernetes.NewForConfig(o.restConfig)
+		if err != nil {
+			return fmt.Errorf("creating Kubernetes client: %w", err)
+		}
 
-	o.scyllaClient, err = scyllaversionedclient.NewForConfig(o.restConfig)
-	if err != nil {
-		return fmt.Errorf("creating Scylla client: %w", err)
+		o.scyllaClient, err = scyllaversionedclient.NewForConfig(o.restConfig)
+		if err != nil {
+			return fmt.Errorf("creating Scylla client: %w", err)
+		}
 	}
 
 	// Set up output directory.
@@ -187,6 +207,11 @@ func (o *DiagnoseOptions) Run(streams genericclioptions.IOStreams, cmd *cobra.Co
 	// --dry-run: resolve and print the plan without touching the cluster.
 	if o.DryRun {
 		return o.printDryRunSummary(streams.Out)
+	}
+
+	// --from-archive: offline re-analysis against a previous output directory.
+	if o.FromArchive != "" {
+		return o.runOffline(ctx, streams)
 	}
 
 	// Discover targets.
@@ -628,4 +653,234 @@ func makeProgressPrinter(w io.Writer) func(engine.CollectorEvent) {
 			}
 		}
 	}
+}
+
+// runOffline loads vitals.json from the archive path, reconstructs the Vitals
+// store, and runs analyzers against it without connecting to the cluster.
+// If the archive path ends in ".tar.gz" it is first extracted to a temp directory.
+func (o *DiagnoseOptions) runOffline(ctx context.Context, streams genericclioptions.IOStreams) error {
+	archiveDir := o.FromArchive
+
+	// If the path is a .tar.gz, extract it to a temp directory first.
+	var tempDir string
+	if strings.HasSuffix(o.FromArchive, ".tar.gz") {
+		var err error
+		tempDir, err = os.MkdirTemp("", "scylla-diagnose-offline-*")
+		if err != nil {
+			return fmt.Errorf("creating temp directory for extraction: %w", err)
+		}
+		defer os.RemoveAll(tempDir)
+
+		if err := extractTarGz(o.FromArchive, tempDir); err != nil {
+			return fmt.Errorf("extracting archive %s: %w", o.FromArchive, err)
+		}
+		archiveDir = tempDir
+	}
+
+	// Load vitals.json.
+	vitalsPath := filepath.Join(archiveDir, "vitals.json")
+	vitalsData, err := os.ReadFile(vitalsPath)
+	if err != nil {
+		return fmt.Errorf("reading vitals.json from %s: %w", vitalsPath, err)
+	}
+
+	var sv engine.SerializableVitals
+	if err := json.Unmarshal(vitalsData, &sv); err != nil {
+		return fmt.Errorf("parsing vitals.json: %w", err)
+	}
+
+	vitals, err := engine.FromSerializable(&sv, collectors.ResultTypeRegistry())
+	if err != nil {
+		return fmt.Errorf("deserializing vitals: %w", err)
+	}
+
+	// Build engine config — no Kubernetes clients needed.
+	enableIDs := make([]engine.AnalyzerID, len(o.Enable))
+	for i, s := range o.Enable {
+		enableIDs[i] = engine.AnalyzerID(s)
+	}
+	disableIDs := make([]engine.AnalyzerID, len(o.Disable))
+	for i, s := range o.Disable {
+		disableIDs[i] = engine.AnalyzerID(s)
+	}
+
+	// Reconstruct the cluster/pod topology from the vitals store so that the
+	// per-cluster analyzer dispatch works correctly.
+	clusterInfos, podsByCluster := clusterTopologyFromVitals(vitals)
+
+	config := engine.EngineConfig{
+		AllCollectors: collectors.AllCollectorsMap(),
+		AllAnalyzers:  analyzers.AllAnalyzersMap(),
+		AllProfiles:   profiles.AllProfiles(),
+
+		ProfileName: o.ProfileName,
+		Enable:      enableIDs,
+		Disable:     disableIDs,
+
+		ScyllaClusters: clusterInfos,
+		Pods:           podsByCluster,
+	}
+
+	eng := engine.NewEngine(config)
+	artifactReader := &fsArtifactReader{baseDir: archiveDir}
+	result, err := eng.OfflineRun(ctx, vitals, artifactReader)
+	if err != nil {
+		return fmt.Errorf("running offline analysis: %w", err)
+	}
+
+	// Display console output.
+	cw := output.NewConsoleWriter(streams.Out)
+	if err := cw.WriteReport(result, o.ProfileName, clusterInfos, podsByCluster); err != nil {
+		return fmt.Errorf("writing console report: %w", err)
+	}
+
+	return nil
+}
+
+// clusterTopologyFromVitals reconstructs the minimal ScyllaClusterInfo and pod
+// topology from the keys present in the Vitals store. The ScyllaClusterInfo
+// objects will only have Namespace and Name populated (sufficient for analyzer
+// dispatch); the full Kubernetes objects are not available offline.
+func clusterTopologyFromVitals(vitals *engine.Vitals) ([]engine.ScyllaClusterInfo, map[engine.ScopeKey][]engine.PodInfo) {
+	clusterKeys := vitals.ScyllaClusterKeys()
+	clusterInfos := make([]engine.ScyllaClusterInfo, 0, len(clusterKeys))
+	for _, key := range clusterKeys {
+		clusterInfos = append(clusterInfos, engine.ScyllaClusterInfo{
+			Namespace: key.Namespace,
+			Name:      key.Name,
+		})
+	}
+
+	podKeys := vitals.PodKeys()
+	podsByCluster := make(map[engine.ScopeKey][]engine.PodInfo)
+	for _, podKey := range podKeys {
+		// Pods are associated with clusters that share the same namespace.
+		// This is a best-effort reconstruction; if multiple clusters share a
+		// namespace, pods are assigned to the first matching cluster key.
+		for _, clusterKey := range clusterKeys {
+			if clusterKey.Namespace == podKey.Namespace {
+				podsByCluster[clusterKey] = append(podsByCluster[clusterKey], engine.PodInfo{
+					Namespace: podKey.Namespace,
+					Name:      podKey.Name,
+				})
+				break
+			}
+		}
+	}
+
+	return clusterInfos, podsByCluster
+}
+
+// extractTarGz extracts a .tar.gz archive to the given destination directory.
+func extractTarGz(src, dest string) error {
+	f, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf("opening archive: %w", err)
+	}
+	defer f.Close()
+
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		return fmt.Errorf("creating gzip reader: %w", err)
+	}
+	defer gz.Close()
+
+	tr := tar.NewReader(gz)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("reading tar entry: %w", err)
+		}
+
+		// Sanitise path to prevent directory traversal attacks.
+		target := filepath.Join(dest, filepath.Clean("/"+header.Name))
+		if !strings.HasPrefix(target, dest+string(os.PathSeparator)) && target != dest {
+			return fmt.Errorf("tar entry %q would escape destination directory", header.Name)
+		}
+
+		switch header.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(target, 0o755); err != nil {
+				return fmt.Errorf("creating directory %s: %w", target, err)
+			}
+		case tar.TypeReg:
+			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+				return fmt.Errorf("creating parent directory for %s: %w", target, err)
+			}
+			out, err := os.Create(target)
+			if err != nil {
+				return fmt.Errorf("creating file %s: %w", target, err)
+			}
+			if _, err := io.Copy(out, tr); err != nil {
+				out.Close()
+				return fmt.Errorf("writing file %s: %w", target, err)
+			}
+			out.Close()
+		}
+	}
+	return nil
+}
+
+// fsArtifactReader implements engine.ArtifactReader by reading from the
+// filesystem layout produced by fsArtifactWriterFactory:
+//
+//	<baseDir>/collectors/cluster-wide/<collectorID>/<filename>
+//	<baseDir>/collectors/per-scylla-cluster/<ns>/<name>/<collectorID>/<filename>
+//	<baseDir>/collectors/per-pod/<ns>/<name>/<collectorID>/<filename>
+//
+// It does not need to know the scope up-front — it probes the three possible
+// locations and returns the first file found. For ListArtifacts, it reads the
+// Artifacts slice from vitals.json (already loaded into the Vitals store) so
+// this type only needs to implement ReadArtifact for direct content reads.
+type fsArtifactReader struct {
+	baseDir string
+}
+
+var _ engine.ArtifactReader = (*fsArtifactReader)(nil)
+
+// artifactDir returns the directory path for a given collector ID and scope key
+// by probing the three possible scope directories.
+func (r *fsArtifactReader) artifactDir(collectorID engine.CollectorID, scopeKey engine.ScopeKey) string {
+	if scopeKey.IsEmpty() {
+		return filepath.Join(r.baseDir, "collectors", "cluster-wide", string(collectorID))
+	}
+	// Try per-pod first (most specific), then per-scylla-cluster.
+	perPod := filepath.Join(r.baseDir, "collectors", "per-pod", scopeKey.Namespace, scopeKey.Name, string(collectorID))
+	if _, err := os.Stat(perPod); err == nil {
+		return perPod
+	}
+	return filepath.Join(r.baseDir, "collectors", "per-scylla-cluster", scopeKey.Namespace, scopeKey.Name, string(collectorID))
+}
+
+func (r *fsArtifactReader) ReadArtifact(collectorID engine.CollectorID, scopeKey engine.ScopeKey, filename string) ([]byte, error) {
+	path := filepath.Join(r.artifactDir(collectorID, scopeKey), filename)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("reading artifact %s: %w", path, err)
+	}
+	return data, nil
+}
+
+func (r *fsArtifactReader) ListArtifacts(collectorID engine.CollectorID, scopeKey engine.ScopeKey) ([]engine.Artifact, error) {
+	dir := r.artifactDir(collectorID, scopeKey)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("listing artifacts in %s: %w", dir, err)
+	}
+
+	var artifacts []engine.Artifact
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			artifacts = append(artifacts, engine.Artifact{
+				RelativePath: entry.Name(),
+			})
+		}
+	}
+	return artifacts, nil
 }
