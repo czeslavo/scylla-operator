@@ -421,3 +421,155 @@ func TestResolveProfileEnableUnknownAnalyzer(t *testing.T) {
 		t.Fatal("expected error for unknown enabled analyzer ID")
 	}
 }
+
+// --- Tests for explicit Collectors in Profile ---
+
+func TestResolveProfileExplicitCollectors(t *testing.T) {
+	// Profile lists collectors explicitly with no analyzers.
+	// All listed collectors (and their transitive deps) should be resolved.
+	collectors := map[CollectorID]Collector{
+		"C1": &stubCollector{id: "C1", scope: ClusterWide},
+		"C2": &stubCollector{id: "C2", scope: PerScyllaCluster},
+		"C3": &stubCollector{id: "C3", scope: PerPod},
+	}
+	profiles := map[string]Profile{
+		"data-only": {
+			Name:       "data-only",
+			Collectors: []CollectorID{"C1", "C2", "C3"},
+		},
+	}
+
+	gotC, gotA, err := ResolveProfile("data-only", profiles, nil, nil, map[AnalyzerID]Analyzer{}, collectors)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expectedC := []CollectorID{"C1", "C2", "C3"}
+	if !reflect.DeepEqual(gotC, expectedC) {
+		t.Errorf("collectors = %v, want %v", gotC, expectedC)
+	}
+	if len(gotA) != 0 {
+		t.Errorf("expected 0 analyzers, got %v", gotA)
+	}
+}
+
+func TestResolveProfileExplicitCollectorsWithTransitiveDeps(t *testing.T) {
+	// Explicit collector C3 depends on C2, which depends on C1.
+	// All three should be in the resolved set.
+	collectors := map[CollectorID]Collector{
+		"C1": &stubCollector{id: "C1", scope: ClusterWide},
+		"C2": &stubCollector{id: "C2", scope: ClusterWide, deps: []CollectorID{"C1"}},
+		"C3": &stubCollector{id: "C3", scope: ClusterWide, deps: []CollectorID{"C2"}},
+	}
+	profiles := map[string]Profile{
+		"test": {Name: "test", Collectors: []CollectorID{"C3"}},
+	}
+
+	gotC, _, err := ResolveProfile("test", profiles, nil, nil, map[AnalyzerID]Analyzer{}, collectors)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expectedC := []CollectorID{"C1", "C2", "C3"}
+	if !reflect.DeepEqual(gotC, expectedC) {
+		t.Errorf("collectors = %v, want %v", gotC, expectedC)
+	}
+}
+
+func TestResolveProfileExplicitCollectorsUnknown(t *testing.T) {
+	// An unknown collector ID in the profile Collectors list is an error.
+	profiles := map[string]Profile{
+		"test": {Name: "test", Collectors: []CollectorID{"NonexistentCollector"}},
+	}
+
+	_, _, err := ResolveProfile("test", profiles, nil, nil, map[AnalyzerID]Analyzer{}, map[CollectorID]Collector{})
+	if err == nil {
+		t.Fatal("expected error for unknown collector ID in profile")
+	}
+}
+
+func TestResolveProfileExplicitCollectorsAndAnalyzers(t *testing.T) {
+	// Both Collectors and Analyzers are listed; the resolved collector set is
+	// the union of explicit collectors and the analyzer transitive closure.
+	// C1 is only reachable via explicit listing; C2 only via the analyzer.
+	collectors := map[CollectorID]Collector{
+		"C1": &stubCollector{id: "C1", scope: ClusterWide},
+		"C2": &stubCollector{id: "C2", scope: PerPod},
+	}
+	analyzers := map[AnalyzerID]Analyzer{
+		"A1": &stubAnalyzer{id: "A1", deps: []CollectorID{"C2"}},
+	}
+	profiles := map[string]Profile{
+		"test": {
+			Name:       "test",
+			Collectors: []CollectorID{"C1"},
+			Analyzers:  []AnalyzerID{"A1"},
+		},
+	}
+
+	gotC, gotA, err := ResolveProfile("test", profiles, nil, nil, analyzers, collectors)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expectedC := []CollectorID{"C1", "C2"}
+	expectedA := []AnalyzerID{"A1"}
+
+	if !reflect.DeepEqual(gotC, expectedC) {
+		t.Errorf("collectors = %v, want %v", gotC, expectedC)
+	}
+	if !reflect.DeepEqual(gotA, expectedA) {
+		t.Errorf("analyzers = %v, want %v", gotA, expectedA)
+	}
+}
+
+func TestResolveProfileExplicitCollectorsDeduplication(t *testing.T) {
+	// A collector listed explicitly AND depended on by an analyzer
+	// should appear only once in the resolved set.
+	collectors := map[CollectorID]Collector{
+		"C1": &stubCollector{id: "C1", scope: PerPod},
+	}
+	analyzers := map[AnalyzerID]Analyzer{
+		"A1": &stubAnalyzer{id: "A1", deps: []CollectorID{"C1"}},
+	}
+	profiles := map[string]Profile{
+		"test": {
+			Name:       "test",
+			Collectors: []CollectorID{"C1"},
+			Analyzers:  []AnalyzerID{"A1"},
+		},
+	}
+
+	gotC, _, err := ResolveProfile("test", profiles, nil, nil, analyzers, collectors)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// C1 should appear exactly once.
+	expectedC := []CollectorID{"C1"}
+	if !reflect.DeepEqual(gotC, expectedC) {
+		t.Errorf("collectors = %v, want %v", gotC, expectedC)
+	}
+}
+
+func TestResolveProfileExplicitCollectorsInheritedViaIncludes(t *testing.T) {
+	// Explicit collectors are inherited through profile composition (Includes).
+	collectors := map[CollectorID]Collector{
+		"C1": &stubCollector{id: "C1", scope: ClusterWide},
+		"C2": &stubCollector{id: "C2", scope: PerPod},
+	}
+	profiles := map[string]Profile{
+		"base": {Name: "base", Collectors: []CollectorID{"C1"}},
+		"full": {Name: "full", Includes: []string{"base"}, Collectors: []CollectorID{"C2"}},
+	}
+
+	gotC, _, err := ResolveProfile("full", profiles, nil, nil, map[AnalyzerID]Analyzer{}, collectors)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expectedC := []CollectorID{"C1", "C2"}
+	if !reflect.DeepEqual(gotC, expectedC) {
+		t.Errorf("collectors = %v, want %v", gotC, expectedC)
+	}
+}

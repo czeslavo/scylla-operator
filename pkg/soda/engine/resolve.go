@@ -10,14 +10,15 @@ import (
 // collector dependency closure.
 //
 // Steps:
-// 1. Flatten the profile's Includes recursively (detect cycles via visited set).
-// 2. Merge all Analyzers from the flattened profile set.
-// 3. Add enable items, remove disable items.
-// 4. Validate all analyzer IDs exist in the registry.
-// 5. For each analyzer, walk DependsOn() → collector IDs.
-// 6. For each collector, walk its DependsOn() → more collector IDs (transitive closure).
-// 7. Validate cross-scope dependency constraints.
-// 8. Return deduplicated, sorted lists.
+//  1. Flatten the profile's Includes recursively (detect cycles via visited set).
+//  2. Merge all Analyzers and explicit Collectors from the flattened profile set.
+//  3. Add enable items, remove disable items (for analyzers).
+//  4. Validate all analyzer IDs exist in the registry.
+//  5. For each analyzer, walk DependsOn() → collector IDs.
+//  6. For each collector, walk its DependsOn() → more collector IDs (transitive closure).
+//  7. Merge explicitly listed collectors (+ their transitive deps) into the closure.
+//  8. Validate cross-scope dependency constraints.
+//  9. Return deduplicated, sorted lists.
 func ResolveProfile(
 	profileName string,
 	allProfiles map[string]Profile,
@@ -26,13 +27,13 @@ func ResolveProfile(
 	allAnalyzers map[AnalyzerID]Analyzer,
 	allCollectors map[CollectorID]Collector,
 ) (resolvedCollectors []CollectorID, resolvedAnalyzers []AnalyzerID, err error) {
-	// Step 1+2: Flatten profile includes and merge analyzers.
-	analyzerSet, err := flattenProfile(profileName, allProfiles, make(map[string]bool))
+	// Step 1+2: Flatten profile includes and merge analyzers + explicit collectors.
+	analyzerSet, explicitCollectorSet, err := flattenProfile(profileName, allProfiles, make(map[string]bool))
 	if err != nil {
 		return nil, nil, fmt.Errorf("resolving profile %q: %w", profileName, err)
 	}
 
-	// Step 3: Apply enable/disable overrides.
+	// Step 3: Apply enable/disable overrides (analyzers only).
 	for _, id := range enable {
 		analyzerSet[id] = true
 	}
@@ -47,7 +48,7 @@ func ResolveProfile(
 		}
 	}
 
-	// Step 5+6: Compute transitive collector closure.
+	// Step 5+6: Compute transitive collector closure from analyzer dependencies.
 	collectorSet := make(map[CollectorID]bool)
 	for analyzerID := range analyzerSet {
 		analyzer := allAnalyzers[analyzerID]
@@ -58,50 +59,68 @@ func ResolveProfile(
 		}
 	}
 
-	// Step 7: Validate cross-scope dependency constraints.
+	// Step 7: Validate and merge explicitly listed collectors (+ their transitive deps).
+	for id := range explicitCollectorSet {
+		if _, ok := allCollectors[id]; !ok {
+			return nil, nil, fmt.Errorf("unknown collector ID %q in profile", id)
+		}
+		if err := resolveCollectorDeps(id, allCollectors, collectorSet, make(map[CollectorID]bool)); err != nil {
+			return nil, nil, fmt.Errorf("resolving dependencies for explicit collector %q: %w", id, err)
+		}
+	}
+
+	// Step 8: Validate cross-scope dependency constraints.
 	if err := validateCrossScopeDeps(collectorSet, allCollectors); err != nil {
 		return nil, nil, err
 	}
 
-	// Step 8: Return sorted, deduplicated lists.
+	// Step 9: Return sorted, deduplicated lists.
 	resolvedCollectors = sortedCollectorIDs(collectorSet)
 	resolvedAnalyzers = sortedAnalyzerIDs(analyzerSet)
 	return resolvedCollectors, resolvedAnalyzers, nil
 }
 
 // flattenProfile recursively resolves a profile and its includes, returning the
-// merged set of analyzer IDs. Detects cycles via the visiting set.
-func flattenProfile(name string, allProfiles map[string]Profile, visiting map[string]bool) (map[AnalyzerID]bool, error) {
+// merged set of analyzer IDs and the merged set of explicitly listed collector IDs.
+// Detects cycles via the visiting set.
+func flattenProfile(name string, allProfiles map[string]Profile, visiting map[string]bool) (map[AnalyzerID]bool, map[CollectorID]bool, error) {
 	if visiting[name] {
-		return nil, fmt.Errorf("cycle detected in profile includes: %q", name)
+		return nil, nil, fmt.Errorf("cycle detected in profile includes: %q", name)
 	}
 	profile, ok := allProfiles[name]
 	if !ok {
-		return nil, fmt.Errorf("unknown profile %q", name)
+		return nil, nil, fmt.Errorf("unknown profile %q", name)
 	}
 
 	visiting[name] = true
 	defer func() { visiting[name] = false }()
 
-	result := make(map[AnalyzerID]bool)
+	analyzerResult := make(map[AnalyzerID]bool)
+	collectorResult := make(map[CollectorID]bool)
 
 	// First, resolve all included profiles.
 	for _, includeName := range profile.Includes {
-		included, err := flattenProfile(includeName, allProfiles, visiting)
+		includedA, includedC, err := flattenProfile(includeName, allProfiles, visiting)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		for id := range included {
-			result[id] = true
+		for id := range includedA {
+			analyzerResult[id] = true
+		}
+		for id := range includedC {
+			collectorResult[id] = true
 		}
 	}
 
-	// Then add this profile's own analyzers.
+	// Then add this profile's own analyzers and explicit collectors.
 	for _, id := range profile.Analyzers {
-		result[id] = true
+		analyzerResult[id] = true
+	}
+	for _, id := range profile.Collectors {
+		collectorResult[id] = true
 	}
 
-	return result, nil
+	return analyzerResult, collectorResult, nil
 }
 
 // resolveCollectorDeps walks a collector's dependency tree, adding all

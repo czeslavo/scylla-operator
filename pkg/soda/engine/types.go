@@ -398,12 +398,13 @@ func (v *Vitals) ForScyllaCluster(clusterKey ScopeKey, podKeys []ScopeKey) *Vita
 	return scoped
 }
 
-// Profile defines a set of analyzers to run as a group.
+// Profile defines a set of analyzers and collectors to run as a group.
 type Profile struct {
 	Name        string
 	Description string
-	Includes    []string     // Names of other profiles to compose
-	Analyzers   []AnalyzerID // Analyzer IDs this profile enables
+	Includes    []string      // Names of other profiles to compose
+	Analyzers   []AnalyzerID  // Analyzer IDs this profile enables
+	Collectors  []CollectorID // Collector IDs explicitly included; run regardless of analyzer dependencies
 }
 
 // SerializableCollectorResult is the JSON-safe version of CollectorResult.
