@@ -6,6 +6,29 @@ import (
 	"sort"
 )
 
+// CollectorEventKind distinguishes the two progress events emitted per collector invocation.
+type CollectorEventKind int
+
+const (
+	// CollectorEventStarted is emitted immediately before a collector runs.
+	CollectorEventStarted CollectorEventKind = iota
+	// CollectorEventFinished is emitted immediately after a collector completes.
+	CollectorEventFinished
+)
+
+// CollectorEvent carries progress information for a single collector invocation.
+// It is passed to EngineConfig.OnCollectorEvent after each start/finish.
+type CollectorEvent struct {
+	Kind          CollectorEventKind
+	CollectorID   CollectorID
+	CollectorName string
+	Scope         CollectorScope
+	ScopeKey      ScopeKey // Empty for ClusterWide collectors.
+
+	// Only populated for CollectorEventFinished.
+	Result *CollectorResult
+}
+
 // EngineConfig holds all inputs needed to construct and run the diagnostic engine.
 type EngineConfig struct {
 	// Registry
@@ -30,6 +53,11 @@ type EngineConfig struct {
 
 	// Artifact management
 	ArtifactWriterFactory ArtifactWriterFactory
+
+	// Progress reporting. If non-nil, called synchronously before and after
+	// each collector invocation. Implementations must be safe for concurrent
+	// use if the engine is ever parallelised in the future.
+	OnCollectorEvent func(event CollectorEvent)
 
 	// Behavior
 	KeepGoing bool
@@ -134,11 +162,20 @@ func (e *Engine) executeCollectors(ctx context.Context, sortedCollectors []Colle
 	}
 }
 
+// emitEvent calls OnCollectorEvent if one is configured.
+func (e *Engine) emitEvent(event CollectorEvent) {
+	if e.config.OnCollectorEvent != nil {
+		e.config.OnCollectorEvent(event)
+	}
+}
+
 func (e *Engine) executeClusterWideCollector(ctx context.Context, collector Collector, vitals *Vitals) {
 	scopeKey := ScopeKey{} // Empty for ClusterWide.
 
 	// Check cascade: if any dependency failed/skipped, cascade.
 	if result := e.checkCascade(collector, vitals, scopeKey); result != nil {
+		e.emitEvent(CollectorEvent{Kind: CollectorEventStarted, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: ClusterWide, ScopeKey: scopeKey})
+		e.emitEvent(CollectorEvent{Kind: CollectorEventFinished, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: ClusterWide, ScopeKey: scopeKey, Result: result})
 		vitals.Store(collector.ID(), ClusterWide, scopeKey, result)
 		return
 	}
@@ -157,6 +194,7 @@ func (e *Engine) executeClusterWideCollector(ctx context.Context, collector Coll
 		ArtifactWriter:      artifactWriter,
 	}
 
+	e.emitEvent(CollectorEvent{Kind: CollectorEventStarted, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: ClusterWide, ScopeKey: scopeKey})
 	result, err := collector.Collect(ctx, params)
 	if err != nil {
 		result = &CollectorResult{
@@ -164,12 +202,15 @@ func (e *Engine) executeClusterWideCollector(ctx context.Context, collector Coll
 			Message: fmt.Sprintf("collector error: %v", err),
 		}
 	}
+	e.emitEvent(CollectorEvent{Kind: CollectorEventFinished, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: ClusterWide, ScopeKey: scopeKey, Result: result})
 
 	vitals.Store(collector.ID(), ClusterWide, scopeKey, result)
 }
 
 func (e *Engine) executePerScyllaClusterCollector(ctx context.Context, collector Collector, cluster *ScyllaClusterInfo, clusterKey ScopeKey, vitals *Vitals) {
 	if result := e.checkCascade(collector, vitals, clusterKey); result != nil {
+		e.emitEvent(CollectorEvent{Kind: CollectorEventStarted, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerScyllaCluster, ScopeKey: clusterKey})
+		e.emitEvent(CollectorEvent{Kind: CollectorEventFinished, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerScyllaCluster, ScopeKey: clusterKey, Result: result})
 		vitals.Store(collector.ID(), PerScyllaCluster, clusterKey, result)
 		return
 	}
@@ -189,6 +230,7 @@ func (e *Engine) executePerScyllaClusterCollector(ctx context.Context, collector
 		ArtifactWriter:      artifactWriter,
 	}
 
+	e.emitEvent(CollectorEvent{Kind: CollectorEventStarted, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerScyllaCluster, ScopeKey: clusterKey})
 	result, err := collector.Collect(ctx, params)
 	if err != nil {
 		result = &CollectorResult{
@@ -196,12 +238,15 @@ func (e *Engine) executePerScyllaClusterCollector(ctx context.Context, collector
 			Message: fmt.Sprintf("collector error: %v", err),
 		}
 	}
+	e.emitEvent(CollectorEvent{Kind: CollectorEventFinished, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerScyllaCluster, ScopeKey: clusterKey, Result: result})
 
 	vitals.Store(collector.ID(), PerScyllaCluster, clusterKey, result)
 }
 
 func (e *Engine) executePerPodCollector(ctx context.Context, collector Collector, cluster *ScyllaClusterInfo, pod *PodInfo, podKey ScopeKey, vitals *Vitals) {
 	if result := e.checkCascade(collector, vitals, podKey); result != nil {
+		e.emitEvent(CollectorEvent{Kind: CollectorEventStarted, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerPod, ScopeKey: podKey})
+		e.emitEvent(CollectorEvent{Kind: CollectorEventFinished, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerPod, ScopeKey: podKey, Result: result})
 		vitals.Store(collector.ID(), PerPod, podKey, result)
 		return
 	}
@@ -222,6 +267,7 @@ func (e *Engine) executePerPodCollector(ctx context.Context, collector Collector
 		ArtifactWriter:      artifactWriter,
 	}
 
+	e.emitEvent(CollectorEvent{Kind: CollectorEventStarted, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerPod, ScopeKey: podKey})
 	result, err := collector.Collect(ctx, params)
 	if err != nil {
 		result = &CollectorResult{
@@ -229,6 +275,7 @@ func (e *Engine) executePerPodCollector(ctx context.Context, collector Collector
 			Message: fmt.Sprintf("collector error: %v", err),
 		}
 	}
+	e.emitEvent(CollectorEvent{Kind: CollectorEventFinished, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerPod, ScopeKey: podKey, Result: result})
 
 	vitals.Store(collector.ID(), PerPod, podKey, result)
 }

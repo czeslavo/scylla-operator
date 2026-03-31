@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -232,6 +233,7 @@ func (o *DiagnoseOptions) Run(streams genericclioptions.IOStreams, cmd *cobra.Co
 		PodLister:           podLister,
 
 		ArtifactWriterFactory: artifactFactory,
+		OnCollectorEvent:      makeProgressPrinter(streams.ErrOut),
 		KeepGoing:             o.KeepGoing,
 	}
 
@@ -529,4 +531,39 @@ func (w *fsArtifactWriter) WriteArtifact(filename string, content []byte) (strin
 	// Return just the filename as the relative path — relative to the
 	// collector's own artifact directory (w.dir).
 	return filename, nil
+}
+
+// makeProgressPrinter returns an OnCollectorEvent callback that prints a single
+// progress line to w for each collector start and finish event.
+//
+// Format examples:
+//
+//	collecting: Kubernetes Node resources (cluster-wide) ...
+//	collected:  Kubernetes Node resources (cluster-wide) PASSED
+//	collecting: OS information (pod scylla/scylla-0) ...
+//	collected:  OS information (pod scylla/scylla-0) FAILED: collector error: ...
+func makeProgressPrinter(w io.Writer) func(engine.CollectorEvent) {
+	return func(ev engine.CollectorEvent) {
+		var scopeLabel string
+		switch ev.Scope {
+		case engine.ClusterWide:
+			scopeLabel = "cluster-wide"
+		case engine.PerScyllaCluster:
+			scopeLabel = fmt.Sprintf("cluster %s", ev.ScopeKey)
+		case engine.PerPod:
+			scopeLabel = fmt.Sprintf("pod %s", ev.ScopeKey)
+		}
+
+		switch ev.Kind {
+		case engine.CollectorEventStarted:
+			fmt.Fprintf(w, "collecting: %s (%s) ...\n", ev.CollectorName, scopeLabel)
+		case engine.CollectorEventFinished:
+			status := ev.Result.Status.String()
+			if ev.Result.Message != "" && ev.Result.Status != engine.CollectorPassed {
+				fmt.Fprintf(w, "collected:  %s (%s) %s: %s\n", ev.CollectorName, scopeLabel, status, ev.Result.Message)
+			} else {
+				fmt.Fprintf(w, "collected:  %s (%s) %s\n", ev.CollectorName, scopeLabel, status)
+			}
+		}
+	}
 }
