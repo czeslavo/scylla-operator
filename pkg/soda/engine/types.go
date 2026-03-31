@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -165,6 +166,7 @@ type CollectorResult struct {
 	Data      any             `json:"-"` // Concrete typed struct; not serialized directly
 	Message   string          `json:"message"`
 	Artifacts []Artifact      `json:"artifacts"` // Raw files written by this collector
+	Duration  time.Duration   `json:"-"`         // Wall-clock time spent in Collect(); omitted from direct JSON
 }
 
 // AnalyzerResult holds the outcome of a single analyzer execution.
@@ -392,10 +394,11 @@ type Profile struct {
 // Unlike CollectorResult, the Data field is stored as json.RawMessage so it
 // can be persisted to vitals.json and later loaded for offline analysis.
 type SerializableCollectorResult struct {
-	Status    CollectorStatus `json:"status"`
-	Data      json.RawMessage `json:"data,omitempty"`
-	Message   string          `json:"message"`
-	Artifacts []Artifact      `json:"artifacts"`
+	Status     CollectorStatus `json:"status"`
+	Data       json.RawMessage `json:"data,omitempty"`
+	Message    string          `json:"message"`
+	Artifacts  []Artifact      `json:"artifacts"`
+	DurationMs int64           `json:"duration_ms,omitempty"` // Wall-clock milliseconds spent in Collect()
 }
 
 // SerializableVitals is the JSON-safe version of Vitals for persistence
@@ -411,9 +414,10 @@ type SerializableVitals struct {
 // marshaling the Data field to json.RawMessage.
 func toSerializableResult(r *CollectorResult) (*SerializableCollectorResult, error) {
 	sr := &SerializableCollectorResult{
-		Status:    r.Status,
-		Message:   r.Message,
-		Artifacts: r.Artifacts,
+		Status:     r.Status,
+		Message:    r.Message,
+		Artifacts:  r.Artifacts,
+		DurationMs: r.Duration.Milliseconds(),
 	}
 	if r.Data != nil {
 		data, err := json.Marshal(r.Data)

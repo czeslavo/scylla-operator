@@ -5,6 +5,7 @@ import (
 	"io"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/scylladb/scylla-operator/pkg/soda/engine"
@@ -115,7 +116,20 @@ func (c *ConsoleWriter) writeCollectorLine(id engine.CollectorID, scopeLabel str
 	if scopeLabel != "" {
 		message = scopeLabel + ": " + message
 	}
-	fmt.Fprintf(c.w, "  [%s]  %-35s %s\n", statusStr, id, message)
+	dur := formatDuration(result.Duration)
+	fmt.Fprintf(c.w, "  [%s]  %-35s %s %s\n", statusStr, id, message, c.grayFn("(%s)", dur))
+}
+
+// formatDuration formats a duration for display in the console report.
+// Sub-second durations are shown as milliseconds; longer durations as seconds.
+func formatDuration(d time.Duration) string {
+	if d == 0 {
+		return "-"
+	}
+	if d < time.Second {
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	}
+	return fmt.Sprintf("%.1fs", d.Seconds())
 }
 
 func (c *ConsoleWriter) writeAnalyzers(result *engine.EngineResult) {

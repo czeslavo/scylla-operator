@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"time"
 )
 
 // CollectorEventKind distinguishes the two progress events emitted per collector invocation.
@@ -195,6 +196,7 @@ func (e *Engine) executeClusterWideCollector(ctx context.Context, collector Coll
 	}
 
 	e.emitEvent(CollectorEvent{Kind: CollectorEventStarted, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: ClusterWide, ScopeKey: scopeKey})
+	start := time.Now()
 	result, err := collector.Collect(ctx, params)
 	if err != nil {
 		result = &CollectorResult{
@@ -202,6 +204,7 @@ func (e *Engine) executeClusterWideCollector(ctx context.Context, collector Coll
 			Message: fmt.Sprintf("collector error: %v", err),
 		}
 	}
+	result.Duration = time.Since(start)
 	e.emitEvent(CollectorEvent{Kind: CollectorEventFinished, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: ClusterWide, ScopeKey: scopeKey, Result: result})
 
 	vitals.Store(collector.ID(), ClusterWide, scopeKey, result)
@@ -231,6 +234,7 @@ func (e *Engine) executePerScyllaClusterCollector(ctx context.Context, collector
 	}
 
 	e.emitEvent(CollectorEvent{Kind: CollectorEventStarted, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerScyllaCluster, ScopeKey: clusterKey})
+	start := time.Now()
 	result, err := collector.Collect(ctx, params)
 	if err != nil {
 		result = &CollectorResult{
@@ -238,6 +242,7 @@ func (e *Engine) executePerScyllaClusterCollector(ctx context.Context, collector
 			Message: fmt.Sprintf("collector error: %v", err),
 		}
 	}
+	result.Duration = time.Since(start)
 	e.emitEvent(CollectorEvent{Kind: CollectorEventFinished, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerScyllaCluster, ScopeKey: clusterKey, Result: result})
 
 	vitals.Store(collector.ID(), PerScyllaCluster, clusterKey, result)
@@ -268,6 +273,7 @@ func (e *Engine) executePerPodCollector(ctx context.Context, collector Collector
 	}
 
 	e.emitEvent(CollectorEvent{Kind: CollectorEventStarted, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerPod, ScopeKey: podKey})
+	start := time.Now()
 	result, err := collector.Collect(ctx, params)
 	if err != nil {
 		result = &CollectorResult{
@@ -275,6 +281,7 @@ func (e *Engine) executePerPodCollector(ctx context.Context, collector Collector
 			Message: fmt.Sprintf("collector error: %v", err),
 		}
 	}
+	result.Duration = time.Since(start)
 	e.emitEvent(CollectorEvent{Kind: CollectorEventFinished, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerPod, ScopeKey: podKey, Result: result})
 
 	vitals.Store(collector.ID(), PerPod, podKey, result)
