@@ -17,6 +17,8 @@ const (
 // scyllaVersionSupportAnalyzer checks Scylla versions against known-supported ranges.
 type scyllaVersionSupportAnalyzer struct{}
 
+var _ engine.Analyzer = (*scyllaVersionSupportAnalyzer)(nil)
+
 // NewScyllaVersionSupportAnalyzer creates a new ScyllaVersionSupportAnalyzer.
 func NewScyllaVersionSupportAnalyzer() engine.Analyzer {
 	return &scyllaVersionSupportAnalyzer{}

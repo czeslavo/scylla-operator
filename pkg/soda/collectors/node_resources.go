@@ -58,6 +58,8 @@ func ReadNodesYAML(reader engine.ArtifactReader, scopeKey engine.ScopeKey) ([]by
 // nodeResourcesCollector collects Kubernetes Node information.
 type nodeResourcesCollector struct{}
 
+var _ engine.Collector = (*nodeResourcesCollector)(nil)
+
 // NewNodeResourcesCollector creates a new NodeResourcesCollector.
 func NewNodeResourcesCollector() engine.Collector {
 	return &nodeResourcesCollector{}

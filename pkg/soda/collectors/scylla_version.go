@@ -44,6 +44,8 @@ func ReadScyllaVersionOutput(reader engine.ArtifactReader, podKey engine.ScopeKe
 // scyllaVersionCollector collects the Scylla version from pods.
 type scyllaVersionCollector struct{}
 
+var _ engine.Collector = (*scyllaVersionCollector)(nil)
+
 // NewScyllaVersionCollector creates a new ScyllaVersionCollector.
 func NewScyllaVersionCollector() engine.Collector {
 	return &scyllaVersionCollector{}

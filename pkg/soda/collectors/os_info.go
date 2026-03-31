@@ -54,6 +54,8 @@ func ReadOSReleaseOutput(reader engine.ArtifactReader, podKey engine.ScopeKey) (
 // osInfoCollector collects OS information from Scylla pods.
 type osInfoCollector struct{}
 
+var _ engine.Collector = (*osInfoCollector)(nil)
+
 // NewOSInfoCollector creates a new OSInfoCollector.
 func NewOSInfoCollector() engine.Collector {
 	return &osInfoCollector{}

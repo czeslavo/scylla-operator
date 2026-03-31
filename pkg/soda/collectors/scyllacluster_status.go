@@ -67,6 +67,8 @@ func ReadManifestYAML(reader engine.ArtifactReader, scopeKey engine.ScopeKey) ([
 // scyllaClusterStatusCollector collects ScyllaCluster/ScyllaDBDatacenter status.
 type scyllaClusterStatusCollector struct{}
 
+var _ engine.Collector = (*scyllaClusterStatusCollector)(nil)
+
 // NewScyllaClusterStatusCollector creates a new ScyllaClusterStatusCollector.
 func NewScyllaClusterStatusCollector() engine.Collector {
 	return &scyllaClusterStatusCollector{}

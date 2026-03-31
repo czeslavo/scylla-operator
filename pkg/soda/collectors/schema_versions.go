@@ -49,6 +49,8 @@ func ReadSchemaVersionsJSON(reader engine.ArtifactReader, podKey engine.ScopeKey
 // schemaVersionsCollector collects schema version information from the Scylla REST API.
 type schemaVersionsCollector struct{}
 
+var _ engine.Collector = (*schemaVersionsCollector)(nil)
+
 // NewSchemaVersionsCollector creates a new SchemaVersionsCollector.
 func NewSchemaVersionsCollector() engine.Collector {
 	return &schemaVersionsCollector{}

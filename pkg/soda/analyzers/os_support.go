@@ -28,6 +28,8 @@ var supportedOSNames = map[string]bool{
 // osSupportAnalyzer checks that the OS running on Scylla pods is a supported distribution.
 type osSupportAnalyzer struct{}
 
+var _ engine.Analyzer = (*osSupportAnalyzer)(nil)
+
 // NewOSSupportAnalyzer creates a new OSSupportAnalyzer.
 func NewOSSupportAnalyzer() engine.Analyzer {
 	return &osSupportAnalyzer{}

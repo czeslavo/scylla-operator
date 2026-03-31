@@ -17,6 +17,8 @@ const (
 // schemaAgreementAnalyzer checks that all pods report the same schema version.
 type schemaAgreementAnalyzer struct{}
 
+var _ engine.Analyzer = (*schemaAgreementAnalyzer)(nil)
+
 // NewSchemaAgreementAnalyzer creates a new SchemaAgreementAnalyzer.
 func NewSchemaAgreementAnalyzer() engine.Analyzer {
 	return &schemaAgreementAnalyzer{}
