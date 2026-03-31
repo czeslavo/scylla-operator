@@ -14,6 +14,7 @@ func AllCollectors() []engine.Collector {
 		NewOSInfoCollector(),
 		NewScyllaVersionCollector(),
 		NewSchemaVersionsCollector(),
+		NewScyllaConfigCollector(),
 	}
 }
 
@@ -41,5 +42,6 @@ func ResultTypeRegistry() map[engine.CollectorID]any {
 		OSInfoCollectorID:              &OSInfoResult{},
 		ScyllaVersionCollectorID:       &ScyllaVersionResult{},
 		SchemaVersionsCollectorID:      &SchemaVersionsResult{},
+		ScyllaConfigCollectorID:        &ScyllaConfigResult{},
 	}
 }

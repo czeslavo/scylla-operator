@@ -26,6 +26,7 @@ func AllProfiles() map[string]engine.Profile {
 				collectors.OSInfoCollectorID,
 				collectors.SchemaVersionsCollectorID,
 				collectors.ScyllaVersionCollectorID,
+				collectors.ScyllaConfigCollectorID,
 			},
 			Analyzers: []engine.AnalyzerID{
 				analyzers.ScyllaVersionSupportAnalyzerID,
