@@ -4,6 +4,8 @@ This document outlines the requirements for a complete rewrite of the existing d
 Kubernetes environments, aiming to merge the best features of both must-gather and Scylla Doctor into a single,
 comprehensive, and user-friendly tool.
 
+A working name for the new tool is "soda" (from Scylla Operator Diagnostic Automation) but the final name can be decided later.
+
 ## Context
 
 ScyllaDB currently ships two independent diagnostic tools that serve overlapping but incomplete audiences.
