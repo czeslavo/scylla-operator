@@ -729,7 +729,6 @@ Steps:
 | `--enable` | []string | `[]` | Additional analyzer IDs to enable on top of the profile |
 | `--disable` | []string | `[]` | Analyzer IDs to disable from the profile |
 | `--output-dir` | string | (auto) | Directory to write JSON results; auto-generated if empty |
-| `--output-format` | string | `"console"` | Output format: `console` or `json` |
 | `--keep-going` | bool | `true` | Continue on collector errors |
 | `--archive` | bool | `false` | Produce `.tar.gz` instead of output directory. Console summary still printed. Mutually exclusive with `--from-archive`. |
 | `--from-archive` | string | `""` | Path to directory or `.tar.gz` for offline analysis. Skips collectors, runs analyzers only. Mutually exclusive with `--archive`, `--kubeconfig`, `--cluster-name`, `--namespace`. |
@@ -1076,7 +1075,7 @@ Define the `"full"` profile containing all 3 analyzer IDs.
 
 Implement `DiagnoseOptions`:
 - Embeds kubeconfig flags (from `kgenericclioptions.ConfigFlags`)
-- Own flags: `--namespace`, `--cluster-name`, `--profile`, `--enable`, `--disable`, `--output-dir`, `--output-format`, `--keep-going`, `--archive`, `--from-archive`
+- Own flags: `--namespace`, `--cluster-name`, `--profile`, `--enable`, `--disable`, `--output-dir`, `--keep-going`, `--archive`, `--from-archive`
 - `Validate()`:
   - Check basic flag validity
   - `--archive` and `--from-archive` are mutually exclusive
