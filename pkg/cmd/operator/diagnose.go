@@ -3,6 +3,7 @@ package operator
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -51,9 +52,6 @@ var (
 		# Run diagnostics on a specific cluster.
 		scylla-operator diagnose --namespace=scylla --cluster-name=my-cluster
 
-		# Run diagnostics and output JSON.
-		scylla-operator diagnose --output-format=json
-
 		# Save artifacts to a specific directory.
 		scylla-operator diagnose --output-dir=/tmp/diagnostics
 	`)
@@ -72,9 +70,8 @@ type DiagnoseOptions struct {
 	Disable     []string
 
 	// Output flags.
-	OutputDir    string
-	OutputFormat string
-	KeepGoing    bool
+	OutputDir string
+	KeepGoing bool
 
 	// Resolved at Complete() time.
 	restConfig   *rest.Config
@@ -85,10 +82,9 @@ type DiagnoseOptions struct {
 // NewDiagnoseOptions creates a new DiagnoseOptions with default values.
 func NewDiagnoseOptions() *DiagnoseOptions {
 	return &DiagnoseOptions{
-		ConfigFlags:  kgenericclioptions.NewConfigFlags(true),
-		ProfileName:  profiles.FullProfileName,
-		OutputFormat: "console",
-		KeepGoing:    true,
+		ConfigFlags: kgenericclioptions.NewConfigFlags(true),
+		ProfileName: profiles.FullProfileName,
+		KeepGoing:   true,
 	}
 }
 
@@ -100,7 +96,6 @@ func (o *DiagnoseOptions) AddFlags(flagset *pflag.FlagSet) {
 	flagset.StringSliceVar(&o.Enable, "enable", o.Enable, "Additional analyzer IDs to enable on top of the profile.")
 	flagset.StringSliceVar(&o.Disable, "disable", o.Disable, "Analyzer IDs to disable from the profile.")
 	flagset.StringVar(&o.OutputDir, "output-dir", o.OutputDir, "Directory to write artifacts. If empty, artifacts are written to a temp directory.")
-	flagset.StringVar(&o.OutputFormat, "output-format", o.OutputFormat, "Output format: 'console' or 'json'.")
 	flagset.BoolVar(&o.KeepGoing, "keep-going", o.KeepGoing, "Continue running diagnostics even if some collectors fail.")
 }
 
@@ -132,10 +127,6 @@ func NewDiagnoseCmd(streams genericclioptions.IOStreams) *cobra.Command {
 
 // Validate checks the DiagnoseOptions for invalid configurations.
 func (o *DiagnoseOptions) Validate() error {
-	if o.OutputFormat != "console" && o.OutputFormat != "json" {
-		return fmt.Errorf("--output-format must be 'console' or 'json', got %q", o.OutputFormat)
-	}
-
 	allProfiles := profiles.AllProfiles()
 	if _, ok := allProfiles[o.ProfileName]; !ok {
 		available := make([]string, 0, len(allProfiles))
@@ -250,21 +241,66 @@ func (o *DiagnoseOptions) Run(streams genericclioptions.IOStreams, cmd *cobra.Co
 		return fmt.Errorf("running diagnostics: %w", err)
 	}
 
-	// Write output.
-	switch o.OutputFormat {
-	case "json":
-		jw := output.NewJSONWriter(streams.Out, "0.1.0-poc")
-		if err := jw.WriteReport(result, o.ProfileName, clusterInfos, podsByCluster); err != nil {
-			return fmt.Errorf("writing JSON report: %w", err)
-		}
-	default:
-		cw := output.NewConsoleWriter(streams.Out)
-		if err := cw.WriteReport(result, o.ProfileName, clusterInfos, podsByCluster); err != nil {
-			return fmt.Errorf("writing console report: %w", err)
-		}
+	// Always display console output.
+	cw := output.NewConsoleWriter(streams.Out)
+	if err := cw.WriteReport(result, o.ProfileName, clusterInfos, podsByCluster); err != nil {
+		return fmt.Errorf("writing console report: %w", err)
 	}
 
+	// Persist vitals.json — the full collector results with data, enabling offline analysis.
+	if err := o.writeVitalsJSON(result); err != nil {
+		return fmt.Errorf("writing vitals.json: %w", err)
+	}
+
+	// Persist report.json — the full diagnostic report including metadata, targets, collectors, and analysis.
+	if err := o.writeReportJSON(result, clusterInfos, podsByCluster); err != nil {
+		return fmt.Errorf("writing report.json: %w", err)
+	}
+
+	fmt.Fprintf(streams.Out, "\nArtifacts written to: %s\n", o.OutputDir)
 	klog.InfoS("Diagnostics complete", "ArtifactDir", o.OutputDir)
+	return nil
+}
+
+// writeVitalsJSON serializes the Vitals store (including collector Data) to
+// vitals.json in the output directory root.
+func (o *DiagnoseOptions) writeVitalsJSON(result *engine.EngineResult) error {
+	sv, err := result.Vitals.ToSerializable()
+	if err != nil {
+		return fmt.Errorf("converting vitals to serializable form: %w", err)
+	}
+
+	data, err := json.MarshalIndent(sv, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling vitals: %w", err)
+	}
+
+	path := filepath.Join(o.OutputDir, "vitals.json")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("writing %s: %w", path, err)
+	}
+
+	klog.V(2).InfoS("Wrote vitals.json", "path", path)
+	return nil
+}
+
+// writeReportJSON builds the full JSONReport and writes it to report.json
+// in the output directory root.
+func (o *DiagnoseOptions) writeReportJSON(result *engine.EngineResult, clusters []engine.ClusterInfo, pods map[engine.ScopeKey][]engine.PodInfo) error {
+	jw := output.NewJSONWriter(nil, "0.1.0-poc")
+	report := jw.BuildReport(result, o.ProfileName, clusters, pods)
+
+	data, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling report: %w", err)
+	}
+
+	path := filepath.Join(o.OutputDir, "report.json")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return fmt.Errorf("writing %s: %w", path, err)
+	}
+
+	klog.V(2).InfoS("Wrote report.json", "path", path)
 	return nil
 }
 
@@ -464,7 +500,14 @@ type fsArtifactWriterFactory struct {
 }
 
 func (f *fsArtifactWriterFactory) NewWriter(collectorID engine.CollectorID, scope engine.CollectorScope, scopeKey engine.ScopeKey) engine.ArtifactWriter {
-	dir := filepath.Join(f.baseDir, scope.String(), scopeKey.String(), string(collectorID))
+	var dir string
+	if scopeKey.IsEmpty() {
+		// ClusterWide scope: no scope key subdirectory.
+		dir = filepath.Join(f.baseDir, scope.String(), string(collectorID))
+	} else {
+		// PerScyllaCluster/PerPod: include namespace/name as path components.
+		dir = filepath.Join(f.baseDir, scope.String(), scopeKey.Namespace, scopeKey.Name, string(collectorID))
+	}
 	return &fsArtifactWriter{dir: dir}
 }
 

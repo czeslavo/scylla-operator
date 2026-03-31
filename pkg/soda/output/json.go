@@ -71,7 +71,7 @@ func NewJSONWriter(w io.Writer, toolVersion string) *JSONWriter {
 
 // WriteReport writes the full diagnostic report as JSON.
 func (j *JSONWriter) WriteReport(result *engine.EngineResult, profileName string, clusters []engine.ClusterInfo, pods map[engine.ScopeKey][]engine.PodInfo) error {
-	report := j.buildReport(result, profileName, clusters, pods)
+	report := j.BuildReport(result, profileName, clusters, pods)
 
 	encoder := json.NewEncoder(j.w)
 	encoder.SetIndent("", "  ")
@@ -81,7 +81,9 @@ func (j *JSONWriter) WriteReport(result *engine.EngineResult, profileName string
 	return nil
 }
 
-func (j *JSONWriter) buildReport(result *engine.EngineResult, profileName string, clusters []engine.ClusterInfo, pods map[engine.ScopeKey][]engine.PodInfo) *JSONReport {
+// BuildReport constructs the full JSONReport structure from engine results.
+// This is useful for both writing to stdout and persisting as report.json.
+func (j *JSONWriter) BuildReport(result *engine.EngineResult, profileName string, clusters []engine.ClusterInfo, pods map[engine.ScopeKey][]engine.PodInfo) *JSONReport {
 	report := &JSONReport{
 		Metadata: JSONMetadata{
 			Timestamp:   time.Now().UTC().Format(time.RFC3339),

@@ -2,8 +2,10 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -91,15 +93,53 @@ type CollectorID string
 type AnalyzerID string
 
 // ScopeKey identifies a namespaced resource (cluster or pod) used as a map key
-// in the Vitals store.
+// in the Vitals store. It is only meaningful for PerScyllaCluster and PerPod
+// scopes; ClusterWide collectors use an empty ScopeKey that is not stored
+// as a map key.
 type ScopeKey struct {
 	Namespace string `json:"namespace"`
 	Name      string `json:"name"`
 }
 
+// IsEmpty returns true if the ScopeKey has no namespace and no name,
+// which is the case for ClusterWide scope.
+func (k ScopeKey) IsEmpty() bool {
+	return k.Namespace == "" && k.Name == ""
+}
+
 // String returns the "namespace/name" representation of the scope key.
+// For an empty ScopeKey (ClusterWide), it returns an empty string.
 func (k ScopeKey) String() string {
+	if k.IsEmpty() {
+		return ""
+	}
 	return k.Namespace + "/" + k.Name
+}
+
+// MarshalText implements encoding.TextMarshaler so ScopeKey can be used as
+// a JSON map key. The format is "namespace/name". An empty ScopeKey marshals
+// to an empty string.
+func (k ScopeKey) MarshalText() ([]byte, error) {
+	return []byte(k.String()), nil
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler so ScopeKey can be parsed
+// back from a JSON map key. The expected format is "namespace/name".
+// An empty string produces an empty ScopeKey.
+func (k *ScopeKey) UnmarshalText(text []byte) error {
+	s := string(text)
+	if s == "" {
+		k.Namespace = ""
+		k.Name = ""
+		return nil
+	}
+	idx := strings.Index(s, "/")
+	if idx < 0 {
+		return fmt.Errorf("invalid ScopeKey format %q: expected namespace/name", s)
+	}
+	k.Namespace = s[:idx]
+	k.Name = s[idx+1:]
+	return nil
 }
 
 // Artifact represents a raw file produced by a collector.
@@ -309,4 +349,83 @@ type Profile struct {
 	Description string
 	Includes    []string     // Names of other profiles to compose
 	Analyzers   []AnalyzerID // Analyzer IDs this profile enables
+}
+
+// SerializableCollectorResult is the JSON-safe version of CollectorResult.
+// Unlike CollectorResult, the Data field is stored as json.RawMessage so it
+// can be persisted to vitals.json and later loaded for offline analysis.
+type SerializableCollectorResult struct {
+	Status    CollectorStatus `json:"status"`
+	Data      json.RawMessage `json:"data,omitempty"`
+	Message   string          `json:"message"`
+	Artifacts []Artifact      `json:"artifacts"`
+}
+
+// SerializableVitals is the JSON-safe version of Vitals for persistence
+// to vitals.json. It mirrors the Vitals structure but uses
+// SerializableCollectorResult so that Data is preserved as raw JSON.
+type SerializableVitals struct {
+	ClusterWide map[CollectorID]*SerializableCollectorResult              `json:"cluster_wide"`
+	PerCluster  map[ScopeKey]map[CollectorID]*SerializableCollectorResult `json:"per_cluster"`
+	PerPod      map[ScopeKey]map[CollectorID]*SerializableCollectorResult `json:"per_pod"`
+}
+
+// toSerializableResult converts a CollectorResult to its serializable form,
+// marshaling the Data field to json.RawMessage.
+func toSerializableResult(r *CollectorResult) (*SerializableCollectorResult, error) {
+	sr := &SerializableCollectorResult{
+		Status:    r.Status,
+		Message:   r.Message,
+		Artifacts: r.Artifacts,
+	}
+	if r.Data != nil {
+		data, err := json.Marshal(r.Data)
+		if err != nil {
+			return nil, fmt.Errorf("marshaling collector data: %w", err)
+		}
+		sr.Data = data
+	}
+	return sr, nil
+}
+
+// ToSerializable converts the Vitals store into a fully JSON-serializable
+// form suitable for writing to vitals.json.
+func (v *Vitals) ToSerializable() (*SerializableVitals, error) {
+	sv := &SerializableVitals{
+		ClusterWide: make(map[CollectorID]*SerializableCollectorResult, len(v.ClusterWide)),
+		PerCluster:  make(map[ScopeKey]map[CollectorID]*SerializableCollectorResult, len(v.PerCluster)),
+		PerPod:      make(map[ScopeKey]map[CollectorID]*SerializableCollectorResult, len(v.PerPod)),
+	}
+
+	for id, r := range v.ClusterWide {
+		sr, err := toSerializableResult(r)
+		if err != nil {
+			return nil, fmt.Errorf("converting ClusterWide result %s: %w", id, err)
+		}
+		sv.ClusterWide[id] = sr
+	}
+
+	for key, perCluster := range v.PerCluster {
+		sv.PerCluster[key] = make(map[CollectorID]*SerializableCollectorResult, len(perCluster))
+		for id, r := range perCluster {
+			sr, err := toSerializableResult(r)
+			if err != nil {
+				return nil, fmt.Errorf("converting PerCluster result %s/%s: %w", key, id, err)
+			}
+			sv.PerCluster[key][id] = sr
+		}
+	}
+
+	for key, perPod := range v.PerPod {
+		sv.PerPod[key] = make(map[CollectorID]*SerializableCollectorResult, len(perPod))
+		for id, r := range perPod {
+			sr, err := toSerializableResult(r)
+			if err != nil {
+				return nil, fmt.Errorf("converting PerPod result %s/%s: %w", key, id, err)
+			}
+			sv.PerPod[key][id] = sr
+		}
+	}
+
+	return sv, nil
 }

@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"encoding/json"
 	"testing"
 )
 
@@ -81,7 +82,7 @@ func TestScopeKeyString(t *testing.T) {
 		{
 			name:     "empty both",
 			key:      ScopeKey{},
-			expected: "/",
+			expected: "",
 		},
 	}
 	for _, tt := range tests {
@@ -90,6 +91,58 @@ func TestScopeKeyString(t *testing.T) {
 				t.Errorf("ScopeKey.String() = %q, want %q", got, tt.expected)
 			}
 		})
+	}
+}
+
+func TestScopeKeyIsEmpty(t *testing.T) {
+	empty := ScopeKey{}
+	if !empty.IsEmpty() {
+		t.Error("ScopeKey{} should be empty")
+	}
+	if (ScopeKey{Namespace: "ns", Name: "name"}).IsEmpty() {
+		t.Error("ScopeKey{ns, name} should not be empty")
+	}
+	if (ScopeKey{Name: "name"}).IsEmpty() {
+		t.Error("ScopeKey{name only} should not be empty")
+	}
+	if (ScopeKey{Namespace: "ns"}).IsEmpty() {
+		t.Error("ScopeKey{namespace only} should not be empty")
+	}
+}
+
+func TestScopeKeyMarshalTextRoundTrip(t *testing.T) {
+	tests := []struct {
+		name string
+		key  ScopeKey
+	}{
+		{name: "normal key", key: ScopeKey{Namespace: "scylla", Name: "my-cluster"}},
+		{name: "empty key", key: ScopeKey{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			text, err := tt.key.MarshalText()
+			if err != nil {
+				t.Fatalf("MarshalText() error: %v", err)
+			}
+
+			var got ScopeKey
+			if err := got.UnmarshalText(text); err != nil {
+				t.Fatalf("UnmarshalText(%q) error: %v", string(text), err)
+			}
+
+			if got != tt.key {
+				t.Errorf("round-trip: got %+v, want %+v", got, tt.key)
+			}
+		})
+	}
+}
+
+func TestScopeKeyUnmarshalText_InvalidFormat(t *testing.T) {
+	var k ScopeKey
+	err := k.UnmarshalText([]byte("no-slash-here"))
+	if err == nil {
+		t.Error("expected error for text without '/'")
 	}
 }
 
@@ -279,5 +332,256 @@ func TestVitalsEmptyKeys(t *testing.T) {
 	clusterKeys := v.ClusterKeys()
 	if len(clusterKeys) != 0 {
 		t.Errorf("expected 0 cluster keys, got %d", len(clusterKeys))
+	}
+}
+
+func TestToSerializableResult_WithData(t *testing.T) {
+	type testData struct {
+		Version string `json:"version"`
+		Count   int    `json:"count"`
+	}
+	r := &CollectorResult{
+		Status:  CollectorPassed,
+		Message: "collected",
+		Data:    &testData{Version: "6.0.0", Count: 3},
+		Artifacts: []Artifact{
+			{RelativePath: "nodes.yaml", Description: "node list"},
+		},
+	}
+
+	sr, err := toSerializableResult(r)
+	if err != nil {
+		t.Fatalf("toSerializableResult() error: %v", err)
+	}
+
+	if sr.Status != CollectorPassed {
+		t.Errorf("Status = %v, want %v", sr.Status, CollectorPassed)
+	}
+	if sr.Message != "collected" {
+		t.Errorf("Message = %q, want %q", sr.Message, "collected")
+	}
+	if len(sr.Artifacts) != 1 {
+		t.Fatalf("Artifacts length = %d, want 1", len(sr.Artifacts))
+	}
+	if sr.Artifacts[0].RelativePath != "nodes.yaml" {
+		t.Errorf("Artifact path = %q, want %q", sr.Artifacts[0].RelativePath, "nodes.yaml")
+	}
+
+	// Verify Data was marshaled correctly.
+	if sr.Data == nil {
+		t.Fatal("Data is nil, expected json.RawMessage")
+	}
+	expectedJSON := `{"version":"6.0.0","count":3}`
+	if string(sr.Data) != expectedJSON {
+		t.Errorf("Data = %s, want %s", string(sr.Data), expectedJSON)
+	}
+}
+
+func TestToSerializableResult_NilData(t *testing.T) {
+	r := &CollectorResult{
+		Status:  CollectorFailed,
+		Message: "failed to collect",
+	}
+
+	sr, err := toSerializableResult(r)
+	if err != nil {
+		t.Fatalf("toSerializableResult() error: %v", err)
+	}
+
+	if sr.Status != CollectorFailed {
+		t.Errorf("Status = %v, want %v", sr.Status, CollectorFailed)
+	}
+	if sr.Data != nil {
+		t.Errorf("Data = %v, want nil", sr.Data)
+	}
+}
+
+func TestToSerializableResult_NilArtifacts(t *testing.T) {
+	r := &CollectorResult{
+		Status:  CollectorPassed,
+		Message: "ok",
+	}
+
+	sr, err := toSerializableResult(r)
+	if err != nil {
+		t.Fatalf("toSerializableResult() error: %v", err)
+	}
+
+	// Nil artifacts in the original should remain nil in serializable form.
+	if sr.Artifacts != nil {
+		t.Errorf("Artifacts = %v, want nil", sr.Artifacts)
+	}
+}
+
+func TestVitalsToSerializable_AllScopes(t *testing.T) {
+	v := NewVitals()
+
+	type nodeData struct {
+		NodeCount int `json:"node_count"`
+	}
+	type clusterData struct {
+		Status string `json:"status"`
+	}
+	type podData struct {
+		OS string `json:"os"`
+	}
+
+	v.Store("node-resources", ClusterWide, ScopeKey{}, &CollectorResult{
+		Status:  CollectorPassed,
+		Message: "3 nodes",
+		Data:    &nodeData{NodeCount: 3},
+		Artifacts: []Artifact{
+			{RelativePath: "nodes.yaml", Description: "node list"},
+		},
+	})
+
+	clusterKey := ScopeKey{Namespace: "scylla", Name: "my-cluster"}
+	v.Store("cluster-status", PerScyllaCluster, clusterKey, &CollectorResult{
+		Status:  CollectorPassed,
+		Message: "cluster OK",
+		Data:    &clusterData{Status: "ready"},
+	})
+
+	podKey := ScopeKey{Namespace: "scylla", Name: "pod-0"}
+	v.Store("os-info", PerPod, podKey, &CollectorResult{
+		Status:  CollectorPassed,
+		Message: "os collected",
+		Data:    &podData{OS: "Ubuntu"},
+	})
+
+	sv, err := v.ToSerializable()
+	if err != nil {
+		t.Fatalf("ToSerializable() error: %v", err)
+	}
+
+	// Check ClusterWide.
+	if len(sv.ClusterWide) != 1 {
+		t.Fatalf("ClusterWide length = %d, want 1", len(sv.ClusterWide))
+	}
+	cwResult := sv.ClusterWide["node-resources"]
+	if cwResult == nil {
+		t.Fatal("ClusterWide[node-resources] is nil")
+	}
+	if cwResult.Message != "3 nodes" {
+		t.Errorf("ClusterWide message = %q, want %q", cwResult.Message, "3 nodes")
+	}
+	if string(cwResult.Data) != `{"node_count":3}` {
+		t.Errorf("ClusterWide data = %s, want %s", string(cwResult.Data), `{"node_count":3}`)
+	}
+
+	// Check PerCluster.
+	if len(sv.PerCluster) != 1 {
+		t.Fatalf("PerCluster length = %d, want 1", len(sv.PerCluster))
+	}
+	pcResult := sv.PerCluster[clusterKey]["cluster-status"]
+	if pcResult == nil {
+		t.Fatal("PerCluster[cluster-status] is nil")
+	}
+	if string(pcResult.Data) != `{"status":"ready"}` {
+		t.Errorf("PerCluster data = %s, want %s", string(pcResult.Data), `{"status":"ready"}`)
+	}
+
+	// Check PerPod.
+	if len(sv.PerPod) != 1 {
+		t.Fatalf("PerPod length = %d, want 1", len(sv.PerPod))
+	}
+	ppResult := sv.PerPod[podKey]["os-info"]
+	if ppResult == nil {
+		t.Fatal("PerPod[os-info] is nil")
+	}
+	if string(ppResult.Data) != `{"os":"Ubuntu"}` {
+		t.Errorf("PerPod data = %s, want %s", string(ppResult.Data), `{"os":"Ubuntu"}`)
+	}
+}
+
+func TestVitalsToSerializable_Empty(t *testing.T) {
+	v := NewVitals()
+
+	sv, err := v.ToSerializable()
+	if err != nil {
+		t.Fatalf("ToSerializable() error: %v", err)
+	}
+
+	if len(sv.ClusterWide) != 0 {
+		t.Errorf("ClusterWide length = %d, want 0", len(sv.ClusterWide))
+	}
+	if len(sv.PerCluster) != 0 {
+		t.Errorf("PerCluster length = %d, want 0", len(sv.PerCluster))
+	}
+	if len(sv.PerPod) != 0 {
+		t.Errorf("PerPod length = %d, want 0", len(sv.PerPod))
+	}
+}
+
+func TestVitalsToSerializable_JSONRoundTrip(t *testing.T) {
+	v := NewVitals()
+
+	type testData struct {
+		Value string `json:"value"`
+	}
+
+	v.Store("collector-a", ClusterWide, ScopeKey{}, &CollectorResult{
+		Status:  CollectorPassed,
+		Message: "ok",
+		Data:    &testData{Value: "hello"},
+		Artifacts: []Artifact{
+			{RelativePath: "output.log", Description: "log file"},
+		},
+	})
+
+	podKey := ScopeKey{Namespace: "ns", Name: "pod-1"}
+	v.Store("collector-b", PerPod, podKey, &CollectorResult{
+		Status:  CollectorFailed,
+		Message: "error occurred",
+	})
+
+	// Serialize to JSON.
+	sv, err := v.ToSerializable()
+	if err != nil {
+		t.Fatalf("ToSerializable() error: %v", err)
+	}
+
+	data, err := json.Marshal(sv)
+	if err != nil {
+		t.Fatalf("json.Marshal() error: %v", err)
+	}
+
+	// Deserialize back.
+	var sv2 SerializableVitals
+	if err := json.Unmarshal(data, &sv2); err != nil {
+		t.Fatalf("json.Unmarshal() error: %v", err)
+	}
+
+	// Verify ClusterWide round-tripped correctly.
+	cwResult := sv2.ClusterWide["collector-a"]
+	if cwResult == nil {
+		t.Fatal("round-tripped ClusterWide[collector-a] is nil")
+	}
+	if cwResult.Status != CollectorPassed {
+		t.Errorf("Status = %v, want %v", cwResult.Status, CollectorPassed)
+	}
+	if cwResult.Message != "ok" {
+		t.Errorf("Message = %q, want %q", cwResult.Message, "ok")
+	}
+	if string(cwResult.Data) != `{"value":"hello"}` {
+		t.Errorf("Data = %s, want %s", string(cwResult.Data), `{"value":"hello"}`)
+	}
+	if len(cwResult.Artifacts) != 1 || cwResult.Artifacts[0].RelativePath != "output.log" {
+		t.Errorf("Artifacts did not round-trip correctly: %+v", cwResult.Artifacts)
+	}
+
+	// Verify PerPod round-tripped correctly.
+	ppResult := sv2.PerPod[podKey]["collector-b"]
+	if ppResult == nil {
+		t.Fatal("round-tripped PerPod[collector-b] is nil")
+	}
+	if ppResult.Status != CollectorFailed {
+		t.Errorf("Status = %v, want %v", ppResult.Status, CollectorFailed)
+	}
+	if ppResult.Message != "error occurred" {
+		t.Errorf("Message = %q, want %q", ppResult.Message, "error occurred")
+	}
+	if ppResult.Data != nil {
+		t.Errorf("Data = %v, want nil", ppResult.Data)
 	}
 }
