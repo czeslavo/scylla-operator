@@ -12,7 +12,7 @@ func TestSchemaVersionsCollector_HappyPath(t *testing.T) {
 	pod := &engine.PodInfo{Name: "pod-0", Namespace: "scylla"}
 	fakeExec := &sodatesting.FakePodExecutor{
 		Responses: map[string]sodatesting.FakeExecResponse{
-			"scylla/pod-0/scylla/curl -s http://localhost:10000/storage_service/schema_version": {
+			"scylla/pod-0/scylla/curl -s http://localhost:10000/storage_proxy/schema_versions": {
 				Stdout: `[{"key":"a1b2c3d4-e5f6-7890-abcd-ef1234567890","value":["10.0.0.1","10.0.0.2","10.0.0.3"]}]`,
 			},
 		},
@@ -63,7 +63,7 @@ func TestSchemaVersionsCollector_MultipleVersions(t *testing.T) {
 	pod := &engine.PodInfo{Name: "pod-0", Namespace: "ns"}
 	fakeExec := &sodatesting.FakePodExecutor{
 		Responses: map[string]sodatesting.FakeExecResponse{
-			"ns/pod-0/scylla/curl -s http://localhost:10000/storage_service/schema_version": {
+			"ns/pod-0/scylla/curl -s http://localhost:10000/storage_proxy/schema_versions": {
 				Stdout: `[{"key":"uuid-1","value":["10.0.0.1"]},{"key":"uuid-2","value":["10.0.0.2","10.0.0.3"]}]`,
 			},
 		},
@@ -93,7 +93,7 @@ func TestSchemaVersionsCollector_EmptyResponse(t *testing.T) {
 	pod := &engine.PodInfo{Name: "pod-0", Namespace: "ns"}
 	fakeExec := &sodatesting.FakePodExecutor{
 		Responses: map[string]sodatesting.FakeExecResponse{
-			"ns/pod-0/scylla/curl -s http://localhost:10000/storage_service/schema_version": {
+			"ns/pod-0/scylla/curl -s http://localhost:10000/storage_proxy/schema_versions": {
 				Stdout: "[]",
 			},
 		},
@@ -120,7 +120,7 @@ func TestSchemaVersionsCollector_InvalidJSON(t *testing.T) {
 	pod := &engine.PodInfo{Name: "pod-0", Namespace: "ns"}
 	fakeExec := &sodatesting.FakePodExecutor{
 		Responses: map[string]sodatesting.FakeExecResponse{
-			"ns/pod-0/scylla/curl -s http://localhost:10000/storage_service/schema_version": {
+			"ns/pod-0/scylla/curl -s http://localhost:10000/storage_proxy/schema_versions": {
 				Stdout: "not json",
 			},
 		},

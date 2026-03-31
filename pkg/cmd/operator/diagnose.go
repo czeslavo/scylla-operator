@@ -64,7 +64,6 @@ type DiagnoseOptions struct {
 	ConfigFlags *kgenericclioptions.ConfigFlags
 
 	// Targeting flags.
-	Namespace   string
 	ClusterName string
 
 	// Profile/override flags.
@@ -96,7 +95,6 @@ func NewDiagnoseOptions() *DiagnoseOptions {
 // AddFlags adds diagnose flags to the flagset.
 func (o *DiagnoseOptions) AddFlags(flagset *pflag.FlagSet) {
 	o.ConfigFlags.AddFlags(flagset)
-	flagset.StringVar(&o.Namespace, "namespace", o.Namespace, "Limit diagnostics to a specific namespace. If empty, discovers clusters in all namespaces.")
 	flagset.StringVar(&o.ClusterName, "cluster-name", o.ClusterName, "Limit diagnostics to a specific ScyllaCluster/ScyllaDBDatacenter name.")
 	flagset.StringVar(&o.ProfileName, "profile", o.ProfileName, "Diagnostic profile to run.")
 	flagset.StringSliceVar(&o.Enable, "enable", o.Enable, "Additional analyzer IDs to enable on top of the profile.")
@@ -272,7 +270,10 @@ func (o *DiagnoseOptions) Run(streams genericclioptions.IOStreams, cmd *cobra.Co
 
 // discoverClusters finds ScyllaCluster and ScyllaDBDatacenter resources.
 func (o *DiagnoseOptions) discoverClusters(ctx context.Context, lister engine.ScyllaClusterLister) ([]engine.ClusterInfo, error) {
-	namespace := o.Namespace
+	namespace := ""
+	if o.ConfigFlags.Namespace != nil && *o.ConfigFlags.Namespace != "" {
+		namespace = *o.ConfigFlags.Namespace
+	}
 	if namespace == "" {
 		namespace = metav1.NamespaceAll
 	}

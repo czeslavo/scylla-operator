@@ -65,7 +65,7 @@ func (c *schemaVersionsCollector) Collect(ctx context.Context, params engine.Col
 	}
 
 	stdout, _, err := params.PodExecutor.Execute(ctx, params.Pod.Namespace, params.Pod.Name, scyllaContainerName,
-		[]string{"curl", "-s", "http://localhost:10000/storage_service/schema_version"})
+		[]string{"curl", "-s", "http://localhost:10000/storage_proxy/schema_versions"})
 	if err != nil {
 		return nil, fmt.Errorf("querying schema versions: %w", err)
 	}
