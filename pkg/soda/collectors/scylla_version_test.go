@@ -17,7 +17,7 @@ func TestScyllaVersionCollector_HappyPath(t *testing.T) {
 			},
 		},
 	}
-	fakeWriter := sodatesting.NewFakeArtifactWriter("test")
+	fakeWriter := sodatesting.NewFakeArtifactWriter()
 
 	collector := NewScyllaVersionCollector()
 	result, err := collector.Collect(context.Background(), engine.CollectorParams{

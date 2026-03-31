@@ -35,7 +35,7 @@ func TestScyllaClusterStatusCollector_ScyllaCluster(t *testing.T) {
 		},
 	}
 
-	fakeWriter := sodatesting.NewFakeArtifactWriter("test")
+	fakeWriter := sodatesting.NewFakeArtifactWriter()
 	cluster := &engine.ClusterInfo{
 		Name:      "my-cluster",
 		Namespace: "scylla",

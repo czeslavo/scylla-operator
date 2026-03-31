@@ -199,14 +199,12 @@ func (f *FakeAnalyzer) Analyze(params engine.AnalyzerParams) *engine.AnalyzerRes
 type FakeArtifactWriter struct {
 	mu        sync.Mutex
 	Artifacts map[string][]byte // filename → content
-	BaseDir   string            // used to construct relative paths
 }
 
-// NewFakeArtifactWriter creates a new FakeArtifactWriter with the given base directory prefix.
-func NewFakeArtifactWriter(baseDir string) *FakeArtifactWriter {
+// NewFakeArtifactWriter creates a new FakeArtifactWriter.
+func NewFakeArtifactWriter() *FakeArtifactWriter {
 	return &FakeArtifactWriter{
 		Artifacts: make(map[string][]byte),
-		BaseDir:   baseDir,
 	}
 }
 
@@ -219,11 +217,9 @@ func (f *FakeArtifactWriter) WriteArtifact(filename string, content []byte) (str
 	copy(copied, content)
 	f.Artifacts[filename] = copied
 
-	relativePath := filename
-	if f.BaseDir != "" {
-		relativePath = f.BaseDir + "/" + filename
-	}
-	return relativePath, nil
+	// Return just the filename as the relative path, consistent with the
+	// production fsArtifactWriter implementation.
+	return filename, nil
 }
 
 // FakeArtifactReader returns preconfigured content from a nested map.

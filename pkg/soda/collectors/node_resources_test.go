@@ -49,7 +49,7 @@ func TestNodeResourcesCollector_HappyPath(t *testing.T) {
 	}
 
 	fakeNodeLister := &sodatesting.FakeNodeLister{Nodes: nodes}
-	fakeWriter := sodatesting.NewFakeArtifactWriter("collectors/cluster-wide/NodeResourcesCollector")
+	fakeWriter := sodatesting.NewFakeArtifactWriter()
 
 	collector := NewNodeResourcesCollector()
 	result, err := collector.Collect(context.Background(), engine.CollectorParams{

@@ -26,7 +26,7 @@ PRETTY_NAME="Red Hat Enterprise Linux 9.7 (Plow)"
 			},
 		},
 	}
-	fakeWriter := sodatesting.NewFakeArtifactWriter("test")
+	fakeWriter := sodatesting.NewFakeArtifactWriter()
 
 	collector := NewOSInfoCollector()
 	result, err := collector.Collect(context.Background(), engine.CollectorParams{

@@ -526,5 +526,7 @@ func (w *fsArtifactWriter) WriteArtifact(filename string, content []byte) (strin
 		return "", fmt.Errorf("writing artifact %s: %w", path, err)
 	}
 
-	return path, nil
+	// Return just the filename as the relative path — relative to the
+	// collector's own artifact directory (w.dir).
+	return filename, nil
 }

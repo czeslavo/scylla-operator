@@ -17,7 +17,7 @@ func TestSchemaVersionsCollector_HappyPath(t *testing.T) {
 			},
 		},
 	}
-	fakeWriter := sodatesting.NewFakeArtifactWriter("test")
+	fakeWriter := sodatesting.NewFakeArtifactWriter()
 
 	collector := NewSchemaVersionsCollector()
 	result, err := collector.Collect(context.Background(), engine.CollectorParams{
