@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/scylladb/scylla-operator/pkg/soda/engine"
+	rbacv1 "k8s.io/api/rbac/v1"
 )
 
 const (
@@ -65,6 +66,19 @@ func (c *osInfoCollector) ID() engine.CollectorID          { return OSInfoCollec
 func (c *osInfoCollector) Name() string                    { return "OS information" }
 func (c *osInfoCollector) Scope() engine.CollectorScope    { return engine.PerPod }
 func (c *osInfoCollector) DependsOn() []engine.CollectorID { return nil }
+
+// RBAC implements engine.RBACProvider.
+// Required permissions:
+//   - core/v1: pods/exec — create (to run uname --all and cat /etc/os-release)
+func (c *osInfoCollector) RBAC() []rbacv1.PolicyRule {
+	return []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{""},
+			Resources: []string{"pods/exec"},
+			Verbs:     []string{"create"},
+		},
+	}
+}
 
 func (c *osInfoCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
 	if params.Pod == nil {

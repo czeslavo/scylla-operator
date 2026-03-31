@@ -10,6 +10,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/labels"
 )
 
@@ -192,6 +193,20 @@ type Analyzer interface {
 	Scope() AnalyzerScope     // Whether this analyzer runs once or per ScyllaCluster
 	DependsOn() []CollectorID // Collector IDs whose results this analyzer reads
 	Analyze(params AnalyzerParams) *AnalyzerResult
+}
+
+// RBACProvider is an optional interface that collectors can implement to declare
+// the Kubernetes RBAC rules they require. Use a type assertion to check whether
+// a given collector implements this interface:
+//
+//	if rbacProvider, ok := collector.(engine.RBACProvider); ok {
+//	    rules := rbacProvider.RBAC()
+//	}
+//
+// This information can be used to generate RBAC manifests or to display required
+// permissions in --dry-run output.
+type RBACProvider interface {
+	RBAC() []rbacv1.PolicyRule
 }
 
 // PodExecutor runs commands inside pod containers.

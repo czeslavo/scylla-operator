@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/scylladb/scylla-operator/pkg/soda/engine"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"sigs.k8s.io/yaml"
 )
 
@@ -69,6 +70,19 @@ func (c *nodeResourcesCollector) ID() engine.CollectorID          { return NodeR
 func (c *nodeResourcesCollector) Name() string                    { return "Kubernetes Node resources" }
 func (c *nodeResourcesCollector) Scope() engine.CollectorScope    { return engine.ClusterWide }
 func (c *nodeResourcesCollector) DependsOn() []engine.CollectorID { return nil }
+
+// RBAC implements engine.RBACProvider.
+// Required permissions:
+//   - core/v1: nodes — get, list
+func (c *nodeResourcesCollector) RBAC() []rbacv1.PolicyRule {
+	return []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{""},
+			Resources: []string{"nodes"},
+			Verbs:     []string{"get", "list"},
+		},
+	}
+}
 
 func (c *nodeResourcesCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
 	nodes, err := params.NodeLister.ListNodes(ctx)

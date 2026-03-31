@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/scylladb/scylla-operator/pkg/soda/engine"
+	rbacv1 "k8s.io/api/rbac/v1"
 )
 
 const (
@@ -55,6 +56,19 @@ func (c *scyllaVersionCollector) ID() engine.CollectorID          { return Scyll
 func (c *scyllaVersionCollector) Name() string                    { return "Scylla version" }
 func (c *scyllaVersionCollector) Scope() engine.CollectorScope    { return engine.PerPod }
 func (c *scyllaVersionCollector) DependsOn() []engine.CollectorID { return nil }
+
+// RBAC implements engine.RBACProvider.
+// Required permissions:
+//   - core/v1: pods/exec — create (to run scylla --version)
+func (c *scyllaVersionCollector) RBAC() []rbacv1.PolicyRule {
+	return []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{""},
+			Resources: []string{"pods/exec"},
+			Verbs:     []string{"create"},
+		},
+	}
+}
 
 func (c *scyllaVersionCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
 	if params.Pod == nil {

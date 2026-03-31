@@ -7,6 +7,7 @@ import (
 	scyllav1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1"
 	scyllav1alpha1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1alpha1"
 	"github.com/scylladb/scylla-operator/pkg/soda/engine"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"sigs.k8s.io/yaml"
 )
 
@@ -78,6 +79,20 @@ func (c *scyllaClusterStatusCollector) ID() engine.CollectorID          { return
 func (c *scyllaClusterStatusCollector) Name() string                    { return "ScyllaDB cluster status" }
 func (c *scyllaClusterStatusCollector) Scope() engine.CollectorScope    { return engine.PerScyllaCluster }
 func (c *scyllaClusterStatusCollector) DependsOn() []engine.CollectorID { return nil }
+
+// RBAC implements engine.RBACProvider.
+// Required permissions:
+//   - scylla.scylladb.com: scyllaclusters — get, list
+//   - scylla.scylladb.com: scylladbdatacenters — get, list
+func (c *scyllaClusterStatusCollector) RBAC() []rbacv1.PolicyRule {
+	return []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{"scylla.scylladb.com"},
+			Resources: []string{"scyllaclusters", "scylladbdatacenters"},
+			Verbs:     []string{"get", "list"},
+		},
+	}
+}
 
 func (c *scyllaClusterStatusCollector) Collect(_ context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
 	if params.ScyllaCluster == nil {
