@@ -72,6 +72,7 @@ type DiagnoseOptions struct {
 
 	// Output flags.
 	OutputDir string
+	DryRun    bool
 	KeepGoing bool
 
 	// Resolved at Complete() time.
@@ -97,6 +98,7 @@ func (o *DiagnoseOptions) AddFlags(flagset *pflag.FlagSet) {
 	flagset.StringSliceVar(&o.Enable, "enable", o.Enable, "Additional analyzer IDs to enable on top of the profile.")
 	flagset.StringSliceVar(&o.Disable, "disable", o.Disable, "Analyzer IDs to disable from the profile.")
 	flagset.StringVar(&o.OutputDir, "output-dir", o.OutputDir, "Directory to write artifacts. If empty, artifacts are written to a temp directory.")
+	flagset.BoolVar(&o.DryRun, "dry-run", o.DryRun, "Print what would be collected and analyzed without connecting to the cluster.")
 	flagset.BoolVar(&o.KeepGoing, "keep-going", o.KeepGoing, "Continue running diagnostics even if some collectors fail.")
 }
 
@@ -181,6 +183,11 @@ func (o *DiagnoseOptions) Run(streams genericclioptions.IOStreams, cmd *cobra.Co
 	}()
 
 	klog.InfoS("Starting diagnostics", "Profile", o.ProfileName, "OutputDir", o.OutputDir)
+
+	// --dry-run: resolve and print the plan without touching the cluster.
+	if o.DryRun {
+		return o.printDryRunSummary(streams.Out)
+	}
 
 	// Discover targets.
 	clusterLister := &k8sScyllaClusterLister{scyllaClient: o.scyllaClient}
@@ -303,6 +310,52 @@ func (o *DiagnoseOptions) writeReportJSON(result *engine.EngineResult, clusters 
 	}
 
 	klog.V(2).InfoS("Wrote report.json", "path", path)
+	return nil
+}
+
+// printDryRunSummary resolves the profile and prints what would be collected
+// and analyzed, without making any connection to the cluster.
+func (o *DiagnoseOptions) printDryRunSummary(w io.Writer) error {
+	allCollectorMap := collectors.AllCollectorsMap()
+	allAnalyzerMap := analyzers.AllAnalyzersMap()
+	allProfileMap := profiles.AllProfiles()
+
+	enableIDs := make([]engine.AnalyzerID, len(o.Enable))
+	for i, s := range o.Enable {
+		enableIDs[i] = engine.AnalyzerID(s)
+	}
+	disableIDs := make([]engine.AnalyzerID, len(o.Disable))
+	for i, s := range o.Disable {
+		disableIDs[i] = engine.AnalyzerID(s)
+	}
+
+	resolvedCollectors, resolvedAnalyzers, err := engine.ResolveProfile(
+		o.ProfileName, allProfileMap, enableIDs, disableIDs, allAnalyzerMap, allCollectorMap,
+	)
+	if err != nil {
+		return fmt.Errorf("resolving profile: %w", err)
+	}
+
+	fmt.Fprintf(w, "Dry run — nothing will be collected or written.\n\n")
+	fmt.Fprintf(w, "Profile:  %s\n", o.ProfileName)
+	if o.ClusterName != "" {
+		fmt.Fprintf(w, "Target:   cluster %q (all namespaces unless --namespace is set)\n", o.ClusterName)
+	} else {
+		fmt.Fprintf(w, "Target:   all ScyllaDB clusters\n")
+	}
+
+	fmt.Fprintf(w, "\nCollectors (%d):\n", len(resolvedCollectors))
+	for _, id := range resolvedCollectors {
+		c := allCollectorMap[id]
+		fmt.Fprintf(w, "  %-14s  %s\n", "["+c.Scope().String()+"]", c.Name())
+	}
+
+	fmt.Fprintf(w, "\nAnalyzers (%d):\n", len(resolvedAnalyzers))
+	for _, id := range resolvedAnalyzers {
+		a := allAnalyzerMap[id]
+		fmt.Fprintf(w, "  %s\n", a.Name())
+	}
+
 	return nil
 }
 
