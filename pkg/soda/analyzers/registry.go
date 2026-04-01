@@ -13,6 +13,7 @@ func AllAnalyzers() []engine.Analyzer {
 		NewSchemaAgreementAnalyzer(),
 		NewOSSupportAnalyzer(),
 		NewGossipHealthAnalyzer(),
+		NewTopologyHealthAnalyzer(),
 	}
 }
 

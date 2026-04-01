@@ -37,6 +37,7 @@ func AllProfiles() map[string]engine.Profile {
 				analyzers.SchemaAgreementAnalyzerID,
 				analyzers.OSSupportAnalyzerID,
 				analyzers.GossipHealthAnalyzerID,
+				analyzers.TopologyHealthAnalyzerID,
 			},
 		},
 	}
