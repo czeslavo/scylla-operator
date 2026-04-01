@@ -3,6 +3,7 @@ package collectors
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/scylladb/scylla-operator/pkg/soda/engine"
@@ -14,9 +15,9 @@ const (
 	ScyllaDConfigCollectorID engine.CollectorID = "ScyllaDConfigCollector"
 )
 
-// ScyllaDConfigResult holds the concatenated contents of all files in /etc/scylla.d/.
+// ScyllaDConfigResult holds the contents of all files in /etc/scylla.d/, keyed by filename.
 type ScyllaDConfigResult struct {
-	RawContents string `json:"raw_contents"` // Concatenated output of all /etc/scylla.d/* files
+	Files map[string]string `json:"files"` // Map of filename (e.g. "io.conf") to file contents
 }
 
 // GetScyllaDConfigResult is the typed accessor for ScyllaDConfigCollector results.
@@ -35,12 +36,7 @@ func GetScyllaDConfigResult(vitals *engine.Vitals, podKey engine.ScopeKey) (*Scy
 	return typed, nil
 }
 
-// ReadScyllaDConfigOutput reads the raw scylla-d-contents.txt artifact.
-func ReadScyllaDConfigOutput(reader engine.ArtifactReader, podKey engine.ScopeKey) ([]byte, error) {
-	return reader.ReadArtifact(ScyllaDConfigCollectorID, podKey, "scylla-d-contents.txt")
-}
-
-// scyllaDConfigCollector collects the contents of all files under /etc/scylla.d/.
+// scyllaDConfigCollector collects each file under /etc/scylla.d/ as a separate artifact.
 type scyllaDConfigCollector struct{}
 
 var _ engine.Collector = (*scyllaDConfigCollector)(nil)
@@ -57,7 +53,7 @@ func (c *scyllaDConfigCollector) DependsOn() []engine.CollectorID { return nil }
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
-//   - core/v1: pods/exec — create (to read /etc/scylla.d/* files)
+//   - core/v1: pods/exec — create (to list and read /etc/scylla.d/* files)
 func (c *scyllaDConfigCollector) RBAC() []rbacv1.PolicyRule {
 	return []rbacv1.PolicyRule{
 		{
@@ -73,32 +69,61 @@ func (c *scyllaDConfigCollector) Collect(ctx context.Context, params engine.Coll
 		return nil, fmt.Errorf("pod info not provided")
 	}
 
-	stdout, _, err := params.PodExecutor.Execute(ctx, params.Pod.Namespace, params.Pod.Name, scyllaContainerName,
-		[]string{"bash", "-c", `for f in /etc/scylla.d/*; do echo "=== $f ==="; cat "$f" 2>/dev/null || echo "(file not readable)"; done`})
+	// List files in /etc/scylla.d/ (one path per line, no directories).
+	lsOut, _, err := params.PodExecutor.Execute(ctx, params.Pod.Namespace, params.Pod.Name, scyllaContainerName,
+		[]string{"bash", "-c", "ls /etc/scylla.d/"})
 	if err != nil {
-		return nil, fmt.Errorf("reading /etc/scylla.d/*: %w", err)
+		return nil, fmt.Errorf("listing /etc/scylla.d/: %w", err)
 	}
 
-	raw := strings.TrimSpace(stdout)
+	filenames := parseLines(lsOut)
 
 	result := &ScyllaDConfigResult{
-		RawContents: raw,
+		Files: make(map[string]string, len(filenames)),
 	}
 
-	// Count the number of files found (each starts with "=== /etc/scylla.d/...").
-	fileCount := strings.Count(raw, "=== /etc/scylla.d/")
-
 	var artifacts []engine.Artifact
-	if params.ArtifactWriter != nil {
-		if relPath, err := params.ArtifactWriter.WriteArtifact("scylla-d-contents.txt", []byte(raw)); err == nil {
-			artifacts = append(artifacts, engine.Artifact{RelativePath: relPath, Description: "Contents of all files in /etc/scylla.d/"})
+
+	for _, filename := range filenames {
+		fullPath := "/etc/scylla.d/" + filename
+
+		content, _, err := params.PodExecutor.Execute(ctx, params.Pod.Namespace, params.Pod.Name, scyllaContainerName,
+			[]string{"cat", fullPath})
+		if err != nil {
+			// Record that we tried but failed rather than aborting the whole collector.
+			result.Files[filename] = fmt.Sprintf("(error reading file: %v)", err)
+			continue
+		}
+
+		result.Files[filename] = content
+
+		if params.ArtifactWriter != nil {
+			// Store each file under its original basename, preserving the extension.
+			artifactName := filepath.Base(filename)
+			if relPath, err := params.ArtifactWriter.WriteArtifact(artifactName, []byte(content)); err == nil {
+				artifacts = append(artifacts, engine.Artifact{
+					RelativePath: relPath,
+					Description:  fmt.Sprintf("Contents of %s", fullPath),
+				})
+			}
 		}
 	}
 
 	return &engine.CollectorResult{
 		Status:    engine.CollectorPassed,
 		Data:      result,
-		Message:   fmt.Sprintf("collected /etc/scylla.d/* (%d files)", fileCount),
+		Message:   fmt.Sprintf("collected /etc/scylla.d/* (%d files)", len(filenames)),
 		Artifacts: artifacts,
 	}, nil
+}
+
+// parseLines splits output into non-empty trimmed lines.
+func parseLines(s string) []string {
+	var lines []string
+	for _, line := range strings.Split(s, "\n") {
+		if trimmed := strings.TrimSpace(line); trimmed != "" {
+			lines = append(lines, trimmed)
+		}
+	}
+	return lines
 }
