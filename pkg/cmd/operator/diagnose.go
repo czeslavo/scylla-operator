@@ -25,6 +25,8 @@ import (
 	"github.com/spf13/pflag"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	kgenericclioptions "k8s.io/cli-runtime/pkg/genericclioptions"
@@ -603,50 +605,92 @@ func (l *k8sResourceLister) ListPods(ctx context.Context, namespace string, sele
 	return podList.Items, nil
 }
 
-func (l *k8sResourceLister) ListConfigMaps(ctx context.Context, namespace string) ([]corev1.ConfigMap, error) {
-	list, err := l.kubeClient.CoreV1().ConfigMaps(namespace).List(ctx, metav1.ListOptions{})
+func (l *k8sResourceLister) ListConfigMaps(ctx context.Context, namespace string, selector labels.Selector) ([]corev1.ConfigMap, error) {
+	list, err := l.kubeClient.CoreV1().ConfigMaps(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: selector.String(),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("listing configmaps: %w", err)
 	}
 	return list.Items, nil
 }
 
-func (l *k8sResourceLister) ListServices(ctx context.Context, namespace string) ([]corev1.Service, error) {
-	list, err := l.kubeClient.CoreV1().Services(namespace).List(ctx, metav1.ListOptions{})
+func (l *k8sResourceLister) ListServices(ctx context.Context, namespace string, selector labels.Selector) ([]corev1.Service, error) {
+	list, err := l.kubeClient.CoreV1().Services(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: selector.String(),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("listing services: %w", err)
 	}
 	return list.Items, nil
 }
 
-func (l *k8sResourceLister) ListServiceAccounts(ctx context.Context, namespace string) ([]corev1.ServiceAccount, error) {
-	list, err := l.kubeClient.CoreV1().ServiceAccounts(namespace).List(ctx, metav1.ListOptions{})
+func (l *k8sResourceLister) ListServiceAccounts(ctx context.Context, namespace string, selector labels.Selector) ([]corev1.ServiceAccount, error) {
+	list, err := l.kubeClient.CoreV1().ServiceAccounts(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: selector.String(),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("listing serviceaccounts: %w", err)
 	}
 	return list.Items, nil
 }
 
-func (l *k8sResourceLister) ListDeployments(ctx context.Context, namespace string) ([]appsv1.Deployment, error) {
-	list, err := l.kubeClient.AppsV1().Deployments(namespace).List(ctx, metav1.ListOptions{})
+func (l *k8sResourceLister) ListPersistentVolumeClaims(ctx context.Context, namespace string, selector labels.Selector) ([]corev1.PersistentVolumeClaim, error) {
+	list, err := l.kubeClient.CoreV1().PersistentVolumeClaims(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: selector.String(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("listing persistentvolumeclaims: %w", err)
+	}
+	return list.Items, nil
+}
+
+func (l *k8sResourceLister) ListDeployments(ctx context.Context, namespace string, selector labels.Selector) ([]appsv1.Deployment, error) {
+	list, err := l.kubeClient.AppsV1().Deployments(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: selector.String(),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("listing deployments: %w", err)
 	}
 	return list.Items, nil
 }
 
-func (l *k8sResourceLister) ListStatefulSets(ctx context.Context, namespace string) ([]appsv1.StatefulSet, error) {
-	list, err := l.kubeClient.AppsV1().StatefulSets(namespace).List(ctx, metav1.ListOptions{})
+func (l *k8sResourceLister) ListStatefulSets(ctx context.Context, namespace string, selector labels.Selector) ([]appsv1.StatefulSet, error) {
+	list, err := l.kubeClient.AppsV1().StatefulSets(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: selector.String(),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("listing statefulsets: %w", err)
 	}
 	return list.Items, nil
 }
 
-func (l *k8sResourceLister) ListDaemonSets(ctx context.Context, namespace string) ([]appsv1.DaemonSet, error) {
-	list, err := l.kubeClient.AppsV1().DaemonSets(namespace).List(ctx, metav1.ListOptions{})
+func (l *k8sResourceLister) ListDaemonSets(ctx context.Context, namespace string, selector labels.Selector) ([]appsv1.DaemonSet, error) {
+	list, err := l.kubeClient.AppsV1().DaemonSets(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: selector.String(),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("listing daemonsets: %w", err)
+	}
+	return list.Items, nil
+}
+
+func (l *k8sResourceLister) ListPodDisruptionBudgets(ctx context.Context, namespace string, selector labels.Selector) ([]policyv1.PodDisruptionBudget, error) {
+	list, err := l.kubeClient.PolicyV1().PodDisruptionBudgets(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: selector.String(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("listing poddisruptionbudgets: %w", err)
+	}
+	return list.Items, nil
+}
+
+func (l *k8sResourceLister) ListRoleBindings(ctx context.Context, namespace string, selector labels.Selector) ([]rbacv1.RoleBinding, error) {
+	list, err := l.kubeClient.RbacV1().RoleBindings(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: selector.String(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("listing rolebindings: %w", err)
 	}
 	return list.Items, nil
 }
