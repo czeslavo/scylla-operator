@@ -103,7 +103,7 @@ func WriteIndex(w io.Writer, params IndexParams) error {
 	// --- Analysis Results ---
 	fmt.Fprintf(w, "## Analysis Results\n\n")
 	if len(params.Result.ResolvedAnalyzers) == 0 {
-		fmt.Fprintf(w, "_No analyzers were resolved._\n\n")
+		fmt.Fprintf(w, "No analyzers are configured for this profile.\n\n")
 	} else {
 		// Collect all per-analyzer results and print them in a table.
 		fmt.Fprintf(w, "| Analyzer | Scope | Status | Message |\n")

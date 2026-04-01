@@ -135,6 +135,11 @@ func formatDuration(d time.Duration) string {
 func (c *ConsoleWriter) writeAnalyzers(result *engine.EngineResult) {
 	fmt.Fprintf(c.w, "Analysis:\n")
 
+	if len(result.ResolvedAnalyzers) == 0 {
+		fmt.Fprintf(c.w, "  (no analyzers configured for this profile)\n\n")
+		return
+	}
+
 	for _, analyzerID := range result.ResolvedAnalyzers {
 		byScope, ok := result.AnalyzerResults[analyzerID]
 		if !ok {
