@@ -7,6 +7,7 @@ import (
 
 	"github.com/scylladb/scylla-operator/pkg/soda/engine"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/yaml"
 )
 
@@ -69,7 +70,7 @@ func (c *deploymentCollector) Collect(ctx context.Context, params engine.Collect
 	total := 0
 
 	for _, ns := range operatorNamespaces {
-		deployments, err := params.ResourceLister.ListDeployments(ctx, ns)
+		deployments, err := params.ResourceLister.ListDeployments(ctx, ns, labels.Everything())
 		if err != nil {
 			return nil, fmt.Errorf("listing deployments in namespace %s: %w", ns, err)
 		}

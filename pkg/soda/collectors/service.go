@@ -7,6 +7,7 @@ import (
 
 	"github.com/scylladb/scylla-operator/pkg/soda/engine"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/yaml"
 )
 
@@ -69,7 +70,7 @@ func (c *serviceCollector) Collect(ctx context.Context, params engine.CollectorP
 	total := 0
 
 	for _, ns := range operatorNamespaces {
-		services, err := params.ResourceLister.ListServices(ctx, ns)
+		services, err := params.ResourceLister.ListServices(ctx, ns, labels.Everything())
 		if err != nil {
 			return nil, fmt.Errorf("listing services in namespace %s: %w", ns, err)
 		}

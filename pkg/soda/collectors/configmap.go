@@ -7,6 +7,7 @@ import (
 
 	"github.com/scylladb/scylla-operator/pkg/soda/engine"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/yaml"
 )
 
@@ -69,7 +70,7 @@ func (c *configMapCollector) Collect(ctx context.Context, params engine.Collecto
 	total := 0
 
 	for _, ns := range operatorNamespaces {
-		configMaps, err := params.ResourceLister.ListConfigMaps(ctx, ns)
+		configMaps, err := params.ResourceLister.ListConfigMaps(ctx, ns, labels.Everything())
 		if err != nil {
 			return nil, fmt.Errorf("listing configmaps in namespace %s: %w", ns, err)
 		}
