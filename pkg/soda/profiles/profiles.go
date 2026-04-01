@@ -46,6 +46,15 @@ func AllProfiles() map[string]engine.Profile {
 				collectors.ServiceCollectorID,
 				collectors.ServiceAccountCollectorID,
 				collectors.PodManifestCollectorID,
+				// PerScyllaCluster manifest collectors — child resources of ScyllaCluster.
+				collectors.ScyllaClusterStatefulSetCollectorID,
+				collectors.ScyllaClusterServiceCollectorID,
+				collectors.ScyllaClusterConfigMapCollectorID,
+				collectors.ScyllaClusterPodCollectorID,
+				collectors.ScyllaClusterPDBCollectorID,
+				collectors.ScyllaClusterServiceAccountCollectorID,
+				collectors.ScyllaClusterRoleBindingCollectorID,
+				collectors.ScyllaClusterPVCCollectorID,
 			},
 			Analyzers: []engine.AnalyzerID{
 				analyzers.ScyllaVersionSupportAnalyzerID,
