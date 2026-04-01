@@ -14,6 +14,8 @@ import (
 	"github.com/scylladb/scylla-operator/pkg/soda/engine"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/labels"
 )
 
@@ -65,16 +67,18 @@ func (f *FakePodExecutor) Execute(_ context.Context, namespace, podName, contain
 // Fields are set directly; unset fields return nil slices with no error.
 type FakeResourceLister struct {
 	// Kubernetes core
-	Nodes              []corev1.Node
-	NodesErr           error
-	Pods               map[string][]corev1.Pod // namespace → pods
-	PodsErr            error
-	ConfigMaps         map[string][]corev1.ConfigMap
-	ConfigMapsErr      error
-	Services           map[string][]corev1.Service
-	ServicesErr        error
-	ServiceAccounts    map[string][]corev1.ServiceAccount
-	ServiceAccountsErr error
+	Nodes                  []corev1.Node
+	NodesErr               error
+	Pods                   map[string][]corev1.Pod // namespace → pods
+	PodsErr                error
+	ConfigMaps             map[string][]corev1.ConfigMap
+	ConfigMapsErr          error
+	Services               map[string][]corev1.Service
+	ServicesErr            error
+	ServiceAccounts        map[string][]corev1.ServiceAccount
+	ServiceAccountsErr     error
+	PersistentVolumeClaims map[string][]corev1.PersistentVolumeClaim
+	PVCsErr                error
 
 	// Kubernetes apps
 	Deployments     map[string][]appsv1.Deployment
@@ -83,6 +87,14 @@ type FakeResourceLister struct {
 	StatefulSetsErr error
 	DaemonSets      map[string][]appsv1.DaemonSet
 	DaemonSetsErr   error
+
+	// Kubernetes policy
+	PodDisruptionBudgets map[string][]policyv1.PodDisruptionBudget
+	PDBsErr              error
+
+	// Kubernetes RBAC
+	RoleBindings    map[string][]rbacv1.RoleBinding
+	RoleBindingsErr error
 
 	// Scylla
 	ScyllaClusters           map[string][]engine.ScyllaClusterInfo
@@ -108,46 +120,67 @@ func (f *FakeResourceLister) ListPods(_ context.Context, namespace string, _ lab
 	return f.Pods[namespace], nil
 }
 
-func (f *FakeResourceLister) ListConfigMaps(_ context.Context, namespace string) ([]corev1.ConfigMap, error) {
+func (f *FakeResourceLister) ListConfigMaps(_ context.Context, namespace string, _ labels.Selector) ([]corev1.ConfigMap, error) {
 	if f.ConfigMapsErr != nil {
 		return nil, f.ConfigMapsErr
 	}
 	return f.ConfigMaps[namespace], nil
 }
 
-func (f *FakeResourceLister) ListServices(_ context.Context, namespace string) ([]corev1.Service, error) {
+func (f *FakeResourceLister) ListServices(_ context.Context, namespace string, _ labels.Selector) ([]corev1.Service, error) {
 	if f.ServicesErr != nil {
 		return nil, f.ServicesErr
 	}
 	return f.Services[namespace], nil
 }
 
-func (f *FakeResourceLister) ListServiceAccounts(_ context.Context, namespace string) ([]corev1.ServiceAccount, error) {
+func (f *FakeResourceLister) ListServiceAccounts(_ context.Context, namespace string, _ labels.Selector) ([]corev1.ServiceAccount, error) {
 	if f.ServiceAccountsErr != nil {
 		return nil, f.ServiceAccountsErr
 	}
 	return f.ServiceAccounts[namespace], nil
 }
 
-func (f *FakeResourceLister) ListDeployments(_ context.Context, namespace string) ([]appsv1.Deployment, error) {
+func (f *FakeResourceLister) ListPersistentVolumeClaims(_ context.Context, namespace string, _ labels.Selector) ([]corev1.PersistentVolumeClaim, error) {
+	if f.PVCsErr != nil {
+		return nil, f.PVCsErr
+	}
+	return f.PersistentVolumeClaims[namespace], nil
+}
+
+func (f *FakeResourceLister) ListDeployments(_ context.Context, namespace string, _ labels.Selector) ([]appsv1.Deployment, error) {
 	if f.DeploymentsErr != nil {
 		return nil, f.DeploymentsErr
 	}
 	return f.Deployments[namespace], nil
 }
 
-func (f *FakeResourceLister) ListStatefulSets(_ context.Context, namespace string) ([]appsv1.StatefulSet, error) {
+func (f *FakeResourceLister) ListStatefulSets(_ context.Context, namespace string, _ labels.Selector) ([]appsv1.StatefulSet, error) {
 	if f.StatefulSetsErr != nil {
 		return nil, f.StatefulSetsErr
 	}
 	return f.StatefulSets[namespace], nil
 }
 
-func (f *FakeResourceLister) ListDaemonSets(_ context.Context, namespace string) ([]appsv1.DaemonSet, error) {
+func (f *FakeResourceLister) ListDaemonSets(_ context.Context, namespace string, _ labels.Selector) ([]appsv1.DaemonSet, error) {
 	if f.DaemonSetsErr != nil {
 		return nil, f.DaemonSetsErr
 	}
 	return f.DaemonSets[namespace], nil
+}
+
+func (f *FakeResourceLister) ListPodDisruptionBudgets(_ context.Context, namespace string, _ labels.Selector) ([]policyv1.PodDisruptionBudget, error) {
+	if f.PDBsErr != nil {
+		return nil, f.PDBsErr
+	}
+	return f.PodDisruptionBudgets[namespace], nil
+}
+
+func (f *FakeResourceLister) ListRoleBindings(_ context.Context, namespace string, _ labels.Selector) ([]rbacv1.RoleBinding, error) {
+	if f.RoleBindingsErr != nil {
+		return nil, f.RoleBindingsErr
+	}
+	return f.RoleBindings[namespace], nil
 }
 
 func (f *FakeResourceLister) ListScyllaClusters(_ context.Context, namespace string) ([]engine.ScyllaClusterInfo, error) {
