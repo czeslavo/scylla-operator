@@ -19,6 +19,9 @@ func AllCollectors() []engine.Collector {
 		NewGossipInfoCollector(),
 		NewSystemTopologyCollector(),
 		NewSystemConfigCollector(),
+		NewScyllaDConfigCollector(),
+		NewDiskUsageCollector(),
+		NewRlimitsCollector(),
 	}
 }
 
@@ -51,5 +54,8 @@ func ResultTypeRegistry() map[engine.CollectorID]any {
 		GossipInfoCollectorID:          &GossipInfoResult{},
 		SystemTopologyCollectorID:      &SystemTopologyResult{},
 		SystemConfigCollectorID:        &SystemConfigResult{},
+		ScyllaDConfigCollectorID:       &ScyllaDConfigResult{},
+		DiskUsageCollectorID:           &DiskUsageResult{},
+		RlimitsCollectorID:             &RlimitsResult{},
 	}
 }

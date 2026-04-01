@@ -31,6 +31,8 @@ func TestFullProfile_ContainsAllAnalyzers(t *testing.T) {
 		analyzers.ScyllaVersionSupportAnalyzerID,
 		analyzers.SchemaAgreementAnalyzerID,
 		analyzers.OSSupportAnalyzerID,
+		analyzers.GossipHealthAnalyzerID,
+		analyzers.TopologyHealthAnalyzerID,
 	}
 
 	if len(full.Analyzers) != len(expectedAnalyzers) {
