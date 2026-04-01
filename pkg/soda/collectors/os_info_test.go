@@ -29,9 +29,9 @@ PRETTY_NAME="Red Hat Enterprise Linux 9.7 (Plow)"
 	fakeWriter := sodatesting.NewFakeArtifactWriter()
 
 	collector := NewOSInfoCollector()
-	result, err := collector.Collect(context.Background(), engine.CollectorParams{
+	result, err := collector.CollectPerScyllaNode(context.Background(), engine.PerScyllaNodeCollectorParams{
 		Vitals:         engine.NewVitals(),
-		ScyllaNode: pod,
+		ScyllaNode:     pod,
 		PodExecutor:    fakeExec,
 		ArtifactWriter: fakeWriter,
 	})
@@ -93,9 +93,9 @@ ID=ubuntu
 	}
 
 	collector := NewOSInfoCollector()
-	result, err := collector.Collect(context.Background(), engine.CollectorParams{
+	result, err := collector.CollectPerScyllaNode(context.Background(), engine.PerScyllaNodeCollectorParams{
 		Vitals:      engine.NewVitals(),
-		ScyllaNode: pod,
+		ScyllaNode:  pod,
 		PodExecutor: fakeExec,
 	})
 
@@ -128,9 +128,9 @@ VERSION_ID="2023"
 	}
 
 	collector := NewOSInfoCollector()
-	result, err := collector.Collect(context.Background(), engine.CollectorParams{
+	result, err := collector.CollectPerScyllaNode(context.Background(), engine.PerScyllaNodeCollectorParams{
 		Vitals:      engine.NewVitals(),
-		ScyllaNode: pod,
+		ScyllaNode:  pod,
 		PodExecutor: fakeExec,
 	})
 
@@ -151,24 +151,14 @@ func TestOSInfoCollector_UnameError(t *testing.T) {
 	}
 
 	collector := NewOSInfoCollector()
-	_, err := collector.Collect(context.Background(), engine.CollectorParams{
+	_, err := collector.CollectPerScyllaNode(context.Background(), engine.PerScyllaNodeCollectorParams{
 		Vitals:      engine.NewVitals(),
-		ScyllaNode: pod,
+		ScyllaNode:  pod,
 		PodExecutor: fakeExec,
 	})
 
 	if err == nil {
 		t.Fatal("expected error for uname failure")
-	}
-}
-
-func TestOSInfoCollector_NilPod(t *testing.T) {
-	collector := NewOSInfoCollector()
-	_, err := collector.Collect(context.Background(), engine.CollectorParams{
-		Vitals: engine.NewVitals(),
-	})
-	if err == nil {
-		t.Fatal("expected error for nil pod")
 	}
 }
 
@@ -186,9 +176,9 @@ func TestOSInfoCollector_EmptyOSRelease(t *testing.T) {
 	}
 
 	collector := NewOSInfoCollector()
-	result, err := collector.Collect(context.Background(), engine.CollectorParams{
+	result, err := collector.CollectPerScyllaNode(context.Background(), engine.PerScyllaNodeCollectorParams{
 		Vitals:      engine.NewVitals(),
-		ScyllaNode: pod,
+		ScyllaNode:  pod,
 		PodExecutor: fakeExec,
 	})
 

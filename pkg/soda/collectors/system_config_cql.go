@@ -29,18 +29,7 @@ type SystemConfigResult struct {
 
 // GetSystemConfigResult is the typed accessor for SystemConfigCollector results.
 func GetSystemConfigResult(vitals *engine.Vitals, podKey engine.ScopeKey) (*SystemConfigResult, error) {
-	result, ok := vitals.Get(SystemConfigCollectorID, podKey)
-	if !ok {
-		return nil, fmt.Errorf("SystemConfigCollector result not found for %v", podKey)
-	}
-	if result.Status != engine.CollectorPassed {
-		return nil, fmt.Errorf("SystemConfigCollector did not pass for %v: %s", podKey, result.Message)
-	}
-	typed, ok := result.Data.(*SystemConfigResult)
-	if !ok {
-		return nil, fmt.Errorf("unexpected data type %T for SystemConfigCollector", result.Data)
-	}
-	return typed, nil
+	return engine.GetResult[SystemConfigResult](vitals, SystemConfigCollectorID, podKey)
 }
 
 // ReadSystemConfigJSON reads the system-config.json artifact.
@@ -49,19 +38,16 @@ func ReadSystemConfigJSON(reader engine.ArtifactReader, podKey engine.ScopeKey) 
 }
 
 // systemConfigCollector collects system.config data via cqlsh.
-type systemConfigCollector struct{}
-
-var _ engine.Collector = (*systemConfigCollector)(nil)
-
-// NewSystemConfigCollector creates a new SystemConfigCollector.
-func NewSystemConfigCollector() engine.Collector {
-	return &systemConfigCollector{}
+type systemConfigCollector struct {
+	engine.CollectorBase
 }
 
-func (c *systemConfigCollector) ID() engine.CollectorID          { return SystemConfigCollectorID }
-func (c *systemConfigCollector) Name() string                    { return "System config" }
-func (c *systemConfigCollector) Scope() engine.CollectorScope    { return engine.PerScyllaNode }
-func (c *systemConfigCollector) DependsOn() []engine.CollectorID { return nil }
+var _ engine.PerScyllaNodeCollector = (*systemConfigCollector)(nil)
+
+// NewSystemConfigCollector creates a new SystemConfigCollector.
+func NewSystemConfigCollector() engine.PerScyllaNodeCollector {
+	return &systemConfigCollector{CollectorBase: engine.NewCollectorBase(SystemConfigCollectorID, "System config", engine.PerScyllaNode, nil)}
+}
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -76,12 +62,8 @@ func (c *systemConfigCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *systemConfigCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
-	if params.ScyllaNode == nil {
-		return nil, fmt.Errorf("pod info not provided")
-	}
-
-	stdout, _, err := params.PodExecutor.Execute(ctx, params.ScyllaNode.Namespace, params.ScyllaNode.Name, scyllaContainerName,
+func (c *systemConfigCollector) CollectPerScyllaNode(ctx context.Context, params engine.PerScyllaNodeCollectorParams) (*engine.CollectorResult, error) {
+	stdout, err := ExecInScyllaPod(ctx, params,
 		[]string{"cqlsh", "127.0.0.1", "9042", "--no-color", "-e",
 			"SELECT name, source, type, value FROM system.config"})
 	if err != nil {
@@ -96,13 +78,8 @@ func (c *systemConfigCollector) Collect(ctx context.Context, params engine.Colle
 
 	// Write artifact.
 	var artifacts []engine.Artifact
-	if params.ArtifactWriter != nil {
-		artifactBytes, jerr := cqlshRowsToJSON(systemConfigToMaps(result.Entries))
-		if jerr == nil {
-			if relPath, werr := params.ArtifactWriter.WriteArtifact("system-config.json", artifactBytes); werr == nil {
-				artifacts = append(artifacts, engine.Artifact{RelativePath: relPath, Description: "system.config rows (effective in-memory Scylla configuration)"})
-			}
-		}
+	if artifactBytes, jerr := cqlshRowsToJSON(systemConfigToMaps(result.Entries)); jerr == nil {
+		writeArtifact(params.ArtifactWriter, "system-config.json", artifactBytes, "system.config rows (effective in-memory Scylla configuration)", &artifacts)
 	}
 
 	return &engine.CollectorResult{

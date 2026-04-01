@@ -21,18 +21,7 @@ type RlimitsResult struct {
 
 // GetRlimitsResult is the typed accessor for RlimitsCollector results.
 func GetRlimitsResult(vitals *engine.Vitals, podKey engine.ScopeKey) (*RlimitsResult, error) {
-	result, ok := vitals.Get(RlimitsCollectorID, podKey)
-	if !ok {
-		return nil, fmt.Errorf("RlimitsCollector result not found for %v", podKey)
-	}
-	if result.Status != engine.CollectorPassed {
-		return nil, fmt.Errorf("RlimitsCollector did not pass for %v: %s", podKey, result.Message)
-	}
-	typed, ok := result.Data.(*RlimitsResult)
-	if !ok {
-		return nil, fmt.Errorf("unexpected data type %T for RlimitsCollector", result.Data)
-	}
-	return typed, nil
+	return engine.GetResult[RlimitsResult](vitals, RlimitsCollectorID, podKey)
 }
 
 // ReadRlimitsOutput reads the raw rlimits.txt artifact.
@@ -42,19 +31,16 @@ func ReadRlimitsOutput(reader engine.ArtifactReader, podKey engine.ScopeKey) ([]
 
 // rlimitsCollector collects resource limits for the scylla process from pods.
 // It uses /proc/<pid>/limits because prlimit is not available in the scylla container.
-type rlimitsCollector struct{}
-
-var _ engine.Collector = (*rlimitsCollector)(nil)
-
-// NewRlimitsCollector creates a new RlimitsCollector.
-func NewRlimitsCollector() engine.Collector {
-	return &rlimitsCollector{}
+type rlimitsCollector struct {
+	engine.CollectorBase
 }
 
-func (c *rlimitsCollector) ID() engine.CollectorID          { return RlimitsCollectorID }
-func (c *rlimitsCollector) Name() string                    { return "Scylla process resource limits" }
-func (c *rlimitsCollector) Scope() engine.CollectorScope    { return engine.PerScyllaNode }
-func (c *rlimitsCollector) DependsOn() []engine.CollectorID { return nil }
+var _ engine.PerScyllaNodeCollector = (*rlimitsCollector)(nil)
+
+// NewRlimitsCollector creates a new RlimitsCollector.
+func NewRlimitsCollector() engine.PerScyllaNodeCollector {
+	return &rlimitsCollector{CollectorBase: engine.NewCollectorBase(RlimitsCollectorID, "Scylla process resource limits", engine.PerScyllaNode, nil)}
+}
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -69,14 +55,9 @@ func (c *rlimitsCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *rlimitsCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
-	if params.ScyllaNode == nil {
-		return nil, fmt.Errorf("pod info not provided")
-	}
-
+func (c *rlimitsCollector) CollectPerScyllaNode(ctx context.Context, params engine.PerScyllaNodeCollectorParams) (*engine.CollectorResult, error) {
 	// prlimit is not available in the scylla container; use /proc/<pid>/limits instead.
-	stdout, _, err := params.PodExecutor.Execute(ctx, params.ScyllaNode.Namespace, params.ScyllaNode.Name, scyllaContainerName,
-		[]string{"bash", "-c", "cat /proc/$(pidof scylla)/limits"})
+	stdout, err := ExecInScyllaPod(ctx, params, []string{"bash", "-c", "cat /proc/$(pidof scylla)/limits"})
 	if err != nil {
 		return nil, fmt.Errorf("reading scylla process limits: %w", err)
 	}
@@ -88,11 +69,7 @@ func (c *rlimitsCollector) Collect(ctx context.Context, params engine.CollectorP
 	}
 
 	var artifacts []engine.Artifact
-	if params.ArtifactWriter != nil {
-		if relPath, err := params.ArtifactWriter.WriteArtifact("rlimits.txt", []byte(raw)); err == nil {
-			artifacts = append(artifacts, engine.Artifact{RelativePath: relPath, Description: "Resource limits for the scylla process (/proc/<pid>/limits)"})
-		}
-	}
+	writeArtifact(params.ArtifactWriter, "rlimits.txt", []byte(raw), "Resource limits for the scylla process (/proc/<pid>/limits)", &artifacts)
 
 	return &engine.CollectorResult{
 		Status:    engine.CollectorPassed,

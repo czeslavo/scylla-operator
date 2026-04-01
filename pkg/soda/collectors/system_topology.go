@@ -32,18 +32,7 @@ type SystemTopologyResult struct {
 
 // GetSystemTopologyResult is the typed accessor for SystemTopologyCollector results.
 func GetSystemTopologyResult(vitals *engine.Vitals, podKey engine.ScopeKey) (*SystemTopologyResult, error) {
-	result, ok := vitals.Get(SystemTopologyCollectorID, podKey)
-	if !ok {
-		return nil, fmt.Errorf("SystemTopologyCollector result not found for %v", podKey)
-	}
-	if result.Status != engine.CollectorPassed {
-		return nil, fmt.Errorf("SystemTopologyCollector did not pass for %v: %s", podKey, result.Message)
-	}
-	typed, ok := result.Data.(*SystemTopologyResult)
-	if !ok {
-		return nil, fmt.Errorf("unexpected data type %T for SystemTopologyCollector", result.Data)
-	}
-	return typed, nil
+	return engine.GetResult[SystemTopologyResult](vitals, SystemTopologyCollectorID, podKey)
 }
 
 // ReadSystemTopologyJSON reads the system-topology.json artifact.
@@ -52,19 +41,16 @@ func ReadSystemTopologyJSON(reader engine.ArtifactReader, podKey engine.ScopeKey
 }
 
 // systemTopologyCollector collects system.topology data via cqlsh.
-type systemTopologyCollector struct{}
-
-var _ engine.Collector = (*systemTopologyCollector)(nil)
-
-// NewSystemTopologyCollector creates a new SystemTopologyCollector.
-func NewSystemTopologyCollector() engine.Collector {
-	return &systemTopologyCollector{}
+type systemTopologyCollector struct {
+	engine.CollectorBase
 }
 
-func (c *systemTopologyCollector) ID() engine.CollectorID          { return SystemTopologyCollectorID }
-func (c *systemTopologyCollector) Name() string                    { return "System topology" }
-func (c *systemTopologyCollector) Scope() engine.CollectorScope    { return engine.PerScyllaNode }
-func (c *systemTopologyCollector) DependsOn() []engine.CollectorID { return nil }
+var _ engine.PerScyllaNodeCollector = (*systemTopologyCollector)(nil)
+
+// NewSystemTopologyCollector creates a new SystemTopologyCollector.
+func NewSystemTopologyCollector() engine.PerScyllaNodeCollector {
+	return &systemTopologyCollector{CollectorBase: engine.NewCollectorBase(SystemTopologyCollectorID, "System topology", engine.PerScyllaNode, nil)}
+}
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -79,12 +65,8 @@ func (c *systemTopologyCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *systemTopologyCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
-	if params.ScyllaNode == nil {
-		return nil, fmt.Errorf("pod info not provided")
-	}
-
-	stdout, _, err := params.PodExecutor.Execute(ctx, params.ScyllaNode.Namespace, params.ScyllaNode.Name, scyllaContainerName,
+func (c *systemTopologyCollector) CollectPerScyllaNode(ctx context.Context, params engine.PerScyllaNodeCollectorParams) (*engine.CollectorResult, error) {
+	stdout, err := ExecInScyllaPod(ctx, params,
 		[]string{"cqlsh", "127.0.0.1", "9042", "--no-color", "-e",
 			"SELECT host_id, node_state, datacenter, rack, release_version, shard_count, upgrade_state FROM system.topology"})
 	if err != nil {
@@ -99,13 +81,8 @@ func (c *systemTopologyCollector) Collect(ctx context.Context, params engine.Col
 
 	// Write artifact.
 	var artifacts []engine.Artifact
-	if params.ArtifactWriter != nil {
-		artifactBytes, jerr := cqlshRowsToJSON(systemTopologyToMaps(result.Nodes))
-		if jerr == nil {
-			if relPath, werr := params.ArtifactWriter.WriteArtifact("system-topology.json", artifactBytes); werr == nil {
-				artifacts = append(artifacts, engine.Artifact{RelativePath: relPath, Description: "system.topology rows"})
-			}
-		}
+	if artifactBytes, jerr := cqlshRowsToJSON(systemTopologyToMaps(result.Nodes)); jerr == nil {
+		writeArtifact(params.ArtifactWriter, "system-topology.json", artifactBytes, "system.topology rows", &artifacts)
 	}
 
 	return &engine.CollectorResult{

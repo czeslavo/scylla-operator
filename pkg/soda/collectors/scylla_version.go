@@ -23,18 +23,7 @@ type ScyllaVersionResult struct {
 
 // GetScyllaVersionResult is the typed accessor for ScyllaVersionCollector results.
 func GetScyllaVersionResult(vitals *engine.Vitals, podKey engine.ScopeKey) (*ScyllaVersionResult, error) {
-	result, ok := vitals.Get(ScyllaVersionCollectorID, podKey)
-	if !ok {
-		return nil, fmt.Errorf("ScyllaVersionCollector result not found for %v", podKey)
-	}
-	if result.Status != engine.CollectorPassed {
-		return nil, fmt.Errorf("ScyllaVersionCollector did not pass for %v: %s", podKey, result.Message)
-	}
-	typed, ok := result.Data.(*ScyllaVersionResult)
-	if !ok {
-		return nil, fmt.Errorf("unexpected data type %T for ScyllaVersionCollector", result.Data)
-	}
-	return typed, nil
+	return engine.GetResult[ScyllaVersionResult](vitals, ScyllaVersionCollectorID, podKey)
 }
 
 // ReadScyllaVersionOutput reads the raw scylla-version.log artifact.
@@ -43,19 +32,16 @@ func ReadScyllaVersionOutput(reader engine.ArtifactReader, podKey engine.ScopeKe
 }
 
 // scyllaVersionCollector collects the Scylla version from pods.
-type scyllaVersionCollector struct{}
-
-var _ engine.Collector = (*scyllaVersionCollector)(nil)
-
-// NewScyllaVersionCollector creates a new ScyllaVersionCollector.
-func NewScyllaVersionCollector() engine.Collector {
-	return &scyllaVersionCollector{}
+type scyllaVersionCollector struct {
+	engine.CollectorBase
 }
 
-func (c *scyllaVersionCollector) ID() engine.CollectorID          { return ScyllaVersionCollectorID }
-func (c *scyllaVersionCollector) Name() string                    { return "Scylla version" }
-func (c *scyllaVersionCollector) Scope() engine.CollectorScope    { return engine.PerScyllaNode }
-func (c *scyllaVersionCollector) DependsOn() []engine.CollectorID { return nil }
+var _ engine.PerScyllaNodeCollector = (*scyllaVersionCollector)(nil)
+
+// NewScyllaVersionCollector creates a new ScyllaVersionCollector.
+func NewScyllaVersionCollector() engine.PerScyllaNodeCollector {
+	return &scyllaVersionCollector{CollectorBase: engine.NewCollectorBase(ScyllaVersionCollectorID, "Scylla version", engine.PerScyllaNode, nil)}
+}
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -70,12 +56,8 @@ func (c *scyllaVersionCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *scyllaVersionCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
-	if params.ScyllaNode == nil {
-		return nil, fmt.Errorf("pod info not provided")
-	}
-
-	stdout, _, err := params.PodExecutor.Execute(ctx, params.ScyllaNode.Namespace, params.ScyllaNode.Name, scyllaContainerName, []string{"scylla", "--version"})
+func (c *scyllaVersionCollector) CollectPerScyllaNode(ctx context.Context, params engine.PerScyllaNodeCollectorParams) (*engine.CollectorResult, error) {
+	stdout, err := ExecInScyllaPod(ctx, params, []string{"scylla", "--version"})
 	if err != nil {
 		return nil, fmt.Errorf("executing scylla --version: %w", err)
 	}
@@ -85,11 +67,7 @@ func (c *scyllaVersionCollector) Collect(ctx context.Context, params engine.Coll
 
 	// Write artifact.
 	var artifacts []engine.Artifact
-	if params.ArtifactWriter != nil {
-		if relPath, err := params.ArtifactWriter.WriteArtifact("scylla-version.log", []byte(stdout)); err == nil {
-			artifacts = append(artifacts, engine.Artifact{RelativePath: relPath, Description: "Raw scylla --version output"})
-		}
-	}
+	writeArtifact(params.ArtifactWriter, "scylla-version.log", []byte(stdout), "Raw scylla --version output", &artifacts)
 
 	return &engine.CollectorResult{
 		Status:    engine.CollectorPassed,

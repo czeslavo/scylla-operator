@@ -28,18 +28,7 @@ type OSInfoResult struct {
 
 // GetOSInfoResult is the typed accessor for OSInfoCollector results.
 func GetOSInfoResult(vitals *engine.Vitals, podKey engine.ScopeKey) (*OSInfoResult, error) {
-	result, ok := vitals.Get(OSInfoCollectorID, podKey)
-	if !ok {
-		return nil, fmt.Errorf("OSInfoCollector result not found for %v", podKey)
-	}
-	if result.Status != engine.CollectorPassed {
-		return nil, fmt.Errorf("OSInfoCollector did not pass for %v: %s", podKey, result.Message)
-	}
-	typed, ok := result.Data.(*OSInfoResult)
-	if !ok {
-		return nil, fmt.Errorf("unexpected data type %T for OSInfoCollector", result.Data)
-	}
-	return typed, nil
+	return engine.GetResult[OSInfoResult](vitals, OSInfoCollectorID, podKey)
 }
 
 // ReadUnameOutput reads the raw uname.log artifact.
@@ -53,19 +42,16 @@ func ReadOSReleaseOutput(reader engine.ArtifactReader, podKey engine.ScopeKey) (
 }
 
 // osInfoCollector collects OS information from Scylla pods.
-type osInfoCollector struct{}
-
-var _ engine.Collector = (*osInfoCollector)(nil)
-
-// NewOSInfoCollector creates a new OSInfoCollector.
-func NewOSInfoCollector() engine.Collector {
-	return &osInfoCollector{}
+type osInfoCollector struct {
+	engine.CollectorBase
 }
 
-func (c *osInfoCollector) ID() engine.CollectorID          { return OSInfoCollectorID }
-func (c *osInfoCollector) Name() string                    { return "OS information" }
-func (c *osInfoCollector) Scope() engine.CollectorScope    { return engine.PerScyllaNode }
-func (c *osInfoCollector) DependsOn() []engine.CollectorID { return nil }
+var _ engine.PerScyllaNodeCollector = (*osInfoCollector)(nil)
+
+// NewOSInfoCollector creates a new OSInfoCollector.
+func NewOSInfoCollector() engine.PerScyllaNodeCollector {
+	return &osInfoCollector{CollectorBase: engine.NewCollectorBase(OSInfoCollectorID, "OS information", engine.PerScyllaNode, nil)}
+}
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -80,19 +66,15 @@ func (c *osInfoCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *osInfoCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
-	if params.ScyllaNode == nil {
-		return nil, fmt.Errorf("pod info not provided")
-	}
-
+func (c *osInfoCollector) CollectPerScyllaNode(ctx context.Context, params engine.PerScyllaNodeCollectorParams) (*engine.CollectorResult, error) {
 	// Execute uname --all.
-	unameOut, _, err := params.PodExecutor.Execute(ctx, params.ScyllaNode.Namespace, params.ScyllaNode.Name, scyllaContainerName, []string{"uname", "--all"})
+	unameOut, err := ExecInScyllaPod(ctx, params, []string{"uname", "--all"})
 	if err != nil {
 		return nil, fmt.Errorf("executing uname: %w", err)
 	}
 
 	// Execute cat /etc/os-release.
-	osReleaseOut, _, err := params.PodExecutor.Execute(ctx, params.ScyllaNode.Namespace, params.ScyllaNode.Name, scyllaContainerName, []string{"cat", "/etc/os-release"})
+	osReleaseOut, err := ExecInScyllaPod(ctx, params, []string{"cat", "/etc/os-release"})
 	if err != nil {
 		return nil, fmt.Errorf("reading /etc/os-release: %w", err)
 	}
@@ -102,14 +84,8 @@ func (c *osInfoCollector) Collect(ctx context.Context, params engine.CollectorPa
 
 	// Write artifacts.
 	var artifacts []engine.Artifact
-	if params.ArtifactWriter != nil {
-		if relPath, err := params.ArtifactWriter.WriteArtifact("uname.log", []byte(unameOut)); err == nil {
-			artifacts = append(artifacts, engine.Artifact{RelativePath: relPath, Description: "Raw uname --all output"})
-		}
-		if relPath, err := params.ArtifactWriter.WriteArtifact("os-release.log", []byte(osReleaseOut)); err == nil {
-			artifacts = append(artifacts, engine.Artifact{RelativePath: relPath, Description: "Raw /etc/os-release content"})
-		}
-	}
+	writeArtifact(params.ArtifactWriter, "uname.log", []byte(unameOut), "Raw uname --all output", &artifacts)
+	writeArtifact(params.ArtifactWriter, "os-release.log", []byte(osReleaseOut), "Raw /etc/os-release content", &artifacts)
 
 	message := fmt.Sprintf("%s %s %s", result.OSName, result.OSVersion, result.Architecture)
 	if result.OSName == "" {

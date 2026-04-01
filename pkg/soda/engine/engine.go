@@ -303,6 +303,7 @@ func (e *Engine) executePerScyllaNodeCollector(ctx context.Context, collector Co
 			ScyllaNode:     node,
 			PodExecutor:    e.config.PodExecutor,
 			PodLogFetcher:  e.config.PodLogFetcher,
+			ResourceLister: e.config.ResourceLister,
 			ArtifactWriter: artifactWriter,
 		})
 	case Collector:

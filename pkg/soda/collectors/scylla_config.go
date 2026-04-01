@@ -23,18 +23,7 @@ type ScyllaConfigResult struct {
 
 // GetScyllaConfigResult is the typed accessor for ScyllaConfigCollector results.
 func GetScyllaConfigResult(vitals *engine.Vitals, podKey engine.ScopeKey) (*ScyllaConfigResult, error) {
-	result, ok := vitals.Get(ScyllaConfigCollectorID, podKey)
-	if !ok {
-		return nil, fmt.Errorf("ScyllaConfigCollector result not found for %v", podKey)
-	}
-	if result.Status != engine.CollectorPassed {
-		return nil, fmt.Errorf("ScyllaConfigCollector did not pass for %v: %s", podKey, result.Message)
-	}
-	typed, ok := result.Data.(*ScyllaConfigResult)
-	if !ok {
-		return nil, fmt.Errorf("unexpected data type %T for ScyllaConfigCollector", result.Data)
-	}
-	return typed, nil
+	return engine.GetResult[ScyllaConfigResult](vitals, ScyllaConfigCollectorID, podKey)
 }
 
 // ReadScyllaConfigYAML reads the raw scylla.yaml artifact.
@@ -43,19 +32,16 @@ func ReadScyllaConfigYAML(reader engine.ArtifactReader, podKey engine.ScopeKey) 
 }
 
 // scyllaConfigCollector collects the Scylla configuration file from pods.
-type scyllaConfigCollector struct{}
-
-var _ engine.Collector = (*scyllaConfigCollector)(nil)
-
-// NewScyllaConfigCollector creates a new ScyllaConfigCollector.
-func NewScyllaConfigCollector() engine.Collector {
-	return &scyllaConfigCollector{}
+type scyllaConfigCollector struct {
+	engine.CollectorBase
 }
 
-func (c *scyllaConfigCollector) ID() engine.CollectorID          { return ScyllaConfigCollectorID }
-func (c *scyllaConfigCollector) Name() string                    { return "Scylla configuration" }
-func (c *scyllaConfigCollector) Scope() engine.CollectorScope    { return engine.PerScyllaNode }
-func (c *scyllaConfigCollector) DependsOn() []engine.CollectorID { return nil }
+var _ engine.PerScyllaNodeCollector = (*scyllaConfigCollector)(nil)
+
+// NewScyllaConfigCollector creates a new ScyllaConfigCollector.
+func NewScyllaConfigCollector() engine.PerScyllaNodeCollector {
+	return &scyllaConfigCollector{CollectorBase: engine.NewCollectorBase(ScyllaConfigCollectorID, "Scylla configuration", engine.PerScyllaNode, nil)}
+}
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -70,13 +56,8 @@ func (c *scyllaConfigCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *scyllaConfigCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
-	if params.ScyllaNode == nil {
-		return nil, fmt.Errorf("pod info not provided")
-	}
-
-	stdout, _, err := params.PodExecutor.Execute(ctx, params.ScyllaNode.Namespace, params.ScyllaNode.Name, scyllaContainerName,
-		[]string{"cat", scyllaConfigPath})
+func (c *scyllaConfigCollector) CollectPerScyllaNode(ctx context.Context, params engine.PerScyllaNodeCollectorParams) (*engine.CollectorResult, error) {
+	stdout, err := ExecInScyllaPod(ctx, params, []string{"cat", scyllaConfigPath})
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", scyllaConfigPath, err)
 	}
@@ -89,11 +70,7 @@ func (c *scyllaConfigCollector) Collect(ctx context.Context, params engine.Colle
 
 	// Write artifact.
 	var artifacts []engine.Artifact
-	if params.ArtifactWriter != nil {
-		if relPath, err := params.ArtifactWriter.WriteArtifact("scylla.yaml", []byte(raw)); err == nil {
-			artifacts = append(artifacts, engine.Artifact{RelativePath: relPath, Description: "Raw /etc/scylla/scylla.yaml content"})
-		}
-	}
+	writeArtifact(params.ArtifactWriter, "scylla.yaml", []byte(raw), "Raw /etc/scylla/scylla.yaml content", &artifacts)
 
 	// Count non-empty, non-comment lines as a rough measure of config size.
 	lineCount := 0

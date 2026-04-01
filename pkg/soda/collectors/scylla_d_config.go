@@ -22,34 +22,20 @@ type ScyllaDConfigResult struct {
 
 // GetScyllaDConfigResult is the typed accessor for ScyllaDConfigCollector results.
 func GetScyllaDConfigResult(vitals *engine.Vitals, podKey engine.ScopeKey) (*ScyllaDConfigResult, error) {
-	result, ok := vitals.Get(ScyllaDConfigCollectorID, podKey)
-	if !ok {
-		return nil, fmt.Errorf("ScyllaDConfigCollector result not found for %v", podKey)
-	}
-	if result.Status != engine.CollectorPassed {
-		return nil, fmt.Errorf("ScyllaDConfigCollector did not pass for %v: %s", podKey, result.Message)
-	}
-	typed, ok := result.Data.(*ScyllaDConfigResult)
-	if !ok {
-		return nil, fmt.Errorf("unexpected data type %T for ScyllaDConfigCollector", result.Data)
-	}
-	return typed, nil
+	return engine.GetResult[ScyllaDConfigResult](vitals, ScyllaDConfigCollectorID, podKey)
 }
 
 // scyllaDConfigCollector collects each file under /etc/scylla.d/ as a separate artifact.
-type scyllaDConfigCollector struct{}
-
-var _ engine.Collector = (*scyllaDConfigCollector)(nil)
-
-// NewScyllaDConfigCollector creates a new ScyllaDConfigCollector.
-func NewScyllaDConfigCollector() engine.Collector {
-	return &scyllaDConfigCollector{}
+type scyllaDConfigCollector struct {
+	engine.CollectorBase
 }
 
-func (c *scyllaDConfigCollector) ID() engine.CollectorID          { return ScyllaDConfigCollectorID }
-func (c *scyllaDConfigCollector) Name() string                    { return "Scylla drop-in config directory" }
-func (c *scyllaDConfigCollector) Scope() engine.CollectorScope    { return engine.PerScyllaNode }
-func (c *scyllaDConfigCollector) DependsOn() []engine.CollectorID { return nil }
+var _ engine.PerScyllaNodeCollector = (*scyllaDConfigCollector)(nil)
+
+// NewScyllaDConfigCollector creates a new ScyllaDConfigCollector.
+func NewScyllaDConfigCollector() engine.PerScyllaNodeCollector {
+	return &scyllaDConfigCollector{CollectorBase: engine.NewCollectorBase(ScyllaDConfigCollectorID, "Scylla drop-in config directory", engine.PerScyllaNode, nil)}
+}
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -64,13 +50,9 @@ func (c *scyllaDConfigCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *scyllaDConfigCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
-	if params.ScyllaNode == nil {
-		return nil, fmt.Errorf("pod info not provided")
-	}
-
+func (c *scyllaDConfigCollector) CollectPerScyllaNode(ctx context.Context, params engine.PerScyllaNodeCollectorParams) (*engine.CollectorResult, error) {
 	// List files in /etc/scylla.d/ (one path per line, no directories).
-	lsOut, _, err := params.PodExecutor.Execute(ctx, params.ScyllaNode.Namespace, params.ScyllaNode.Name, scyllaContainerName,
+	lsOut, err := ExecInScyllaPod(ctx, params,
 		[]string{"bash", "-c", "ls /etc/scylla.d/"})
 	if err != nil {
 		return nil, fmt.Errorf("listing /etc/scylla.d/: %w", err)
@@ -87,8 +69,7 @@ func (c *scyllaDConfigCollector) Collect(ctx context.Context, params engine.Coll
 	for _, filename := range filenames {
 		fullPath := "/etc/scylla.d/" + filename
 
-		content, _, err := params.PodExecutor.Execute(ctx, params.ScyllaNode.Namespace, params.ScyllaNode.Name, scyllaContainerName,
-			[]string{"cat", fullPath})
+		content, err := ExecInScyllaPod(ctx, params, []string{"cat", fullPath})
 		if err != nil {
 			// Record that we tried but failed rather than aborting the whole collector.
 			result.Files[filename] = fmt.Sprintf("(error reading file: %v)", err)
@@ -97,16 +78,9 @@ func (c *scyllaDConfigCollector) Collect(ctx context.Context, params engine.Coll
 
 		result.Files[filename] = content
 
-		if params.ArtifactWriter != nil {
-			// Store each file under its original basename, preserving the extension.
-			artifactName := filepath.Base(filename)
-			if relPath, err := params.ArtifactWriter.WriteArtifact(artifactName, []byte(content)); err == nil {
-				artifacts = append(artifacts, engine.Artifact{
-					RelativePath: relPath,
-					Description:  fmt.Sprintf("Contents of %s", fullPath),
-				})
-			}
-		}
+		// Store each file under its original basename, preserving the extension.
+		artifactName := filepath.Base(filename)
+		writeArtifact(params.ArtifactWriter, artifactName, []byte(content), fmt.Sprintf("Contents of %s", fullPath), &artifacts)
 	}
 
 	return &engine.CollectorResult{

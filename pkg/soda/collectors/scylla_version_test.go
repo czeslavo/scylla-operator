@@ -20,9 +20,9 @@ func TestScyllaVersionCollector_HappyPath(t *testing.T) {
 	fakeWriter := sodatesting.NewFakeArtifactWriter()
 
 	collector := NewScyllaVersionCollector()
-	result, err := collector.Collect(context.Background(), engine.CollectorParams{
+	result, err := collector.CollectPerScyllaNode(context.Background(), engine.PerScyllaNodeCollectorParams{
 		Vitals:         engine.NewVitals(),
-		ScyllaNode: pod,
+		ScyllaNode:     pod,
 		PodExecutor:    fakeExec,
 		ArtifactWriter: fakeWriter,
 	})
@@ -66,9 +66,9 @@ func TestScyllaVersionCollector_EnterpriseVersion(t *testing.T) {
 	}
 
 	collector := NewScyllaVersionCollector()
-	result, err := collector.Collect(context.Background(), engine.CollectorParams{
+	result, err := collector.CollectPerScyllaNode(context.Background(), engine.PerScyllaNodeCollectorParams{
 		Vitals:      engine.NewVitals(),
-		ScyllaNode: pod,
+		ScyllaNode:  pod,
 		PodExecutor: fakeExec,
 	})
 
@@ -96,9 +96,9 @@ func TestScyllaVersionCollector_SimpleVersion(t *testing.T) {
 	}
 
 	collector := NewScyllaVersionCollector()
-	result, err := collector.Collect(context.Background(), engine.CollectorParams{
+	result, err := collector.CollectPerScyllaNode(context.Background(), engine.PerScyllaNodeCollectorParams{
 		Vitals:      engine.NewVitals(),
-		ScyllaNode: pod,
+		ScyllaNode:  pod,
 		PodExecutor: fakeExec,
 	})
 
@@ -122,9 +122,9 @@ func TestScyllaVersionCollector_ExecError(t *testing.T) {
 	}
 
 	collector := NewScyllaVersionCollector()
-	_, err := collector.Collect(context.Background(), engine.CollectorParams{
+	_, err := collector.CollectPerScyllaNode(context.Background(), engine.PerScyllaNodeCollectorParams{
 		Vitals:      engine.NewVitals(),
-		ScyllaNode: pod,
+		ScyllaNode:  pod,
 		PodExecutor: fakeExec,
 	})
 
@@ -142,9 +142,9 @@ func TestScyllaVersionCollector_EmptyOutput(t *testing.T) {
 	}
 
 	collector := NewScyllaVersionCollector()
-	result, err := collector.Collect(context.Background(), engine.CollectorParams{
+	result, err := collector.CollectPerScyllaNode(context.Background(), engine.PerScyllaNodeCollectorParams{
 		Vitals:      engine.NewVitals(),
-		ScyllaNode: pod,
+		ScyllaNode:  pod,
 		PodExecutor: fakeExec,
 	})
 

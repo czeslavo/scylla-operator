@@ -222,6 +222,7 @@ type PerScyllaNodeCollectorParams struct {
 	ScyllaNode     *ScyllaNodeInfo    // Always non-nil.
 	PodExecutor    PodExecutor
 	PodLogFetcher  PodLogFetcher
+	ResourceLister ResourceLister
 	ArtifactWriter ArtifactWriter
 }
 

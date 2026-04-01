@@ -28,18 +28,7 @@ type SchemaVersionEntry struct {
 
 // GetSchemaVersionsResult is the typed accessor for SchemaVersionsCollector results.
 func GetSchemaVersionsResult(vitals *engine.Vitals, podKey engine.ScopeKey) (*SchemaVersionsResult, error) {
-	result, ok := vitals.Get(SchemaVersionsCollectorID, podKey)
-	if !ok {
-		return nil, fmt.Errorf("SchemaVersionsCollector result not found for %v", podKey)
-	}
-	if result.Status != engine.CollectorPassed {
-		return nil, fmt.Errorf("SchemaVersionsCollector did not pass for %v: %s", podKey, result.Message)
-	}
-	typed, ok := result.Data.(*SchemaVersionsResult)
-	if !ok {
-		return nil, fmt.Errorf("unexpected data type %T for SchemaVersionsCollector", result.Data)
-	}
-	return typed, nil
+	return engine.GetResult[SchemaVersionsResult](vitals, SchemaVersionsCollectorID, podKey)
 }
 
 // ReadSchemaVersionsJSON reads the raw schema-versions.json artifact.
@@ -48,19 +37,16 @@ func ReadSchemaVersionsJSON(reader engine.ArtifactReader, podKey engine.ScopeKey
 }
 
 // schemaVersionsCollector collects schema version information from the Scylla REST API.
-type schemaVersionsCollector struct{}
-
-var _ engine.Collector = (*schemaVersionsCollector)(nil)
-
-// NewSchemaVersionsCollector creates a new SchemaVersionsCollector.
-func NewSchemaVersionsCollector() engine.Collector {
-	return &schemaVersionsCollector{}
+type schemaVersionsCollector struct {
+	engine.CollectorBase
 }
 
-func (c *schemaVersionsCollector) ID() engine.CollectorID          { return SchemaVersionsCollectorID }
-func (c *schemaVersionsCollector) Name() string                    { return "Schema versions" }
-func (c *schemaVersionsCollector) Scope() engine.CollectorScope    { return engine.PerScyllaNode }
-func (c *schemaVersionsCollector) DependsOn() []engine.CollectorID { return nil }
+var _ engine.PerScyllaNodeCollector = (*schemaVersionsCollector)(nil)
+
+// NewSchemaVersionsCollector creates a new SchemaVersionsCollector.
+func NewSchemaVersionsCollector() engine.PerScyllaNodeCollector {
+	return &schemaVersionsCollector{CollectorBase: engine.NewCollectorBase(SchemaVersionsCollectorID, "Schema versions", engine.PerScyllaNode, nil)}
+}
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -75,12 +61,8 @@ func (c *schemaVersionsCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *schemaVersionsCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
-	if params.ScyllaNode == nil {
-		return nil, fmt.Errorf("pod info not provided")
-	}
-
-	stdout, _, err := params.PodExecutor.Execute(ctx, params.ScyllaNode.Namespace, params.ScyllaNode.Name, scyllaContainerName,
+func (c *schemaVersionsCollector) CollectPerScyllaNode(ctx context.Context, params engine.PerScyllaNodeCollectorParams) (*engine.CollectorResult, error) {
+	stdout, err := ExecInScyllaPod(ctx, params,
 		[]string{"curl", "-s", "http://localhost:10000/storage_proxy/schema_versions"})
 	if err != nil {
 		return nil, fmt.Errorf("querying schema versions: %w", err)
@@ -94,11 +76,7 @@ func (c *schemaVersionsCollector) Collect(ctx context.Context, params engine.Col
 
 	// Write artifact.
 	var artifacts []engine.Artifact
-	if params.ArtifactWriter != nil {
-		if relPath, err := params.ArtifactWriter.WriteArtifact("schema-versions.json", []byte(raw)); err == nil {
-			artifacts = append(artifacts, engine.Artifact{RelativePath: relPath, Description: "Raw Scylla REST API schema versions response"})
-		}
-	}
+	writeArtifact(params.ArtifactWriter, "schema-versions.json", []byte(raw), "Raw Scylla REST API schema versions response", &artifacts)
 
 	return &engine.CollectorResult{
 		Status:    engine.CollectorPassed,

@@ -39,18 +39,7 @@ type GossipInfoResult struct {
 
 // GetGossipInfoResult is the typed accessor for GossipInfoCollector results.
 func GetGossipInfoResult(vitals *engine.Vitals, podKey engine.ScopeKey) (*GossipInfoResult, error) {
-	result, ok := vitals.Get(GossipInfoCollectorID, podKey)
-	if !ok {
-		return nil, fmt.Errorf("GossipInfoCollector result not found for %v", podKey)
-	}
-	if result.Status != engine.CollectorPassed {
-		return nil, fmt.Errorf("GossipInfoCollector did not pass for %v: %s", podKey, result.Message)
-	}
-	typed, ok := result.Data.(*GossipInfoResult)
-	if !ok {
-		return nil, fmt.Errorf("unexpected data type %T for GossipInfoCollector", result.Data)
-	}
-	return typed, nil
+	return engine.GetResult[GossipInfoResult](vitals, GossipInfoCollectorID, podKey)
 }
 
 // ReadGossipInfoJSON reads the gossip-info.json artifact.
@@ -59,19 +48,16 @@ func ReadGossipInfoJSON(reader engine.ArtifactReader, podKey engine.ScopeKey) ([
 }
 
 // gossipInfoCollector collects gossip state from the Scylla REST API.
-type gossipInfoCollector struct{}
-
-var _ engine.Collector = (*gossipInfoCollector)(nil)
-
-// NewGossipInfoCollector creates a new GossipInfoCollector.
-func NewGossipInfoCollector() engine.Collector {
-	return &gossipInfoCollector{}
+type gossipInfoCollector struct {
+	engine.CollectorBase
 }
 
-func (c *gossipInfoCollector) ID() engine.CollectorID          { return GossipInfoCollectorID }
-func (c *gossipInfoCollector) Name() string                    { return "Gossip info" }
-func (c *gossipInfoCollector) Scope() engine.CollectorScope    { return engine.PerScyllaNode }
-func (c *gossipInfoCollector) DependsOn() []engine.CollectorID { return nil }
+var _ engine.PerScyllaNodeCollector = (*gossipInfoCollector)(nil)
+
+// NewGossipInfoCollector creates a new GossipInfoCollector.
+func NewGossipInfoCollector() engine.PerScyllaNodeCollector {
+	return &gossipInfoCollector{CollectorBase: engine.NewCollectorBase(GossipInfoCollectorID, "Gossip info", engine.PerScyllaNode, nil)}
+}
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -86,12 +72,8 @@ func (c *gossipInfoCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *gossipInfoCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
-	if params.ScyllaNode == nil {
-		return nil, fmt.Errorf("pod info not provided")
-	}
-
-	stdout, _, err := params.PodExecutor.Execute(ctx, params.ScyllaNode.Namespace, params.ScyllaNode.Name, scyllaContainerName,
+func (c *gossipInfoCollector) CollectPerScyllaNode(ctx context.Context, params engine.PerScyllaNodeCollectorParams) (*engine.CollectorResult, error) {
+	stdout, err := ExecInScyllaPod(ctx, params,
 		[]string{"curl", "-s", "http://localhost:10000/failure_detector/endpoints"})
 	if err != nil {
 		return nil, fmt.Errorf("querying gossip info: %w", err)
@@ -105,11 +87,7 @@ func (c *gossipInfoCollector) Collect(ctx context.Context, params engine.Collect
 
 	// Write artifact.
 	var artifacts []engine.Artifact
-	if params.ArtifactWriter != nil {
-		if relPath, werr := params.ArtifactWriter.WriteArtifact("gossip-info.json", []byte(raw)); werr == nil {
-			artifacts = append(artifacts, engine.Artifact{RelativePath: relPath, Description: "Raw Scylla REST API gossip endpoint state"})
-		}
-	}
+	writeArtifact(params.ArtifactWriter, "gossip-info.json", []byte(raw), "Raw Scylla REST API gossip endpoint state", &artifacts)
 
 	alive := 0
 	for _, ep := range result.Endpoints {

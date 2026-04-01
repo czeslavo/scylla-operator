@@ -20,9 +20,9 @@ func TestSchemaVersionsCollector_HappyPath(t *testing.T) {
 	fakeWriter := sodatesting.NewFakeArtifactWriter()
 
 	collector := NewSchemaVersionsCollector()
-	result, err := collector.Collect(context.Background(), engine.CollectorParams{
+	result, err := collector.CollectPerScyllaNode(context.Background(), engine.PerScyllaNodeCollectorParams{
 		Vitals:         engine.NewVitals(),
-		ScyllaNode: pod,
+		ScyllaNode:     pod,
 		PodExecutor:    fakeExec,
 		ArtifactWriter: fakeWriter,
 	})
@@ -70,9 +70,9 @@ func TestSchemaVersionsCollector_MultipleVersions(t *testing.T) {
 	}
 
 	collector := NewSchemaVersionsCollector()
-	result, err := collector.Collect(context.Background(), engine.CollectorParams{
+	result, err := collector.CollectPerScyllaNode(context.Background(), engine.PerScyllaNodeCollectorParams{
 		Vitals:      engine.NewVitals(),
-		ScyllaNode: pod,
+		ScyllaNode:  pod,
 		PodExecutor: fakeExec,
 	})
 
@@ -100,9 +100,9 @@ func TestSchemaVersionsCollector_EmptyResponse(t *testing.T) {
 	}
 
 	collector := NewSchemaVersionsCollector()
-	result, err := collector.Collect(context.Background(), engine.CollectorParams{
+	result, err := collector.CollectPerScyllaNode(context.Background(), engine.PerScyllaNodeCollectorParams{
 		Vitals:      engine.NewVitals(),
-		ScyllaNode: pod,
+		ScyllaNode:  pod,
 		PodExecutor: fakeExec,
 	})
 
@@ -127,9 +127,9 @@ func TestSchemaVersionsCollector_InvalidJSON(t *testing.T) {
 	}
 
 	collector := NewSchemaVersionsCollector()
-	_, err := collector.Collect(context.Background(), engine.CollectorParams{
+	_, err := collector.CollectPerScyllaNode(context.Background(), engine.PerScyllaNodeCollectorParams{
 		Vitals:      engine.NewVitals(),
-		ScyllaNode: pod,
+		ScyllaNode:  pod,
 		PodExecutor: fakeExec,
 	})
 
@@ -145,24 +145,14 @@ func TestSchemaVersionsCollector_ExecError(t *testing.T) {
 	}
 
 	collector := NewSchemaVersionsCollector()
-	_, err := collector.Collect(context.Background(), engine.CollectorParams{
+	_, err := collector.CollectPerScyllaNode(context.Background(), engine.PerScyllaNodeCollectorParams{
 		Vitals:      engine.NewVitals(),
-		ScyllaNode: pod,
+		ScyllaNode:  pod,
 		PodExecutor: fakeExec,
 	})
 
 	if err == nil {
 		t.Fatal("expected error")
-	}
-}
-
-func TestSchemaVersionsCollector_NilPod(t *testing.T) {
-	collector := NewSchemaVersionsCollector()
-	_, err := collector.Collect(context.Background(), engine.CollectorParams{
-		Vitals: engine.NewVitals(),
-	})
-	if err == nil {
-		t.Fatal("expected error for nil pod")
 	}
 }
 

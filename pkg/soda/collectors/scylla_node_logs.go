@@ -22,19 +22,16 @@ type ScyllaNodeLogsResult struct {
 }
 
 // scyllaNodeLogsCollector collects current and previous container logs from Scylla node pods.
-type scyllaNodeLogsCollector struct{}
-
-var _ engine.Collector = (*scyllaNodeLogsCollector)(nil)
-
-// NewScyllaNodeLogsCollector creates a new ScyllaNodeLogsCollector.
-func NewScyllaNodeLogsCollector() engine.Collector {
-	return &scyllaNodeLogsCollector{}
+type scyllaNodeLogsCollector struct {
+	engine.CollectorBase
 }
 
-func (c *scyllaNodeLogsCollector) ID() engine.CollectorID          { return ScyllaNodeLogsCollectorID }
-func (c *scyllaNodeLogsCollector) Name() string                    { return "Scylla node container logs" }
-func (c *scyllaNodeLogsCollector) Scope() engine.CollectorScope    { return engine.PerScyllaNode }
-func (c *scyllaNodeLogsCollector) DependsOn() []engine.CollectorID { return nil }
+var _ engine.PerScyllaNodeCollector = (*scyllaNodeLogsCollector)(nil)
+
+// NewScyllaNodeLogsCollector creates a new ScyllaNodeLogsCollector.
+func NewScyllaNodeLogsCollector() engine.PerScyllaNodeCollector {
+	return &scyllaNodeLogsCollector{CollectorBase: engine.NewCollectorBase(ScyllaNodeLogsCollectorID, "Scylla node container logs", engine.PerScyllaNode, nil)}
+}
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -55,16 +52,12 @@ func (c *scyllaNodeLogsCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *scyllaNodeLogsCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
+func (c *scyllaNodeLogsCollector) CollectPerScyllaNode(ctx context.Context, params engine.PerScyllaNodeCollectorParams) (*engine.CollectorResult, error) {
 	if params.PodLogFetcher == nil {
 		return &engine.CollectorResult{
 			Status:  engine.CollectorSkipped,
 			Message: "PodLogFetcher not available (offline mode)",
 		}, nil
-	}
-
-	if params.ScyllaNode == nil {
-		return nil, fmt.Errorf("ScyllaNode info not provided")
 	}
 
 	node := params.ScyllaNode

@@ -42,18 +42,7 @@ type SystemPeersLocalResult struct {
 
 // GetSystemPeersLocalResult is the typed accessor for SystemPeersLocalCollector results.
 func GetSystemPeersLocalResult(vitals *engine.Vitals, podKey engine.ScopeKey) (*SystemPeersLocalResult, error) {
-	result, ok := vitals.Get(SystemPeersLocalCollectorID, podKey)
-	if !ok {
-		return nil, fmt.Errorf("SystemPeersLocalCollector result not found for %v", podKey)
-	}
-	if result.Status != engine.CollectorPassed {
-		return nil, fmt.Errorf("SystemPeersLocalCollector did not pass for %v: %s", podKey, result.Message)
-	}
-	typed, ok := result.Data.(*SystemPeersLocalResult)
-	if !ok {
-		return nil, fmt.Errorf("unexpected data type %T for SystemPeersLocalCollector", result.Data)
-	}
-	return typed, nil
+	return engine.GetResult[SystemPeersLocalResult](vitals, SystemPeersLocalCollectorID, podKey)
 }
 
 // ReadSystemLocalJSON reads the system-local.json artifact.
@@ -67,19 +56,16 @@ func ReadSystemPeersJSON(reader engine.ArtifactReader, podKey engine.ScopeKey) (
 }
 
 // systemPeersLocalCollector collects system.local and system.peers from Scylla pods via cqlsh.
-type systemPeersLocalCollector struct{}
-
-var _ engine.Collector = (*systemPeersLocalCollector)(nil)
-
-// NewSystemPeersLocalCollector creates a new SystemPeersLocalCollector.
-func NewSystemPeersLocalCollector() engine.Collector {
-	return &systemPeersLocalCollector{}
+type systemPeersLocalCollector struct {
+	engine.CollectorBase
 }
 
-func (c *systemPeersLocalCollector) ID() engine.CollectorID          { return SystemPeersLocalCollectorID }
-func (c *systemPeersLocalCollector) Name() string                    { return "System local and peers" }
-func (c *systemPeersLocalCollector) Scope() engine.CollectorScope    { return engine.PerScyllaNode }
-func (c *systemPeersLocalCollector) DependsOn() []engine.CollectorID { return nil }
+var _ engine.PerScyllaNodeCollector = (*systemPeersLocalCollector)(nil)
+
+// NewSystemPeersLocalCollector creates a new SystemPeersLocalCollector.
+func NewSystemPeersLocalCollector() engine.PerScyllaNodeCollector {
+	return &systemPeersLocalCollector{CollectorBase: engine.NewCollectorBase(SystemPeersLocalCollectorID, "System local and peers", engine.PerScyllaNode, nil)}
+}
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -94,13 +80,9 @@ func (c *systemPeersLocalCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *systemPeersLocalCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
-	if params.ScyllaNode == nil {
-		return nil, fmt.Errorf("pod info not provided")
-	}
-
+func (c *systemPeersLocalCollector) CollectPerScyllaNode(ctx context.Context, params engine.PerScyllaNodeCollectorParams) (*engine.CollectorResult, error) {
 	// Query system.local.
-	localStdout, _, err := params.PodExecutor.Execute(ctx, params.ScyllaNode.Namespace, params.ScyllaNode.Name, scyllaContainerName,
+	localStdout, err := ExecInScyllaPod(ctx, params,
 		[]string{"cqlsh", "127.0.0.1", "9042", "--no-color", "-e",
 			"SELECT cluster_name, data_center, rack, host_id, schema_version, release_version FROM system.local"})
 	if err != nil {
@@ -113,7 +95,7 @@ func (c *systemPeersLocalCollector) Collect(ctx context.Context, params engine.C
 	}
 
 	// Query system.peers.
-	peersStdout, _, err := params.PodExecutor.Execute(ctx, params.ScyllaNode.Namespace, params.ScyllaNode.Name, scyllaContainerName,
+	peersStdout, err := ExecInScyllaPod(ctx, params,
 		[]string{"cqlsh", "127.0.0.1", "9042", "--no-color", "-e",
 			"SELECT peer, data_center, rack, host_id, schema_version FROM system.peers"})
 	if err != nil {
@@ -132,17 +114,11 @@ func (c *systemPeersLocalCollector) Collect(ctx context.Context, params engine.C
 
 	// Write artifacts.
 	var artifacts []engine.Artifact
-	if params.ArtifactWriter != nil {
-		if localJSON, jerr := json.Marshal(localRow); jerr == nil {
-			if relPath, werr := params.ArtifactWriter.WriteArtifact("system-local.json", localJSON); werr == nil {
-				artifacts = append(artifacts, engine.Artifact{RelativePath: relPath, Description: "system.local row"})
-			}
-		}
-		if peersJSON, jerr := json.Marshal(peerRows); jerr == nil {
-			if relPath, werr := params.ArtifactWriter.WriteArtifact("system-peers.json", peersJSON); werr == nil {
-				artifacts = append(artifacts, engine.Artifact{RelativePath: relPath, Description: "system.peers rows"})
-			}
-		}
+	if localJSON, jerr := json.Marshal(localRow); jerr == nil {
+		writeArtifact(params.ArtifactWriter, "system-local.json", localJSON, "system.local row", &artifacts)
+	}
+	if peersJSON, jerr := json.Marshal(peerRows); jerr == nil {
+		writeArtifact(params.ArtifactWriter, "system-peers.json", peersJSON, "system.peers rows", &artifacts)
 	}
 
 	return &engine.CollectorResult{
