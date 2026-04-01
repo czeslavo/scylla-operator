@@ -17,6 +17,7 @@ func AllCollectors() []engine.Collector {
 		NewScyllaConfigCollector(),
 		NewSystemPeersLocalCollector(),
 		NewGossipInfoCollector(),
+		NewSystemTopologyCollector(),
 	}
 }
 
@@ -47,5 +48,6 @@ func ResultTypeRegistry() map[engine.CollectorID]any {
 		ScyllaConfigCollectorID:        &ScyllaConfigResult{},
 		SystemPeersLocalCollectorID:    &SystemPeersLocalResult{},
 		GossipInfoCollectorID:          &GossipInfoResult{},
+		SystemTopologyCollectorID:      &SystemTopologyResult{},
 	}
 }
