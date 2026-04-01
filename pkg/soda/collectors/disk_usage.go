@@ -52,7 +52,7 @@ func NewDiskUsageCollector() engine.Collector {
 
 func (c *diskUsageCollector) ID() engine.CollectorID          { return DiskUsageCollectorID }
 func (c *diskUsageCollector) Name() string                    { return "Disk usage" }
-func (c *diskUsageCollector) Scope() engine.CollectorScope    { return engine.PerPod }
+func (c *diskUsageCollector) Scope() engine.CollectorScope    { return engine.PerScyllaNode }
 func (c *diskUsageCollector) DependsOn() []engine.CollectorID { return nil }
 
 // RBAC implements engine.RBACProvider.
@@ -69,11 +69,11 @@ func (c *diskUsageCollector) RBAC() []rbacv1.PolicyRule {
 }
 
 func (c *diskUsageCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
-	if params.Pod == nil {
+	if params.ScyllaNode == nil {
 		return nil, fmt.Errorf("pod info not provided")
 	}
 
-	stdout, _, err := params.PodExecutor.Execute(ctx, params.Pod.Namespace, params.Pod.Name, scyllaContainerName,
+	stdout, _, err := params.PodExecutor.Execute(ctx, params.ScyllaNode.Namespace, params.ScyllaNode.Name, scyllaContainerName,
 		[]string{"df", "-h"})
 	if err != nil {
 		return nil, fmt.Errorf("running df -h: %w", err)

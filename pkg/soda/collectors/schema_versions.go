@@ -59,7 +59,7 @@ func NewSchemaVersionsCollector() engine.Collector {
 
 func (c *schemaVersionsCollector) ID() engine.CollectorID          { return SchemaVersionsCollectorID }
 func (c *schemaVersionsCollector) Name() string                    { return "Schema versions" }
-func (c *schemaVersionsCollector) Scope() engine.CollectorScope    { return engine.PerPod }
+func (c *schemaVersionsCollector) Scope() engine.CollectorScope    { return engine.PerScyllaNode }
 func (c *schemaVersionsCollector) DependsOn() []engine.CollectorID { return nil }
 
 // RBAC implements engine.RBACProvider.
@@ -76,11 +76,11 @@ func (c *schemaVersionsCollector) RBAC() []rbacv1.PolicyRule {
 }
 
 func (c *schemaVersionsCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
-	if params.Pod == nil {
+	if params.ScyllaNode == nil {
 		return nil, fmt.Errorf("pod info not provided")
 	}
 
-	stdout, _, err := params.PodExecutor.Execute(ctx, params.Pod.Namespace, params.Pod.Name, scyllaContainerName,
+	stdout, _, err := params.PodExecutor.Execute(ctx, params.ScyllaNode.Namespace, params.ScyllaNode.Name, scyllaContainerName,
 		[]string{"curl", "-s", "http://localhost:10000/storage_proxy/schema_versions"})
 	if err != nil {
 		return nil, fmt.Errorf("querying schema versions: %w", err)

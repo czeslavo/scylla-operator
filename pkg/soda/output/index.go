@@ -16,9 +16,9 @@ type IndexParams struct {
 	// Profile that was used for this diagnostic run.
 	ProfileName string
 
-	// Clusters and pods that were targeted.
-	Clusters []engine.ScyllaClusterInfo
-	Pods     map[engine.ScopeKey][]engine.PodInfo
+	// Clusters and Scylla nodes that were targeted.
+	Clusters    []engine.ScyllaClusterInfo
+	ScyllaNodes map[engine.ScopeKey][]engine.ScyllaNodeInfo
 
 	// Engine result with resolved IDs, vitals, and analyzer results.
 	Result *engine.EngineResult
@@ -42,11 +42,11 @@ func WriteIndex(w io.Writer, params IndexParams) error {
 	fmt.Fprintf(w, "|----------|-------|\n")
 	fmt.Fprintf(w, "| Profile | `%s` |\n", params.ProfileName)
 	fmt.Fprintf(w, "| Clusters found | %d |\n", len(params.Clusters))
-	totalPods := 0
-	for _, pods := range params.Pods {
-		totalPods += len(pods)
+	totalNodes := 0
+	for _, nodes := range params.ScyllaNodes {
+		totalNodes += len(nodes)
 	}
-	fmt.Fprintf(w, "| Pods targeted | %d |\n", totalPods)
+	fmt.Fprintf(w, "| Scylla nodes targeted | %d |\n", totalNodes)
 	fmt.Fprintf(w, "\n")
 
 	// --- Targets ---
@@ -54,17 +54,17 @@ func WriteIndex(w io.Writer, params IndexParams) error {
 		fmt.Fprintf(w, "## Targets\n\n")
 		for _, cluster := range params.Clusters {
 			clusterKey := engine.ScopeKey{Namespace: cluster.Namespace, Name: cluster.Name}
-			pods := params.Pods[clusterKey]
+			nodes := params.ScyllaNodes[clusterKey]
 			fmt.Fprintf(w, "### %s/%s", cluster.Namespace, cluster.Name)
 			if cluster.Kind != "" {
 				fmt.Fprintf(w, " (%s)", cluster.Kind)
 			}
 			fmt.Fprintf(w, "\n\n")
-			if len(pods) == 0 {
-				fmt.Fprintf(w, "_No pods found._\n\n")
+			if len(nodes) == 0 {
+				fmt.Fprintf(w, "_No Scylla nodes found._\n\n")
 			} else {
-				for _, pod := range pods {
-					fmt.Fprintf(w, "- `%s/%s`\n", pod.Namespace, pod.Name)
+				for _, node := range nodes {
+					fmt.Fprintf(w, "- `%s/%s`\n", node.Namespace, node.Name)
 				}
 				fmt.Fprintf(w, "\n")
 			}
@@ -211,13 +211,13 @@ func collectArtifactsForCollector(id engine.CollectorID, vitals *engine.Vitals) 
 		}
 	}
 
-	// PerPod.
-	for _, key := range vitals.PodKeys() {
-		if perPod, ok := vitals.PerPod[key]; ok {
-			if result, ok := perPod[id]; ok {
+	// PerScyllaNode.
+	for _, key := range vitals.ScyllaNodeKeys() {
+		if perNode, ok := vitals.PerScyllaNode[key]; ok {
+			if result, ok := perNode[id]; ok {
 				for _, a := range result.Artifacts {
 					entries = append(entries, artifactEntry{
-						path:        fmt.Sprintf("collectors/per-pod/%s/%s/%s/%s", key.Namespace, key.Name, id, a.RelativePath),
+						path:        fmt.Sprintf("collectors/per-scylla-node/%s/%s/%s/%s", key.Namespace, key.Name, id, a.RelativePath),
 						description: a.Description,
 					})
 				}

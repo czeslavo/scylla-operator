@@ -54,7 +54,7 @@ func NewScyllaConfigCollector() engine.Collector {
 
 func (c *scyllaConfigCollector) ID() engine.CollectorID          { return ScyllaConfigCollectorID }
 func (c *scyllaConfigCollector) Name() string                    { return "Scylla configuration" }
-func (c *scyllaConfigCollector) Scope() engine.CollectorScope    { return engine.PerPod }
+func (c *scyllaConfigCollector) Scope() engine.CollectorScope    { return engine.PerScyllaNode }
 func (c *scyllaConfigCollector) DependsOn() []engine.CollectorID { return nil }
 
 // RBAC implements engine.RBACProvider.
@@ -71,11 +71,11 @@ func (c *scyllaConfigCollector) RBAC() []rbacv1.PolicyRule {
 }
 
 func (c *scyllaConfigCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
-	if params.Pod == nil {
+	if params.ScyllaNode == nil {
 		return nil, fmt.Errorf("pod info not provided")
 	}
 
-	stdout, _, err := params.PodExecutor.Execute(ctx, params.Pod.Namespace, params.Pod.Name, scyllaContainerName,
+	stdout, _, err := params.PodExecutor.Execute(ctx, params.ScyllaNode.Namespace, params.ScyllaNode.Name, scyllaContainerName,
 		[]string{"cat", scyllaConfigPath})
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", scyllaConfigPath, err)

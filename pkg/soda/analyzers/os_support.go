@@ -47,7 +47,7 @@ func (a *osSupportAnalyzer) Analyze(params engine.AnalyzerParams) *engine.Analyz
 	var unknown []string
 	podsChecked := 0
 
-	for _, podKey := range params.Vitals.PodKeys() {
+	for _, podKey := range params.Vitals.ScyllaNodeKeys() {
 		osResult, err := collectors.GetOSInfoResult(params.Vitals, podKey)
 		if err != nil {
 			// Skip pods where the collector didn't pass.

@@ -64,7 +64,7 @@ func NewOSInfoCollector() engine.Collector {
 
 func (c *osInfoCollector) ID() engine.CollectorID          { return OSInfoCollectorID }
 func (c *osInfoCollector) Name() string                    { return "OS information" }
-func (c *osInfoCollector) Scope() engine.CollectorScope    { return engine.PerPod }
+func (c *osInfoCollector) Scope() engine.CollectorScope    { return engine.PerScyllaNode }
 func (c *osInfoCollector) DependsOn() []engine.CollectorID { return nil }
 
 // RBAC implements engine.RBACProvider.
@@ -81,18 +81,18 @@ func (c *osInfoCollector) RBAC() []rbacv1.PolicyRule {
 }
 
 func (c *osInfoCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
-	if params.Pod == nil {
+	if params.ScyllaNode == nil {
 		return nil, fmt.Errorf("pod info not provided")
 	}
 
 	// Execute uname --all.
-	unameOut, _, err := params.PodExecutor.Execute(ctx, params.Pod.Namespace, params.Pod.Name, scyllaContainerName, []string{"uname", "--all"})
+	unameOut, _, err := params.PodExecutor.Execute(ctx, params.ScyllaNode.Namespace, params.ScyllaNode.Name, scyllaContainerName, []string{"uname", "--all"})
 	if err != nil {
 		return nil, fmt.Errorf("executing uname: %w", err)
 	}
 
 	// Execute cat /etc/os-release.
-	osReleaseOut, _, err := params.PodExecutor.Execute(ctx, params.Pod.Namespace, params.Pod.Name, scyllaContainerName, []string{"cat", "/etc/os-release"})
+	osReleaseOut, _, err := params.PodExecutor.Execute(ctx, params.ScyllaNode.Namespace, params.ScyllaNode.Name, scyllaContainerName, []string{"cat", "/etc/os-release"})
 	if err != nil {
 		return nil, fmt.Errorf("reading /etc/os-release: %w", err)
 	}

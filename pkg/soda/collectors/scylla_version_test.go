@@ -9,7 +9,7 @@ import (
 )
 
 func TestScyllaVersionCollector_HappyPath(t *testing.T) {
-	pod := &engine.PodInfo{Name: "pod-0", Namespace: "scylla"}
+	pod := &engine.ScyllaNodeInfo{Name: "pod-0", Namespace: "scylla"}
 	fakeExec := &sodatesting.FakePodExecutor{
 		Responses: map[string]sodatesting.FakeExecResponse{
 			"scylla/pod-0/scylla/scylla --version": {
@@ -22,7 +22,7 @@ func TestScyllaVersionCollector_HappyPath(t *testing.T) {
 	collector := NewScyllaVersionCollector()
 	result, err := collector.Collect(context.Background(), engine.CollectorParams{
 		Vitals:         engine.NewVitals(),
-		Pod:            pod,
+		ScyllaNode: pod,
 		PodExecutor:    fakeExec,
 		ArtifactWriter: fakeWriter,
 	})
@@ -56,7 +56,7 @@ func TestScyllaVersionCollector_HappyPath(t *testing.T) {
 }
 
 func TestScyllaVersionCollector_EnterpriseVersion(t *testing.T) {
-	pod := &engine.PodInfo{Name: "pod-0", Namespace: "ns"}
+	pod := &engine.ScyllaNodeInfo{Name: "pod-0", Namespace: "ns"}
 	fakeExec := &sodatesting.FakePodExecutor{
 		Responses: map[string]sodatesting.FakeExecResponse{
 			"ns/pod-0/scylla/scylla --version": {
@@ -68,7 +68,7 @@ func TestScyllaVersionCollector_EnterpriseVersion(t *testing.T) {
 	collector := NewScyllaVersionCollector()
 	result, err := collector.Collect(context.Background(), engine.CollectorParams{
 		Vitals:      engine.NewVitals(),
-		Pod:         pod,
+		ScyllaNode: pod,
 		PodExecutor: fakeExec,
 	})
 
@@ -86,7 +86,7 @@ func TestScyllaVersionCollector_EnterpriseVersion(t *testing.T) {
 }
 
 func TestScyllaVersionCollector_SimpleVersion(t *testing.T) {
-	pod := &engine.PodInfo{Name: "pod-0", Namespace: "ns"}
+	pod := &engine.ScyllaNodeInfo{Name: "pod-0", Namespace: "ns"}
 	fakeExec := &sodatesting.FakePodExecutor{
 		Responses: map[string]sodatesting.FakeExecResponse{
 			"ns/pod-0/scylla/scylla --version": {
@@ -98,7 +98,7 @@ func TestScyllaVersionCollector_SimpleVersion(t *testing.T) {
 	collector := NewScyllaVersionCollector()
 	result, err := collector.Collect(context.Background(), engine.CollectorParams{
 		Vitals:      engine.NewVitals(),
-		Pod:         pod,
+		ScyllaNode: pod,
 		PodExecutor: fakeExec,
 	})
 
@@ -116,7 +116,7 @@ func TestScyllaVersionCollector_SimpleVersion(t *testing.T) {
 }
 
 func TestScyllaVersionCollector_ExecError(t *testing.T) {
-	pod := &engine.PodInfo{Name: "pod-0", Namespace: "ns"}
+	pod := &engine.ScyllaNodeInfo{Name: "pod-0", Namespace: "ns"}
 	fakeExec := &sodatesting.FakePodExecutor{
 		Responses: map[string]sodatesting.FakeExecResponse{},
 	}
@@ -124,7 +124,7 @@ func TestScyllaVersionCollector_ExecError(t *testing.T) {
 	collector := NewScyllaVersionCollector()
 	_, err := collector.Collect(context.Background(), engine.CollectorParams{
 		Vitals:      engine.NewVitals(),
-		Pod:         pod,
+		ScyllaNode: pod,
 		PodExecutor: fakeExec,
 	})
 
@@ -134,7 +134,7 @@ func TestScyllaVersionCollector_ExecError(t *testing.T) {
 }
 
 func TestScyllaVersionCollector_EmptyOutput(t *testing.T) {
-	pod := &engine.PodInfo{Name: "pod-0", Namespace: "ns"}
+	pod := &engine.ScyllaNodeInfo{Name: "pod-0", Namespace: "ns"}
 	fakeExec := &sodatesting.FakePodExecutor{
 		Responses: map[string]sodatesting.FakeExecResponse{
 			"ns/pod-0/scylla/scylla --version": {Stdout: "\n"},
@@ -144,7 +144,7 @@ func TestScyllaVersionCollector_EmptyOutput(t *testing.T) {
 	collector := NewScyllaVersionCollector()
 	result, err := collector.Collect(context.Background(), engine.CollectorParams{
 		Vitals:      engine.NewVitals(),
-		Pod:         pod,
+		ScyllaNode: pod,
 		PodExecutor: fakeExec,
 	})
 
@@ -162,7 +162,7 @@ func TestGetScyllaVersionResult_TypedAccessor(t *testing.T) {
 	vitals := engine.NewVitals()
 	expected := &ScyllaVersionResult{Version: "6.2.2"}
 	podKey := engine.ScopeKey{Namespace: "ns", Name: "pod-0"}
-	vitals.Store(ScyllaVersionCollectorID, engine.PerPod, podKey, &engine.CollectorResult{
+	vitals.Store(ScyllaVersionCollectorID, engine.PerScyllaNode, podKey, &engine.CollectorResult{
 		Status: engine.CollectorPassed,
 		Data:   expected,
 	})

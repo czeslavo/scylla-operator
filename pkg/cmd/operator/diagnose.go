@@ -262,7 +262,7 @@ func (o *DiagnoseOptions) Run(streams genericclioptions.IOStreams, cmd *cobra.Co
 		Disable:     disableIDs,
 
 		ScyllaClusters: clusterInfos,
-		Pods:           podsByCluster,
+		ScyllaNodes:    podsByCluster,
 
 		PodExecutor:         &k8sPodExecutor{restConfig: o.restConfig, kubeClient: o.kubeClient},
 		ScyllaClusterLister: clusterLister,
@@ -333,16 +333,16 @@ func (o *DiagnoseOptions) Run(streams genericclioptions.IOStreams, cmd *cobra.Co
 // vitals.json in the output directory root. The clusterInfos and podsByCluster
 // arguments are embedded in a Topology field so that offline re-analysis can
 // reconstruct the cluster/pod topology without connecting to the cluster.
-func (o *DiagnoseOptions) writeVitalsJSON(result *engine.EngineResult, clusterInfos []engine.ScyllaClusterInfo, podsByCluster map[engine.ScopeKey][]engine.PodInfo) error {
+func (o *DiagnoseOptions) writeVitalsJSON(result *engine.EngineResult, clusterInfos []engine.ScyllaClusterInfo, podsByCluster map[engine.ScopeKey][]engine.ScyllaNodeInfo) error {
 	sv, err := result.Vitals.ToSerializable()
 	if err != nil {
 		return fmt.Errorf("converting vitals to serializable form: %w", err)
 	}
 
-	// Embed the cluster/pod topology so it survives the serialization round-trip.
+	// Embed the cluster/Scylla-node topology so it survives the serialization round-trip.
 	topo := &engine.SerializableClusterTopology{
-		Clusters: make([]engine.SerializableClusterInfo, 0, len(clusterInfos)),
-		Pods:     make(map[engine.ScopeKey][]engine.SerializablePodInfo, len(podsByCluster)),
+		Clusters:    make([]engine.SerializableClusterInfo, 0, len(clusterInfos)),
+		ScyllaNodes: make(map[engine.ScopeKey][]engine.SerializableScyllaNodeInfo, len(podsByCluster)),
 	}
 	for _, ci := range clusterInfos {
 		topo.Clusters = append(topo.Clusters, engine.SerializableClusterInfo{
@@ -353,9 +353,9 @@ func (o *DiagnoseOptions) writeVitalsJSON(result *engine.EngineResult, clusterIn
 		})
 	}
 	for key, pods := range podsByCluster {
-		spods := make([]engine.SerializablePodInfo, 0, len(pods))
+		snodes := make([]engine.SerializableScyllaNodeInfo, 0, len(pods))
 		for _, pod := range pods {
-			spods = append(spods, engine.SerializablePodInfo{
+			snodes = append(snodes, engine.SerializableScyllaNodeInfo{
 				Namespace:      pod.Namespace,
 				Name:           pod.Name,
 				ClusterName:    pod.ClusterName,
@@ -363,7 +363,7 @@ func (o *DiagnoseOptions) writeVitalsJSON(result *engine.EngineResult, clusterIn
 				RackName:       pod.RackName,
 			})
 		}
-		topo.Pods[key] = spods
+		topo.ScyllaNodes[key] = snodes
 	}
 	sv.Topology = topo
 
@@ -383,7 +383,7 @@ func (o *DiagnoseOptions) writeVitalsJSON(result *engine.EngineResult, clusterIn
 
 // writeReportJSON builds the full JSONReport and writes it to report.json
 // in the output directory root.
-func (o *DiagnoseOptions) writeReportJSON(result *engine.EngineResult, clusters []engine.ScyllaClusterInfo, pods map[engine.ScopeKey][]engine.PodInfo) error {
+func (o *DiagnoseOptions) writeReportJSON(result *engine.EngineResult, clusters []engine.ScyllaClusterInfo, pods map[engine.ScopeKey][]engine.ScyllaNodeInfo) error {
 	jw := output.NewJSONWriter(nil, "0.1.0-poc")
 	report := jw.BuildReport(result, o.ProfileName, clusters, pods)
 
@@ -403,7 +403,7 @@ func (o *DiagnoseOptions) writeReportJSON(result *engine.EngineResult, clusters 
 
 // writeIndexFile writes a README.md to the output directory that describes the
 // contents of the artifact bundle and provides instructions for offline re-analysis.
-func (o *DiagnoseOptions) writeIndexFile(result *engine.EngineResult, clusters []engine.ScyllaClusterInfo, pods map[engine.ScopeKey][]engine.PodInfo) error {
+func (o *DiagnoseOptions) writeIndexFile(result *engine.EngineResult, clusters []engine.ScyllaClusterInfo, pods map[engine.ScopeKey][]engine.ScyllaNodeInfo) error {
 	allCollectorMap := collectors.AllCollectorsMap()
 	allAnalyzerMap := analyzers.AllAnalyzersMap()
 
@@ -419,7 +419,7 @@ func (o *DiagnoseOptions) writeIndexFile(result *engine.EngineResult, clusters [
 	params := output.IndexParams{
 		ProfileName:    o.ProfileName,
 		Clusters:       clusters,
-		Pods:           pods,
+		ScyllaNodes:    pods,
 		Result:         result,
 		CollectorNames: collectorNames,
 		AnalyzerNames:  analyzerNames,
@@ -510,8 +510,8 @@ func (o *DiagnoseOptions) discoverClusters(ctx context.Context, lister engine.Sc
 }
 
 // discoverPods finds Scylla pods for each cluster.
-func (o *DiagnoseOptions) discoverPods(ctx context.Context, lister engine.PodLister, clusterInfos []engine.ScyllaClusterInfo) (map[engine.ScopeKey][]engine.PodInfo, error) {
-	result := make(map[engine.ScopeKey][]engine.PodInfo)
+func (o *DiagnoseOptions) discoverPods(ctx context.Context, lister engine.PodLister, clusterInfos []engine.ScyllaClusterInfo) (map[engine.ScopeKey][]engine.ScyllaNodeInfo, error) {
+	result := make(map[engine.ScopeKey][]engine.ScyllaNodeInfo)
 
 	for _, cluster := range clusterInfos {
 		clusterKey := engine.ScopeKey{Namespace: cluster.Namespace, Name: cluster.Name}
@@ -524,9 +524,9 @@ func (o *DiagnoseOptions) discoverPods(ctx context.Context, lister engine.PodLis
 			return nil, fmt.Errorf("listing pods for %s/%s: %w", cluster.Namespace, cluster.Name, err)
 		}
 
-		var podInfos []engine.PodInfo
+		var podInfos []engine.ScyllaNodeInfo
 		for _, pod := range pods {
-			podInfos = append(podInfos, engine.PodInfo{
+			podInfos = append(podInfos, engine.ScyllaNodeInfo{
 				Name:           pod.Name,
 				Namespace:      pod.Namespace,
 				ClusterName:    pod.Labels[naming.ClusterNameLabel],
@@ -680,7 +680,7 @@ type fsArtifactWriterFactory struct {
 var collectorScopeDirName = map[engine.CollectorScope]string{
 	engine.ClusterWide:      "cluster-wide",
 	engine.PerScyllaCluster: "per-scylla-cluster",
-	engine.PerPod:           "per-pod",
+	engine.PerScyllaNode:    "per-scylla-node",
 }
 
 func (f *fsArtifactWriterFactory) NewWriter(collectorID engine.CollectorID, scope engine.CollectorScope, scopeKey engine.ScopeKey) engine.ArtifactWriter {
@@ -690,7 +690,7 @@ func (f *fsArtifactWriterFactory) NewWriter(collectorID engine.CollectorID, scop
 		// ClusterWide scope: no scope key subdirectory.
 		dir = filepath.Join(f.baseDir, "collectors", scopeDir, string(collectorID))
 	} else {
-		// PerScyllaCluster/PerPod: include namespace/name as path components.
+		// PerScyllaCluster/PerScyllaNode: include namespace/name as path components.
 		dir = filepath.Join(f.baseDir, "collectors", scopeDir, scopeKey.Namespace, scopeKey.Name, string(collectorID))
 	}
 	return &fsArtifactWriter{dir: dir}
@@ -733,8 +733,8 @@ func makeProgressPrinter(w io.Writer) func(engine.CollectorEvent) {
 			scopeLabel = "cluster-wide"
 		case engine.PerScyllaCluster:
 			scopeLabel = fmt.Sprintf("cluster %s", ev.ScopeKey)
-		case engine.PerPod:
-			scopeLabel = fmt.Sprintf("pod %s", ev.ScopeKey)
+		case engine.PerScyllaNode:
+			scopeLabel = fmt.Sprintf("scylla-node %s", ev.ScopeKey)
 		}
 
 		switch ev.Kind {
@@ -814,7 +814,7 @@ func (o *DiagnoseOptions) runOffline(ctx context.Context, streams genericcliopti
 		Disable:     disableIDs,
 
 		ScyllaClusters: clusterInfos,
-		Pods:           podsByCluster,
+		ScyllaNodes:    podsByCluster,
 	}
 
 	eng := engine.NewEngine(config)
@@ -837,9 +837,9 @@ func (o *DiagnoseOptions) runOffline(ctx context.Context, streams genericcliopti
 // needed for offline analyzer dispatch. It prefers the Topology embedded in
 // SerializableVitals (populated during a live run) for accuracy. When Topology
 // is absent (older archives), it falls back to inferring one cluster per distinct
-// namespace from the PerPod keys — a best-effort approximation sufficient for
+// namespace from the PerScyllaNode keys — a best-effort approximation sufficient for
 // single-cluster namespaces.
-func clusterTopologyFromVitals(sv *engine.SerializableVitals, vitals *engine.Vitals) ([]engine.ScyllaClusterInfo, map[engine.ScopeKey][]engine.PodInfo) {
+func clusterTopologyFromVitals(sv *engine.SerializableVitals, vitals *engine.Vitals) ([]engine.ScyllaClusterInfo, map[engine.ScopeKey][]engine.ScyllaNodeInfo) {
 	// Preferred path: use the stored topology from the live run.
 	if sv.Topology != nil && len(sv.Topology.Clusters) > 0 {
 		clusterInfos := make([]engine.ScyllaClusterInfo, 0, len(sv.Topology.Clusters))
@@ -851,24 +851,24 @@ func clusterTopologyFromVitals(sv *engine.SerializableVitals, vitals *engine.Vit
 				APIVersion: ci.APIVersion,
 			})
 		}
-		podsByCluster := make(map[engine.ScopeKey][]engine.PodInfo, len(sv.Topology.Pods))
-		for key, spods := range sv.Topology.Pods {
-			pods := make([]engine.PodInfo, 0, len(spods))
-			for _, sp := range spods {
-				pods = append(pods, engine.PodInfo{
-					Namespace:      sp.Namespace,
-					Name:           sp.Name,
-					ClusterName:    sp.ClusterName,
-					DatacenterName: sp.DatacenterName,
-					RackName:       sp.RackName,
+		podsByCluster := make(map[engine.ScopeKey][]engine.ScyllaNodeInfo, len(sv.Topology.ScyllaNodes))
+		for key, snodes := range sv.Topology.ScyllaNodes {
+			nodes := make([]engine.ScyllaNodeInfo, 0, len(snodes))
+			for _, sn := range snodes {
+				nodes = append(nodes, engine.ScyllaNodeInfo{
+					Namespace:      sn.Namespace,
+					Name:           sn.Name,
+					ClusterName:    sn.ClusterName,
+					DatacenterName: sn.DatacenterName,
+					RackName:       sn.RackName,
 				})
 			}
-			podsByCluster[key] = pods
+			podsByCluster[key] = nodes
 		}
 		return clusterInfos, podsByCluster
 	}
 
-	// Fallback: infer topology from PerScyllaCluster keys (if any) and PerPod keys.
+	// Fallback: infer topology from PerScyllaCluster keys (if any) and PerScyllaNode keys.
 	// This handles archives produced before topology was stored in vitals.json.
 	clusterKeys := vitals.ScyllaClusterKeys()
 	clusterInfos := make([]engine.ScyllaClusterInfo, 0, len(clusterKeys))
@@ -879,11 +879,11 @@ func clusterTopologyFromVitals(sv *engine.SerializableVitals, vitals *engine.Vit
 		})
 	}
 
-	podKeys := vitals.PodKeys()
+	podKeys := vitals.ScyllaNodeKeys()
 
 	// If there are no PerScyllaCluster keys, synthesize one cluster per distinct
-	// namespace seen in the PerPod keys.  This is the common case when only
-	// PerPod-scope collectors ran (e.g. the default full profile today).
+	// namespace seen in the PerScyllaNode keys.  This is the common case when only
+	// PerScyllaNode-scope collectors ran (e.g. the default full profile today).
 	if len(clusterKeys) == 0 && len(podKeys) > 0 {
 		seen := make(map[string]bool)
 		for _, podKey := range podKeys {
@@ -899,13 +899,13 @@ func clusterTopologyFromVitals(sv *engine.SerializableVitals, vitals *engine.Vit
 		}
 	}
 
-	podsByCluster := make(map[engine.ScopeKey][]engine.PodInfo)
+	podsByCluster := make(map[engine.ScopeKey][]engine.ScyllaNodeInfo)
 	for _, podKey := range podKeys {
 		// Pods are associated with clusters that share the same namespace.
 		// If multiple clusters share a namespace, pods go to the first match.
 		for _, clusterKey := range clusterKeys {
 			if clusterKey.Namespace == podKey.Namespace {
-				podsByCluster[clusterKey] = append(podsByCluster[clusterKey], engine.PodInfo{
+				podsByCluster[clusterKey] = append(podsByCluster[clusterKey], engine.ScyllaNodeInfo{
 					Namespace: podKey.Namespace,
 					Name:      podKey.Name,
 				})
@@ -1047,10 +1047,10 @@ func (r *fsArtifactReader) artifactDir(collectorID engine.CollectorID, scopeKey 
 	if scopeKey.IsEmpty() {
 		return filepath.Join(r.baseDir, "collectors", "cluster-wide", string(collectorID))
 	}
-	// Try per-pod first (most specific), then per-scylla-cluster.
-	perPod := filepath.Join(r.baseDir, "collectors", "per-pod", scopeKey.Namespace, scopeKey.Name, string(collectorID))
-	if _, err := os.Stat(perPod); err == nil {
-		return perPod
+	// Try per-scylla-node first (most specific), then per-scylla-cluster.
+	perNode := filepath.Join(r.baseDir, "collectors", "per-scylla-node", scopeKey.Namespace, scopeKey.Name, string(collectorID))
+	if _, err := os.Stat(perNode); err == nil {
+		return perNode
 	}
 	return filepath.Join(r.baseDir, "collectors", "per-scylla-cluster", scopeKey.Namespace, scopeKey.Name, string(collectorID))
 }

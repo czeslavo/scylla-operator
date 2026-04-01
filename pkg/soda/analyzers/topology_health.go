@@ -37,7 +37,7 @@ func (a *topologyHealthAnalyzer) DependsOn() []engine.CollectorID {
 func (a *topologyHealthAnalyzer) Analyze(params engine.AnalyzerParams) *engine.AnalyzerResult {
 	// system.topology is a cluster-wide table; every pod sees the same rows.
 	// Use the first pod whose SystemTopologyCollector succeeded.
-	podKeys := params.Vitals.PodKeys()
+	podKeys := params.Vitals.ScyllaNodeKeys()
 	if len(podKeys) == 0 {
 		return &engine.AnalyzerResult{
 			Status:  engine.AnalyzerWarning,

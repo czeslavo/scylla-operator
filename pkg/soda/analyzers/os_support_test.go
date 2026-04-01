@@ -25,7 +25,7 @@ func TestOSSupportAnalyzer_Metadata(t *testing.T) {
 func TestOSSupportAnalyzer_SupportedUbuntu(t *testing.T) {
 	vitals := engine.NewVitals()
 	podKey := engine.ScopeKey{Namespace: "ns", Name: "pod-0"}
-	vitals.Store(collectors.OSInfoCollectorID, engine.PerPod, podKey, &engine.CollectorResult{
+	vitals.Store(collectors.OSInfoCollectorID, engine.PerScyllaNode, podKey, &engine.CollectorResult{
 		Status: engine.CollectorPassed,
 		Data: &collectors.OSInfoResult{
 			OSName:    "Ubuntu",
@@ -47,7 +47,7 @@ func TestOSSupportAnalyzer_SupportedUbuntu(t *testing.T) {
 func TestOSSupportAnalyzer_SupportedRHEL(t *testing.T) {
 	vitals := engine.NewVitals()
 	podKey := engine.ScopeKey{Namespace: "ns", Name: "pod-0"}
-	vitals.Store(collectors.OSInfoCollectorID, engine.PerPod, podKey, &engine.CollectorResult{
+	vitals.Store(collectors.OSInfoCollectorID, engine.PerScyllaNode, podKey, &engine.CollectorResult{
 		Status: engine.CollectorPassed,
 		Data: &collectors.OSInfoResult{
 			OSName:    "Red Hat Enterprise Linux",
@@ -66,7 +66,7 @@ func TestOSSupportAnalyzer_SupportedRHEL(t *testing.T) {
 func TestOSSupportAnalyzer_SupportedDebian(t *testing.T) {
 	vitals := engine.NewVitals()
 	podKey := engine.ScopeKey{Namespace: "ns", Name: "pod-0"}
-	vitals.Store(collectors.OSInfoCollectorID, engine.PerPod, podKey, &engine.CollectorResult{
+	vitals.Store(collectors.OSInfoCollectorID, engine.PerScyllaNode, podKey, &engine.CollectorResult{
 		Status: engine.CollectorPassed,
 		Data: &collectors.OSInfoResult{
 			OSName:    "Debian GNU/Linux",
@@ -85,7 +85,7 @@ func TestOSSupportAnalyzer_SupportedDebian(t *testing.T) {
 func TestOSSupportAnalyzer_SupportedRockyLinux(t *testing.T) {
 	vitals := engine.NewVitals()
 	podKey := engine.ScopeKey{Namespace: "ns", Name: "pod-0"}
-	vitals.Store(collectors.OSInfoCollectorID, engine.PerPod, podKey, &engine.CollectorResult{
+	vitals.Store(collectors.OSInfoCollectorID, engine.PerScyllaNode, podKey, &engine.CollectorResult{
 		Status: engine.CollectorPassed,
 		Data: &collectors.OSInfoResult{
 			OSName:    "Rocky Linux",
@@ -104,7 +104,7 @@ func TestOSSupportAnalyzer_SupportedRockyLinux(t *testing.T) {
 func TestOSSupportAnalyzer_SupportedAmazonLinux(t *testing.T) {
 	vitals := engine.NewVitals()
 	podKey := engine.ScopeKey{Namespace: "ns", Name: "pod-0"}
-	vitals.Store(collectors.OSInfoCollectorID, engine.PerPod, podKey, &engine.CollectorResult{
+	vitals.Store(collectors.OSInfoCollectorID, engine.PerScyllaNode, podKey, &engine.CollectorResult{
 		Status: engine.CollectorPassed,
 		Data: &collectors.OSInfoResult{
 			OSName:    "Amazon Linux",
@@ -123,7 +123,7 @@ func TestOSSupportAnalyzer_SupportedAmazonLinux(t *testing.T) {
 func TestOSSupportAnalyzer_UnknownOS(t *testing.T) {
 	vitals := engine.NewVitals()
 	podKey := engine.ScopeKey{Namespace: "ns", Name: "pod-0"}
-	vitals.Store(collectors.OSInfoCollectorID, engine.PerPod, podKey, &engine.CollectorResult{
+	vitals.Store(collectors.OSInfoCollectorID, engine.PerScyllaNode, podKey, &engine.CollectorResult{
 		Status: engine.CollectorPassed,
 		Data: &collectors.OSInfoResult{
 			OSName:    "Alpine Linux",
@@ -145,7 +145,7 @@ func TestOSSupportAnalyzer_UnknownOS(t *testing.T) {
 func TestOSSupportAnalyzer_EmptyOSName(t *testing.T) {
 	vitals := engine.NewVitals()
 	podKey := engine.ScopeKey{Namespace: "ns", Name: "pod-0"}
-	vitals.Store(collectors.OSInfoCollectorID, engine.PerPod, podKey, &engine.CollectorResult{
+	vitals.Store(collectors.OSInfoCollectorID, engine.PerScyllaNode, podKey, &engine.CollectorResult{
 		Status: engine.CollectorPassed,
 		Data: &collectors.OSInfoResult{
 			OSName:    "",
@@ -166,7 +166,7 @@ func TestOSSupportAnalyzer_EmptyOSName(t *testing.T) {
 
 func TestOSSupportAnalyzer_MultiplePods_AllSupported(t *testing.T) {
 	vitals := engine.NewVitals()
-	vitals.Store(collectors.OSInfoCollectorID, engine.PerPod,
+	vitals.Store(collectors.OSInfoCollectorID, engine.PerScyllaNode,
 		engine.ScopeKey{Namespace: "ns", Name: "pod-0"}, &engine.CollectorResult{
 			Status: engine.CollectorPassed,
 			Data: &collectors.OSInfoResult{
@@ -174,7 +174,7 @@ func TestOSSupportAnalyzer_MultiplePods_AllSupported(t *testing.T) {
 				OSVersion: "22.04",
 			},
 		})
-	vitals.Store(collectors.OSInfoCollectorID, engine.PerPod,
+	vitals.Store(collectors.OSInfoCollectorID, engine.PerScyllaNode,
 		engine.ScopeKey{Namespace: "ns", Name: "pod-1"}, &engine.CollectorResult{
 			Status: engine.CollectorPassed,
 			Data: &collectors.OSInfoResult{
@@ -193,7 +193,7 @@ func TestOSSupportAnalyzer_MultiplePods_AllSupported(t *testing.T) {
 
 func TestOSSupportAnalyzer_MultiplePods_MixedSupport(t *testing.T) {
 	vitals := engine.NewVitals()
-	vitals.Store(collectors.OSInfoCollectorID, engine.PerPod,
+	vitals.Store(collectors.OSInfoCollectorID, engine.PerScyllaNode,
 		engine.ScopeKey{Namespace: "ns", Name: "pod-0"}, &engine.CollectorResult{
 			Status: engine.CollectorPassed,
 			Data: &collectors.OSInfoResult{
@@ -201,7 +201,7 @@ func TestOSSupportAnalyzer_MultiplePods_MixedSupport(t *testing.T) {
 				OSVersion: "22.04",
 			},
 		})
-	vitals.Store(collectors.OSInfoCollectorID, engine.PerPod,
+	vitals.Store(collectors.OSInfoCollectorID, engine.PerScyllaNode,
 		engine.ScopeKey{Namespace: "ns", Name: "pod-1"}, &engine.CollectorResult{
 			Status: engine.CollectorPassed,
 			Data: &collectors.OSInfoResult{
@@ -237,7 +237,7 @@ func TestOSSupportAnalyzer_NoPods(t *testing.T) {
 
 func TestOSSupportAnalyzer_SkipsFailedCollector(t *testing.T) {
 	vitals := engine.NewVitals()
-	vitals.Store(collectors.OSInfoCollectorID, engine.PerPod,
+	vitals.Store(collectors.OSInfoCollectorID, engine.PerScyllaNode,
 		engine.ScopeKey{Namespace: "ns", Name: "pod-0"}, &engine.CollectorResult{
 			Status:  engine.CollectorFailed,
 			Message: "exec failed",
@@ -284,7 +284,7 @@ func TestOSSupportAnalyzer_DeduplicatesOS(t *testing.T) {
 	vitals := engine.NewVitals()
 	// Three pods all running Ubuntu 22.04.
 	for _, name := range []string{"pod-0", "pod-1", "pod-2"} {
-		vitals.Store(collectors.OSInfoCollectorID, engine.PerPod,
+		vitals.Store(collectors.OSInfoCollectorID, engine.PerScyllaNode,
 			engine.ScopeKey{Namespace: "ns", Name: name}, &engine.CollectorResult{
 				Status: engine.CollectorPassed,
 				Data: &collectors.OSInfoResult{

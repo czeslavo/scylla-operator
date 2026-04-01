@@ -26,7 +26,7 @@ func TestSchemaAgreementAnalyzer_AllAgree(t *testing.T) {
 	uuid := "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 	vitals := engine.NewVitals()
 
-	vitals.Store(collectors.SchemaVersionsCollectorID, engine.PerPod,
+	vitals.Store(collectors.SchemaVersionsCollectorID, engine.PerScyllaNode,
 		engine.ScopeKey{Namespace: "ns", Name: "pod-0"}, &engine.CollectorResult{
 			Status: engine.CollectorPassed,
 			Data: &collectors.SchemaVersionsResult{
@@ -35,7 +35,7 @@ func TestSchemaAgreementAnalyzer_AllAgree(t *testing.T) {
 				},
 			},
 		})
-	vitals.Store(collectors.SchemaVersionsCollectorID, engine.PerPod,
+	vitals.Store(collectors.SchemaVersionsCollectorID, engine.PerScyllaNode,
 		engine.ScopeKey{Namespace: "ns", Name: "pod-1"}, &engine.CollectorResult{
 			Status: engine.CollectorPassed,
 			Data: &collectors.SchemaVersionsResult{
@@ -61,7 +61,7 @@ func TestSchemaAgreementAnalyzer_Disagreement(t *testing.T) {
 	uuid2 := "bbbb-2222"
 	vitals := engine.NewVitals()
 
-	vitals.Store(collectors.SchemaVersionsCollectorID, engine.PerPod,
+	vitals.Store(collectors.SchemaVersionsCollectorID, engine.PerScyllaNode,
 		engine.ScopeKey{Namespace: "ns", Name: "pod-0"}, &engine.CollectorResult{
 			Status: engine.CollectorPassed,
 			Data: &collectors.SchemaVersionsResult{
@@ -70,7 +70,7 @@ func TestSchemaAgreementAnalyzer_Disagreement(t *testing.T) {
 				},
 			},
 		})
-	vitals.Store(collectors.SchemaVersionsCollectorID, engine.PerPod,
+	vitals.Store(collectors.SchemaVersionsCollectorID, engine.PerScyllaNode,
 		engine.ScopeKey{Namespace: "ns", Name: "pod-1"}, &engine.CollectorResult{
 			Status: engine.CollectorPassed,
 			Data: &collectors.SchemaVersionsResult{
@@ -100,7 +100,7 @@ func TestSchemaAgreementAnalyzer_SinglePodMultipleVersions(t *testing.T) {
 	uuid2 := "bbbb-2222"
 	vitals := engine.NewVitals()
 
-	vitals.Store(collectors.SchemaVersionsCollectorID, engine.PerPod,
+	vitals.Store(collectors.SchemaVersionsCollectorID, engine.PerScyllaNode,
 		engine.ScopeKey{Namespace: "ns", Name: "pod-0"}, &engine.CollectorResult{
 			Status: engine.CollectorPassed,
 			Data: &collectors.SchemaVersionsResult{
@@ -135,7 +135,7 @@ func TestSchemaAgreementAnalyzer_NoPods(t *testing.T) {
 
 func TestSchemaAgreementAnalyzer_SkipsFailedCollector(t *testing.T) {
 	vitals := engine.NewVitals()
-	vitals.Store(collectors.SchemaVersionsCollectorID, engine.PerPod,
+	vitals.Store(collectors.SchemaVersionsCollectorID, engine.PerScyllaNode,
 		engine.ScopeKey{Namespace: "ns", Name: "pod-0"}, &engine.CollectorResult{
 			Status:  engine.CollectorFailed,
 			Message: "exec failed",
@@ -151,7 +151,7 @@ func TestSchemaAgreementAnalyzer_SkipsFailedCollector(t *testing.T) {
 
 func TestSchemaAgreementAnalyzer_EmptyVersionsFromPod(t *testing.T) {
 	vitals := engine.NewVitals()
-	vitals.Store(collectors.SchemaVersionsCollectorID, engine.PerPod,
+	vitals.Store(collectors.SchemaVersionsCollectorID, engine.PerScyllaNode,
 		engine.ScopeKey{Namespace: "ns", Name: "pod-0"}, &engine.CollectorResult{
 			Status: engine.CollectorPassed,
 			Data:   &collectors.SchemaVersionsResult{Versions: []collectors.SchemaVersionEntry{}},
@@ -171,7 +171,7 @@ func TestSchemaAgreementAnalyzer_MixedPassAndFail(t *testing.T) {
 	uuid := "aaaa-1111"
 	vitals := engine.NewVitals()
 
-	vitals.Store(collectors.SchemaVersionsCollectorID, engine.PerPod,
+	vitals.Store(collectors.SchemaVersionsCollectorID, engine.PerScyllaNode,
 		engine.ScopeKey{Namespace: "ns", Name: "pod-0"}, &engine.CollectorResult{
 			Status: engine.CollectorPassed,
 			Data: &collectors.SchemaVersionsResult{
@@ -180,7 +180,7 @@ func TestSchemaAgreementAnalyzer_MixedPassAndFail(t *testing.T) {
 				},
 			},
 		})
-	vitals.Store(collectors.SchemaVersionsCollectorID, engine.PerPod,
+	vitals.Store(collectors.SchemaVersionsCollectorID, engine.PerScyllaNode,
 		engine.ScopeKey{Namespace: "ns", Name: "pod-1"}, &engine.CollectorResult{
 			Status:  engine.CollectorFailed,
 			Message: "connection refused",

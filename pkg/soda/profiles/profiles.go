@@ -18,7 +18,7 @@ func AllProfiles() map[string]engine.Profile {
 			Name:        FullProfileName,
 			Description: "Run all available diagnostic collectors and analyzers",
 			// All known collectors are listed explicitly so that every scope
-			// (ClusterWide, PerScyllaCluster, PerPod) produces artifacts even
+			// (ClusterWide, PerScyllaCluster, PerScyllaNode) produces artifacts even
 			// when no analyzer currently depends on a given collector.
 			Collectors: []engine.CollectorID{
 				collectors.NodeResourcesCollectorID,

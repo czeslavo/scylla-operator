@@ -37,7 +37,7 @@ func (s *stubAnalyzer) Analyze(_ AnalyzerParams) *AnalyzerResult {
 
 func TestResolveProfileBasic(t *testing.T) {
 	collectors := map[CollectorID]Collector{
-		"C1": &stubCollector{id: "C1", scope: PerPod},
+		"C1": &stubCollector{id: "C1", scope: PerScyllaNode},
 		"C2": &stubCollector{id: "C2", scope: ClusterWide},
 	}
 	analyzers := map[AnalyzerID]Analyzer{
@@ -92,8 +92,8 @@ func TestResolveProfileTransitiveDeps(t *testing.T) {
 
 func TestResolveProfileComposition(t *testing.T) {
 	collectors := map[CollectorID]Collector{
-		"C1": &stubCollector{id: "C1", scope: PerPod},
-		"C2": &stubCollector{id: "C2", scope: PerPod},
+		"C1": &stubCollector{id: "C1", scope: PerScyllaNode},
+		"C2": &stubCollector{id: "C2", scope: PerScyllaNode},
 		"C3": &stubCollector{id: "C3", scope: ClusterWide},
 	}
 	analyzers := map[AnalyzerID]Analyzer{
@@ -126,8 +126,8 @@ func TestResolveProfileComposition(t *testing.T) {
 func TestResolveProfileDeepComposition(t *testing.T) {
 	// Profile chain: full → mid → base.
 	collectors := map[CollectorID]Collector{
-		"C1": &stubCollector{id: "C1", scope: PerPod},
-		"C2": &stubCollector{id: "C2", scope: PerPod},
+		"C1": &stubCollector{id: "C1", scope: PerScyllaNode},
+		"C2": &stubCollector{id: "C2", scope: PerScyllaNode},
 	}
 	analyzers := map[AnalyzerID]Analyzer{
 		"A1": &stubAnalyzer{id: "A1", deps: []CollectorID{"C1"}},
@@ -152,8 +152,8 @@ func TestResolveProfileDeepComposition(t *testing.T) {
 
 func TestResolveProfileEnableOverride(t *testing.T) {
 	collectors := map[CollectorID]Collector{
-		"C1": &stubCollector{id: "C1", scope: PerPod},
-		"C2": &stubCollector{id: "C2", scope: PerPod},
+		"C1": &stubCollector{id: "C1", scope: PerScyllaNode},
+		"C2": &stubCollector{id: "C2", scope: PerScyllaNode},
 	}
 	analyzers := map[AnalyzerID]Analyzer{
 		"A1": &stubAnalyzer{id: "A1", deps: []CollectorID{"C1"}},
@@ -177,8 +177,8 @@ func TestResolveProfileEnableOverride(t *testing.T) {
 
 func TestResolveProfileDisableOverride(t *testing.T) {
 	collectors := map[CollectorID]Collector{
-		"C1": &stubCollector{id: "C1", scope: PerPod},
-		"C2": &stubCollector{id: "C2", scope: PerPod},
+		"C1": &stubCollector{id: "C1", scope: PerScyllaNode},
+		"C2": &stubCollector{id: "C2", scope: PerScyllaNode},
 	}
 	analyzers := map[AnalyzerID]Analyzer{
 		"A1": &stubAnalyzer{id: "A1", deps: []CollectorID{"C1"}},
@@ -220,8 +220,8 @@ func TestResolveProfileCycleInProfiles(t *testing.T) {
 
 func TestResolveProfileCycleInCollectors(t *testing.T) {
 	collectors := map[CollectorID]Collector{
-		"C1": &stubCollector{id: "C1", scope: PerPod, deps: []CollectorID{"C2"}},
-		"C2": &stubCollector{id: "C2", scope: PerPod, deps: []CollectorID{"C1"}},
+		"C1": &stubCollector{id: "C1", scope: PerScyllaNode, deps: []CollectorID{"C2"}},
+		"C2": &stubCollector{id: "C2", scope: PerScyllaNode, deps: []CollectorID{"C1"}},
 	}
 	analyzers := map[AnalyzerID]Analyzer{
 		"A1": &stubAnalyzer{id: "A1", deps: []CollectorID{"C1"}},
@@ -271,7 +271,7 @@ func TestResolveProfileUnknownCollector(t *testing.T) {
 func TestResolveProfileCrossScopeViolation_ClusterWideDependsOnPerPod(t *testing.T) {
 	collectors := map[CollectorID]Collector{
 		"CW": &stubCollector{id: "CW", scope: ClusterWide, deps: []CollectorID{"PP"}},
-		"PP": &stubCollector{id: "PP", scope: PerPod},
+		"PP": &stubCollector{id: "PP", scope: PerScyllaNode},
 	}
 	analyzers := map[AnalyzerID]Analyzer{
 		"A1": &stubAnalyzer{id: "A1", deps: []CollectorID{"CW"}},
@@ -307,7 +307,7 @@ func TestResolveProfileCrossScopeViolation_ClusterWideDependsOnPerCluster(t *tes
 func TestResolveProfileCrossScopeViolation_PerClusterDependsOnPerPod(t *testing.T) {
 	collectors := map[CollectorID]Collector{
 		"PC": &stubCollector{id: "PC", scope: PerScyllaCluster, deps: []CollectorID{"PP"}},
-		"PP": &stubCollector{id: "PP", scope: PerPod},
+		"PP": &stubCollector{id: "PP", scope: PerScyllaNode},
 	}
 	analyzers := map[AnalyzerID]Analyzer{
 		"A1": &stubAnalyzer{id: "A1", deps: []CollectorID{"PC"}},
@@ -325,7 +325,7 @@ func TestResolveProfileCrossScopeViolation_PerClusterDependsOnPerPod(t *testing.
 func TestResolveProfileValidCrossScope_PerPodDependsOnClusterWide(t *testing.T) {
 	collectors := map[CollectorID]Collector{
 		"CW": &stubCollector{id: "CW", scope: ClusterWide},
-		"PP": &stubCollector{id: "PP", scope: PerPod, deps: []CollectorID{"CW"}},
+		"PP": &stubCollector{id: "PP", scope: PerScyllaNode, deps: []CollectorID{"CW"}},
 	}
 	analyzers := map[AnalyzerID]Analyzer{
 		"A1": &stubAnalyzer{id: "A1", deps: []CollectorID{"PP"}},
@@ -389,7 +389,7 @@ func TestResolveProfileEmptyProfile(t *testing.T) {
 func TestResolveProfileDeduplication(t *testing.T) {
 	// Two analyzers depend on the same collector.
 	collectors := map[CollectorID]Collector{
-		"C1": &stubCollector{id: "C1", scope: PerPod},
+		"C1": &stubCollector{id: "C1", scope: PerScyllaNode},
 	}
 	analyzers := map[AnalyzerID]Analyzer{
 		"A1": &stubAnalyzer{id: "A1", deps: []CollectorID{"C1"}},
@@ -430,7 +430,7 @@ func TestResolveProfileExplicitCollectors(t *testing.T) {
 	collectors := map[CollectorID]Collector{
 		"C1": &stubCollector{id: "C1", scope: ClusterWide},
 		"C2": &stubCollector{id: "C2", scope: PerScyllaCluster},
-		"C3": &stubCollector{id: "C3", scope: PerPod},
+		"C3": &stubCollector{id: "C3", scope: PerScyllaNode},
 	}
 	profiles := map[string]Profile{
 		"data-only": {
@@ -494,7 +494,7 @@ func TestResolveProfileExplicitCollectorsAndAnalyzers(t *testing.T) {
 	// C1 is only reachable via explicit listing; C2 only via the analyzer.
 	collectors := map[CollectorID]Collector{
 		"C1": &stubCollector{id: "C1", scope: ClusterWide},
-		"C2": &stubCollector{id: "C2", scope: PerPod},
+		"C2": &stubCollector{id: "C2", scope: PerScyllaNode},
 	}
 	analyzers := map[AnalyzerID]Analyzer{
 		"A1": &stubAnalyzer{id: "A1", deps: []CollectorID{"C2"}},
@@ -527,7 +527,7 @@ func TestResolveProfileExplicitCollectorsDeduplication(t *testing.T) {
 	// A collector listed explicitly AND depended on by an analyzer
 	// should appear only once in the resolved set.
 	collectors := map[CollectorID]Collector{
-		"C1": &stubCollector{id: "C1", scope: PerPod},
+		"C1": &stubCollector{id: "C1", scope: PerScyllaNode},
 	}
 	analyzers := map[AnalyzerID]Analyzer{
 		"A1": &stubAnalyzer{id: "A1", deps: []CollectorID{"C1"}},
@@ -556,7 +556,7 @@ func TestResolveProfileExplicitCollectorsInheritedViaIncludes(t *testing.T) {
 	// Explicit collectors are inherited through profile composition (Includes).
 	collectors := map[CollectorID]Collector{
 		"C1": &stubCollector{id: "C1", scope: ClusterWide},
-		"C2": &stubCollector{id: "C2", scope: PerPod},
+		"C2": &stubCollector{id: "C2", scope: PerScyllaNode},
 	}
 	profiles := map[string]Profile{
 		"base": {Name: "base", Collectors: []CollectorID{"C1"}},

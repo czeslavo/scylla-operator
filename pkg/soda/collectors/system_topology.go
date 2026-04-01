@@ -63,7 +63,7 @@ func NewSystemTopologyCollector() engine.Collector {
 
 func (c *systemTopologyCollector) ID() engine.CollectorID          { return SystemTopologyCollectorID }
 func (c *systemTopologyCollector) Name() string                    { return "System topology" }
-func (c *systemTopologyCollector) Scope() engine.CollectorScope    { return engine.PerPod }
+func (c *systemTopologyCollector) Scope() engine.CollectorScope    { return engine.PerScyllaNode }
 func (c *systemTopologyCollector) DependsOn() []engine.CollectorID { return nil }
 
 // RBAC implements engine.RBACProvider.
@@ -80,11 +80,11 @@ func (c *systemTopologyCollector) RBAC() []rbacv1.PolicyRule {
 }
 
 func (c *systemTopologyCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
-	if params.Pod == nil {
+	if params.ScyllaNode == nil {
 		return nil, fmt.Errorf("pod info not provided")
 	}
 
-	stdout, _, err := params.PodExecutor.Execute(ctx, params.Pod.Namespace, params.Pod.Name, scyllaContainerName,
+	stdout, _, err := params.PodExecutor.Execute(ctx, params.ScyllaNode.Namespace, params.ScyllaNode.Name, scyllaContainerName,
 		[]string{"cqlsh", "127.0.0.1", "9042", "--no-color", "-e",
 			"SELECT host_id, node_state, datacenter, rack, release_version, shard_count, upgrade_state FROM system.topology"})
 	if err != nil {

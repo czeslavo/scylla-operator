@@ -9,7 +9,7 @@ import (
 )
 
 func TestOSInfoCollector_HappyPath(t *testing.T) {
-	pod := &engine.PodInfo{Name: "pod-0", Namespace: "scylla"}
+	pod := &engine.ScyllaNodeInfo{Name: "pod-0", Namespace: "scylla"}
 	fakeExec := &sodatesting.FakePodExecutor{
 		Responses: map[string]sodatesting.FakeExecResponse{
 			"scylla/pod-0/scylla/uname --all": {
@@ -31,7 +31,7 @@ PRETTY_NAME="Red Hat Enterprise Linux 9.7 (Plow)"
 	collector := NewOSInfoCollector()
 	result, err := collector.Collect(context.Background(), engine.CollectorParams{
 		Vitals:         engine.NewVitals(),
-		Pod:            pod,
+		ScyllaNode: pod,
 		PodExecutor:    fakeExec,
 		ArtifactWriter: fakeWriter,
 	})
@@ -77,7 +77,7 @@ PRETTY_NAME="Red Hat Enterprise Linux 9.7 (Plow)"
 }
 
 func TestOSInfoCollector_Ubuntu(t *testing.T) {
-	pod := &engine.PodInfo{Name: "pod-0", Namespace: "ns"}
+	pod := &engine.ScyllaNodeInfo{Name: "pod-0", Namespace: "ns"}
 	fakeExec := &sodatesting.FakePodExecutor{
 		Responses: map[string]sodatesting.FakeExecResponse{
 			"ns/pod-0/scylla/uname --all": {
@@ -95,7 +95,7 @@ ID=ubuntu
 	collector := NewOSInfoCollector()
 	result, err := collector.Collect(context.Background(), engine.CollectorParams{
 		Vitals:      engine.NewVitals(),
-		Pod:         pod,
+		ScyllaNode: pod,
 		PodExecutor: fakeExec,
 	})
 
@@ -113,7 +113,7 @@ ID=ubuntu
 }
 
 func TestOSInfoCollector_ARM64(t *testing.T) {
-	pod := &engine.PodInfo{Name: "pod-0", Namespace: "ns"}
+	pod := &engine.ScyllaNodeInfo{Name: "pod-0", Namespace: "ns"}
 	fakeExec := &sodatesting.FakePodExecutor{
 		Responses: map[string]sodatesting.FakeExecResponse{
 			"ns/pod-0/scylla/uname --all": {
@@ -130,7 +130,7 @@ VERSION_ID="2023"
 	collector := NewOSInfoCollector()
 	result, err := collector.Collect(context.Background(), engine.CollectorParams{
 		Vitals:      engine.NewVitals(),
-		Pod:         pod,
+		ScyllaNode: pod,
 		PodExecutor: fakeExec,
 	})
 
@@ -145,7 +145,7 @@ VERSION_ID="2023"
 }
 
 func TestOSInfoCollector_UnameError(t *testing.T) {
-	pod := &engine.PodInfo{Name: "pod-0", Namespace: "ns"}
+	pod := &engine.ScyllaNodeInfo{Name: "pod-0", Namespace: "ns"}
 	fakeExec := &sodatesting.FakePodExecutor{
 		Responses: map[string]sodatesting.FakeExecResponse{},
 	}
@@ -153,7 +153,7 @@ func TestOSInfoCollector_UnameError(t *testing.T) {
 	collector := NewOSInfoCollector()
 	_, err := collector.Collect(context.Background(), engine.CollectorParams{
 		Vitals:      engine.NewVitals(),
-		Pod:         pod,
+		ScyllaNode: pod,
 		PodExecutor: fakeExec,
 	})
 
@@ -173,7 +173,7 @@ func TestOSInfoCollector_NilPod(t *testing.T) {
 }
 
 func TestOSInfoCollector_EmptyOSRelease(t *testing.T) {
-	pod := &engine.PodInfo{Name: "pod-0", Namespace: "ns"}
+	pod := &engine.ScyllaNodeInfo{Name: "pod-0", Namespace: "ns"}
 	fakeExec := &sodatesting.FakePodExecutor{
 		Responses: map[string]sodatesting.FakeExecResponse{
 			"ns/pod-0/scylla/uname --all": {
@@ -188,7 +188,7 @@ func TestOSInfoCollector_EmptyOSRelease(t *testing.T) {
 	collector := NewOSInfoCollector()
 	result, err := collector.Collect(context.Background(), engine.CollectorParams{
 		Vitals:      engine.NewVitals(),
-		Pod:         pod,
+		ScyllaNode: pod,
 		PodExecutor: fakeExec,
 	})
 
@@ -210,7 +210,7 @@ func TestGetOSInfoResult_TypedAccessor(t *testing.T) {
 	vitals := engine.NewVitals()
 	expected := &OSInfoResult{OSName: "Ubuntu", OSVersion: "22.04"}
 	podKey := engine.ScopeKey{Namespace: "ns", Name: "pod-0"}
-	vitals.Store(OSInfoCollectorID, engine.PerPod, podKey, &engine.CollectorResult{
+	vitals.Store(OSInfoCollectorID, engine.PerScyllaNode, podKey, &engine.CollectorResult{
 		Status: engine.CollectorPassed,
 		Data:   expected,
 	})

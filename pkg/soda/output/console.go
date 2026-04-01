@@ -52,9 +52,9 @@ func NewConsoleWriterNoColor(w io.Writer) *ConsoleWriter {
 }
 
 // WriteReport writes the full diagnostic report.
-func (c *ConsoleWriter) WriteReport(result *engine.EngineResult, profileName string, clusters []engine.ScyllaClusterInfo, pods map[engine.ScopeKey][]engine.PodInfo) error {
+func (c *ConsoleWriter) WriteReport(result *engine.EngineResult, profileName string, clusters []engine.ScyllaClusterInfo, scyllaNodes map[engine.ScopeKey][]engine.ScyllaNodeInfo) error {
 	c.writeHeader(profileName)
-	c.writeTargets(clusters, pods)
+	c.writeTargets(clusters, scyllaNodes)
 	c.writeCollectors(result)
 	c.writeAnalyzers(result)
 	c.writeSummary(result)
@@ -65,7 +65,7 @@ func (c *ConsoleWriter) writeHeader(profileName string) {
 	fmt.Fprintf(c.w, "%s\n\n", c.boldFn("ScyllaDB Diagnostics (profile: %s)", profileName))
 }
 
-func (c *ConsoleWriter) writeTargets(clusters []engine.ScyllaClusterInfo, pods map[engine.ScopeKey][]engine.PodInfo) {
+func (c *ConsoleWriter) writeTargets(clusters []engine.ScyllaClusterInfo, scyllaNodes map[engine.ScopeKey][]engine.ScyllaNodeInfo) {
 	if len(clusters) == 0 {
 		return
 	}
@@ -73,8 +73,8 @@ func (c *ConsoleWriter) writeTargets(clusters []engine.ScyllaClusterInfo, pods m
 	fmt.Fprintf(c.w, "Scylla Clusters:\n")
 	for _, cluster := range clusters {
 		clusterKey := engine.ScopeKey{Namespace: cluster.Namespace, Name: cluster.Name}
-		podCount := len(pods[clusterKey])
-		fmt.Fprintf(c.w, "  %s/%s (%s, %d pods)\n", cluster.Namespace, cluster.Name, cluster.Kind, podCount)
+		nodeCount := len(scyllaNodes[clusterKey])
+		fmt.Fprintf(c.w, "  %s/%s (%s, %d nodes)\n", cluster.Namespace, cluster.Name, cluster.Kind, nodeCount)
 	}
 	fmt.Fprintln(c.w)
 }
@@ -97,10 +97,10 @@ func (c *ConsoleWriter) writeCollectors(result *engine.EngineResult) {
 			}
 		}
 
-		// PerPod results.
-		for _, key := range result.Vitals.PodKeys() {
-			if perPod, ok := result.Vitals.PerPod[key]; ok {
-				if res, ok := perPod[collectorID]; ok {
+		// PerScyllaNode results.
+		for _, key := range result.Vitals.ScyllaNodeKeys() {
+			if perNode, ok := result.Vitals.PerScyllaNode[key]; ok {
+				if res, ok := perNode[collectorID]; ok {
 					c.writeCollectorLine(collectorID, key.String(), res)
 				}
 			}

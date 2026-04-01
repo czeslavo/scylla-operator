@@ -36,7 +36,7 @@ func (a *gossipHealthAnalyzer) DependsOn() []engine.CollectorID {
 func (a *gossipHealthAnalyzer) Analyze(params engine.AnalyzerParams) *engine.AnalyzerResult {
 	// Each pod in the cluster sees all endpoints via gossip. We use the first
 	// pod whose GossipInfoCollector succeeded; they should all be equivalent.
-	podKeys := params.Vitals.PodKeys()
+	podKeys := params.Vitals.ScyllaNodeKeys()
 	if len(podKeys) == 0 {
 		return &engine.AnalyzerResult{
 			Status:  engine.AnalyzerWarning,

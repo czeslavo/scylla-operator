@@ -54,7 +54,7 @@ func NewScyllaVersionCollector() engine.Collector {
 
 func (c *scyllaVersionCollector) ID() engine.CollectorID          { return ScyllaVersionCollectorID }
 func (c *scyllaVersionCollector) Name() string                    { return "Scylla version" }
-func (c *scyllaVersionCollector) Scope() engine.CollectorScope    { return engine.PerPod }
+func (c *scyllaVersionCollector) Scope() engine.CollectorScope    { return engine.PerScyllaNode }
 func (c *scyllaVersionCollector) DependsOn() []engine.CollectorID { return nil }
 
 // RBAC implements engine.RBACProvider.
@@ -71,11 +71,11 @@ func (c *scyllaVersionCollector) RBAC() []rbacv1.PolicyRule {
 }
 
 func (c *scyllaVersionCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
-	if params.Pod == nil {
+	if params.ScyllaNode == nil {
 		return nil, fmt.Errorf("pod info not provided")
 	}
 
-	stdout, _, err := params.PodExecutor.Execute(ctx, params.Pod.Namespace, params.Pod.Name, scyllaContainerName, []string{"scylla", "--version"})
+	stdout, _, err := params.PodExecutor.Execute(ctx, params.ScyllaNode.Namespace, params.ScyllaNode.Name, scyllaContainerName, []string{"scylla", "--version"})
 	if err != nil {
 		return nil, fmt.Errorf("executing scylla --version: %w", err)
 	}

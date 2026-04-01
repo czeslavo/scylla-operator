@@ -153,8 +153,8 @@ func resolveCollectorDeps(id CollectorID, allCollectors map[CollectorID]Collecto
 }
 
 // validateCrossScopeDeps ensures cross-scope dependency constraints are met:
-// - ClusterWide collectors cannot depend on PerScyllaCluster or PerPod collectors
-// - PerScyllaCluster collectors cannot depend on PerPod collectors
+// - ClusterWide collectors cannot depend on PerScyllaCluster or PerScyllaNode collectors
+// - PerScyllaCluster collectors cannot depend on PerScyllaNode collectors
 func validateCrossScopeDeps(collectorSet map[CollectorID]bool, allCollectors map[CollectorID]Collector) error {
 	for id := range collectorSet {
 		collector := allCollectors[id]
@@ -178,11 +178,11 @@ func validateScopeDep(fromScope, depScope CollectorScope, fromID, depID Collecto
 			return fmt.Errorf("ClusterWide collector %q cannot depend on %s collector %q", fromID, depScope, depID)
 		}
 	case PerScyllaCluster:
-		if depScope == PerPod {
-			return fmt.Errorf("PerScyllaCluster collector %q cannot depend on PerPod collector %q", fromID, depID)
+		if depScope == PerScyllaNode {
+			return fmt.Errorf("PerScyllaCluster collector %q cannot depend on PerScyllaNode collector %q", fromID, depID)
 		}
-	case PerPod:
-		// PerPod can depend on anything.
+	case PerScyllaNode:
+		// PerScyllaNode can depend on anything.
 	}
 	return nil
 }

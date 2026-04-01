@@ -24,13 +24,13 @@ func testEngineResult() *engine.EngineResult {
 		Message: "3/3 members ready",
 	})
 
-	// PerPod collector results.
+	// PerScyllaNode collector results.
 	podKey := engine.ScopeKey{Namespace: "scylla", Name: "my-cluster-0"}
-	vitals.Store("OSInfoCollector", engine.PerPod, podKey, &engine.CollectorResult{
+	vitals.Store("OSInfoCollector", engine.PerScyllaNode, podKey, &engine.CollectorResult{
 		Status:  engine.CollectorPassed,
 		Message: "Ubuntu 22.04 x86_64",
 	})
-	vitals.Store("ScyllaVersionCollector", engine.PerPod, podKey, &engine.CollectorResult{
+	vitals.Store("ScyllaVersionCollector", engine.PerScyllaNode, podKey, &engine.CollectorResult{
 		Status:  engine.CollectorPassed,
 		Message: "6.2.2",
 	})
@@ -77,8 +77,8 @@ func testClusters() []engine.ScyllaClusterInfo {
 	}
 }
 
-func testPods() map[engine.ScopeKey][]engine.PodInfo {
-	return map[engine.ScopeKey][]engine.PodInfo{
+func testPods() map[engine.ScopeKey][]engine.ScyllaNodeInfo {
+	return map[engine.ScopeKey][]engine.ScyllaNodeInfo{
 		{Namespace: "scylla", Name: "my-cluster"}: {
 			{Name: "my-cluster-0", Namespace: "scylla"},
 		},
@@ -106,7 +106,7 @@ func TestConsoleWriter_WriteReport(t *testing.T) {
 	if !strings.Contains(output, "Scylla Clusters:") {
 		t.Errorf("missing targets section, got:\n%s", output)
 	}
-	if !strings.Contains(output, "scylla/my-cluster (ScyllaCluster, 1 pods)") {
+	if !strings.Contains(output, "scylla/my-cluster (ScyllaCluster, 1 nodes)") {
 		t.Errorf("missing cluster target, got:\n%s", output)
 	}
 

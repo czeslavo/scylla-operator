@@ -25,7 +25,7 @@ func TestScyllaVersionSupportAnalyzer_Metadata(t *testing.T) {
 func TestScyllaVersionSupportAnalyzer_SupportedOSS(t *testing.T) {
 	vitals := engine.NewVitals()
 	podKey := engine.ScopeKey{Namespace: "ns", Name: "pod-0"}
-	vitals.Store(collectors.ScyllaVersionCollectorID, engine.PerPod, podKey, &engine.CollectorResult{
+	vitals.Store(collectors.ScyllaVersionCollectorID, engine.PerScyllaNode, podKey, &engine.CollectorResult{
 		Status: engine.CollectorPassed,
 		Data:   &collectors.ScyllaVersionResult{Version: "6.2.2"},
 	})
@@ -44,7 +44,7 @@ func TestScyllaVersionSupportAnalyzer_SupportedOSS(t *testing.T) {
 func TestScyllaVersionSupportAnalyzer_SupportedEnterprise(t *testing.T) {
 	vitals := engine.NewVitals()
 	podKey := engine.ScopeKey{Namespace: "ns", Name: "pod-0"}
-	vitals.Store(collectors.ScyllaVersionCollectorID, engine.PerPod, podKey, &engine.CollectorResult{
+	vitals.Store(collectors.ScyllaVersionCollectorID, engine.PerScyllaNode, podKey, &engine.CollectorResult{
 		Status: engine.CollectorPassed,
 		Data:   &collectors.ScyllaVersionResult{Version: "2025.1.0"},
 	})
@@ -60,7 +60,7 @@ func TestScyllaVersionSupportAnalyzer_SupportedEnterprise(t *testing.T) {
 func TestScyllaVersionSupportAnalyzer_WarningOSS(t *testing.T) {
 	vitals := engine.NewVitals()
 	podKey := engine.ScopeKey{Namespace: "ns", Name: "pod-0"}
-	vitals.Store(collectors.ScyllaVersionCollectorID, engine.PerPod, podKey, &engine.CollectorResult{
+	vitals.Store(collectors.ScyllaVersionCollectorID, engine.PerScyllaNode, podKey, &engine.CollectorResult{
 		Status: engine.CollectorPassed,
 		Data:   &collectors.ScyllaVersionResult{Version: "5.4.3"},
 	})
@@ -79,7 +79,7 @@ func TestScyllaVersionSupportAnalyzer_WarningOSS(t *testing.T) {
 func TestScyllaVersionSupportAnalyzer_WarningEnterprise(t *testing.T) {
 	vitals := engine.NewVitals()
 	podKey := engine.ScopeKey{Namespace: "ns", Name: "pod-0"}
-	vitals.Store(collectors.ScyllaVersionCollectorID, engine.PerPod, podKey, &engine.CollectorResult{
+	vitals.Store(collectors.ScyllaVersionCollectorID, engine.PerScyllaNode, podKey, &engine.CollectorResult{
 		Status: engine.CollectorPassed,
 		Data:   &collectors.ScyllaVersionResult{Version: "2024.2.1"},
 	})
@@ -95,7 +95,7 @@ func TestScyllaVersionSupportAnalyzer_WarningEnterprise(t *testing.T) {
 func TestScyllaVersionSupportAnalyzer_UnsupportedOSS(t *testing.T) {
 	vitals := engine.NewVitals()
 	podKey := engine.ScopeKey{Namespace: "ns", Name: "pod-0"}
-	vitals.Store(collectors.ScyllaVersionCollectorID, engine.PerPod, podKey, &engine.CollectorResult{
+	vitals.Store(collectors.ScyllaVersionCollectorID, engine.PerScyllaNode, podKey, &engine.CollectorResult{
 		Status: engine.CollectorPassed,
 		Data:   &collectors.ScyllaVersionResult{Version: "4.6.3"},
 	})
@@ -114,12 +114,12 @@ func TestScyllaVersionSupportAnalyzer_UnsupportedOSS(t *testing.T) {
 func TestScyllaVersionSupportAnalyzer_MultiplePods_MixedVersions(t *testing.T) {
 	vitals := engine.NewVitals()
 	// One supported, one unsupported.
-	vitals.Store(collectors.ScyllaVersionCollectorID, engine.PerPod,
+	vitals.Store(collectors.ScyllaVersionCollectorID, engine.PerScyllaNode,
 		engine.ScopeKey{Namespace: "ns", Name: "pod-0"}, &engine.CollectorResult{
 			Status: engine.CollectorPassed,
 			Data:   &collectors.ScyllaVersionResult{Version: "6.2.2"},
 		})
-	vitals.Store(collectors.ScyllaVersionCollectorID, engine.PerPod,
+	vitals.Store(collectors.ScyllaVersionCollectorID, engine.PerScyllaNode,
 		engine.ScopeKey{Namespace: "ns", Name: "pod-1"}, &engine.CollectorResult{
 			Status: engine.CollectorPassed,
 			Data:   &collectors.ScyllaVersionResult{Version: "4.3.0"},
@@ -151,7 +151,7 @@ func TestScyllaVersionSupportAnalyzer_NoPods(t *testing.T) {
 func TestScyllaVersionSupportAnalyzer_SkipsFailedCollector(t *testing.T) {
 	vitals := engine.NewVitals()
 	podKey := engine.ScopeKey{Namespace: "ns", Name: "pod-0"}
-	vitals.Store(collectors.ScyllaVersionCollectorID, engine.PerPod, podKey, &engine.CollectorResult{
+	vitals.Store(collectors.ScyllaVersionCollectorID, engine.PerScyllaNode, podKey, &engine.CollectorResult{
 		Status:  engine.CollectorFailed,
 		Message: "exec failed",
 	})
@@ -168,7 +168,7 @@ func TestScyllaVersionSupportAnalyzer_SkipsFailedCollector(t *testing.T) {
 func TestScyllaVersionSupportAnalyzer_EmptyVersion(t *testing.T) {
 	vitals := engine.NewVitals()
 	podKey := engine.ScopeKey{Namespace: "ns", Name: "pod-0"}
-	vitals.Store(collectors.ScyllaVersionCollectorID, engine.PerPod, podKey, &engine.CollectorResult{
+	vitals.Store(collectors.ScyllaVersionCollectorID, engine.PerScyllaNode, podKey, &engine.CollectorResult{
 		Status: engine.CollectorPassed,
 		Data:   &collectors.ScyllaVersionResult{Version: ""},
 	})
@@ -184,12 +184,12 @@ func TestScyllaVersionSupportAnalyzer_EmptyVersion(t *testing.T) {
 func TestScyllaVersionSupportAnalyzer_DeduplicatesVersions(t *testing.T) {
 	vitals := engine.NewVitals()
 	// Two pods with same version.
-	vitals.Store(collectors.ScyllaVersionCollectorID, engine.PerPod,
+	vitals.Store(collectors.ScyllaVersionCollectorID, engine.PerScyllaNode,
 		engine.ScopeKey{Namespace: "ns", Name: "pod-0"}, &engine.CollectorResult{
 			Status: engine.CollectorPassed,
 			Data:   &collectors.ScyllaVersionResult{Version: "6.2.2"},
 		})
-	vitals.Store(collectors.ScyllaVersionCollectorID, engine.PerPod,
+	vitals.Store(collectors.ScyllaVersionCollectorID, engine.PerScyllaNode,
 		engine.ScopeKey{Namespace: "ns", Name: "pod-1"}, &engine.CollectorResult{
 			Status: engine.CollectorPassed,
 			Data:   &collectors.ScyllaVersionResult{Version: "6.2.2"},

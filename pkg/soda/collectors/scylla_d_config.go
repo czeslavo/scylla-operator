@@ -48,7 +48,7 @@ func NewScyllaDConfigCollector() engine.Collector {
 
 func (c *scyllaDConfigCollector) ID() engine.CollectorID          { return ScyllaDConfigCollectorID }
 func (c *scyllaDConfigCollector) Name() string                    { return "Scylla drop-in config directory" }
-func (c *scyllaDConfigCollector) Scope() engine.CollectorScope    { return engine.PerPod }
+func (c *scyllaDConfigCollector) Scope() engine.CollectorScope    { return engine.PerScyllaNode }
 func (c *scyllaDConfigCollector) DependsOn() []engine.CollectorID { return nil }
 
 // RBAC implements engine.RBACProvider.
@@ -65,12 +65,12 @@ func (c *scyllaDConfigCollector) RBAC() []rbacv1.PolicyRule {
 }
 
 func (c *scyllaDConfigCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
-	if params.Pod == nil {
+	if params.ScyllaNode == nil {
 		return nil, fmt.Errorf("pod info not provided")
 	}
 
 	// List files in /etc/scylla.d/ (one path per line, no directories).
-	lsOut, _, err := params.PodExecutor.Execute(ctx, params.Pod.Namespace, params.Pod.Name, scyllaContainerName,
+	lsOut, _, err := params.PodExecutor.Execute(ctx, params.ScyllaNode.Namespace, params.ScyllaNode.Name, scyllaContainerName,
 		[]string{"bash", "-c", "ls /etc/scylla.d/"})
 	if err != nil {
 		return nil, fmt.Errorf("listing /etc/scylla.d/: %w", err)
@@ -87,7 +87,7 @@ func (c *scyllaDConfigCollector) Collect(ctx context.Context, params engine.Coll
 	for _, filename := range filenames {
 		fullPath := "/etc/scylla.d/" + filename
 
-		content, _, err := params.PodExecutor.Execute(ctx, params.Pod.Namespace, params.Pod.Name, scyllaContainerName,
+		content, _, err := params.PodExecutor.Execute(ctx, params.ScyllaNode.Namespace, params.ScyllaNode.Name, scyllaContainerName,
 			[]string{"cat", fullPath})
 		if err != nil {
 			// Record that we tried but failed rather than aborting the whole collector.

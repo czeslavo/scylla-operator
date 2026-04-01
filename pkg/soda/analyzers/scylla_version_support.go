@@ -38,7 +38,7 @@ func (a *scyllaVersionSupportAnalyzer) Analyze(params engine.AnalyzerParams) *en
 	var unsupported []string
 	var warnings []string
 
-	for _, podKey := range params.Vitals.PodKeys() {
+	for _, podKey := range params.Vitals.ScyllaNodeKeys() {
 		versionResult, err := collectors.GetScyllaVersionResult(params.Vitals, podKey)
 		if err != nil {
 			// Skip pods where the collector didn't pass.

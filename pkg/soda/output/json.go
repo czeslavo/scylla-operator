@@ -41,7 +41,7 @@ type JSONScyllaClusterTarget struct {
 type JSONCollectors struct {
 	ClusterWide      map[engine.CollectorID]*JSONCollectorResult            `json:"cluster_wide"`
 	PerScyllaCluster map[string]map[engine.CollectorID]*JSONCollectorResult `json:"per_scylla_cluster"`
-	PerPod           map[string]map[engine.CollectorID]*JSONCollectorResult `json:"per_pod"`
+	PerScyllaNode    map[string]map[engine.CollectorID]*JSONCollectorResult `json:"per_scylla_node"`
 }
 
 // JSONCollectorResult represents a single collector result in JSON output.
@@ -70,8 +70,8 @@ func NewJSONWriter(w io.Writer, toolVersion string) *JSONWriter {
 }
 
 // WriteReport writes the full diagnostic report as JSON.
-func (j *JSONWriter) WriteReport(result *engine.EngineResult, profileName string, clusters []engine.ScyllaClusterInfo, pods map[engine.ScopeKey][]engine.PodInfo) error {
-	report := j.BuildReport(result, profileName, clusters, pods)
+func (j *JSONWriter) WriteReport(result *engine.EngineResult, profileName string, clusters []engine.ScyllaClusterInfo, scyllaNodes map[engine.ScopeKey][]engine.ScyllaNodeInfo) error {
+	report := j.BuildReport(result, profileName, clusters, scyllaNodes)
 
 	encoder := json.NewEncoder(j.w)
 	encoder.SetIndent("", "  ")
@@ -83,37 +83,37 @@ func (j *JSONWriter) WriteReport(result *engine.EngineResult, profileName string
 
 // BuildReport constructs the full JSONReport structure from engine results.
 // This is useful for both writing to stdout and persisting as report.json.
-func (j *JSONWriter) BuildReport(result *engine.EngineResult, profileName string, clusters []engine.ScyllaClusterInfo, pods map[engine.ScopeKey][]engine.PodInfo) *JSONReport {
+func (j *JSONWriter) BuildReport(result *engine.EngineResult, profileName string, clusters []engine.ScyllaClusterInfo, scyllaNodes map[engine.ScopeKey][]engine.ScyllaNodeInfo) *JSONReport {
 	report := &JSONReport{
 		Metadata: JSONMetadata{
 			Timestamp:   time.Now().UTC().Format(time.RFC3339),
 			ToolVersion: j.toolVersion,
 			Profile:     profileName,
 		},
-		Targets:    j.buildTargets(clusters, pods),
+		Targets:    j.buildTargets(clusters, scyllaNodes),
 		Collectors: j.buildCollectors(result),
 		Analysis:   j.buildAnalysis(result),
 	}
 	return report
 }
 
-func (j *JSONWriter) buildTargets(clusters []engine.ScyllaClusterInfo, pods map[engine.ScopeKey][]engine.PodInfo) JSONTargets {
+func (j *JSONWriter) buildTargets(clusters []engine.ScyllaClusterInfo, scyllaNodes map[engine.ScopeKey][]engine.ScyllaNodeInfo) JSONTargets {
 	targets := JSONTargets{
 		ScyllaClusters: make([]JSONScyllaClusterTarget, 0, len(clusters)),
 	}
 
 	for _, cluster := range clusters {
 		clusterKey := engine.ScopeKey{Namespace: cluster.Namespace, Name: cluster.Name}
-		podNames := make([]string, 0)
-		for _, pod := range pods[clusterKey] {
-			podNames = append(podNames, pod.Name)
+		nodeNames := make([]string, 0)
+		for _, node := range scyllaNodes[clusterKey] {
+			nodeNames = append(nodeNames, node.Name)
 		}
 
 		targets.ScyllaClusters = append(targets.ScyllaClusters, JSONScyllaClusterTarget{
 			Name:      cluster.Name,
 			Namespace: cluster.Namespace,
 			Kind:      cluster.Kind,
-			Pods:      podNames,
+			Pods:      nodeNames,
 		})
 	}
 
@@ -124,7 +124,7 @@ func (j *JSONWriter) buildCollectors(result *engine.EngineResult) JSONCollectors
 	collectors := JSONCollectors{
 		ClusterWide:      make(map[engine.CollectorID]*JSONCollectorResult),
 		PerScyllaCluster: make(map[string]map[engine.CollectorID]*JSONCollectorResult),
-		PerPod:           make(map[string]map[engine.CollectorID]*JSONCollectorResult),
+		PerScyllaNode:    make(map[string]map[engine.CollectorID]*JSONCollectorResult),
 	}
 
 	// ClusterWide.
@@ -141,12 +141,12 @@ func (j *JSONWriter) buildCollectors(result *engine.EngineResult) JSONCollectors
 		}
 	}
 
-	// PerPod.
-	for key, perPod := range result.Vitals.PerPod {
+	// PerScyllaNode.
+	for key, perPod := range result.Vitals.PerScyllaNode {
 		keyStr := key.String()
-		collectors.PerPod[keyStr] = make(map[engine.CollectorID]*JSONCollectorResult)
+		collectors.PerScyllaNode[keyStr] = make(map[engine.CollectorID]*JSONCollectorResult)
 		for id, res := range perPod {
-			collectors.PerPod[keyStr][id] = toJSONCollectorResult(res)
+			collectors.PerScyllaNode[keyStr][id] = toJSONCollectorResult(res)
 		}
 	}
 

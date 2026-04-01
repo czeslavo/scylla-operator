@@ -60,7 +60,7 @@ func NewSystemConfigCollector() engine.Collector {
 
 func (c *systemConfigCollector) ID() engine.CollectorID          { return SystemConfigCollectorID }
 func (c *systemConfigCollector) Name() string                    { return "System config" }
-func (c *systemConfigCollector) Scope() engine.CollectorScope    { return engine.PerPod }
+func (c *systemConfigCollector) Scope() engine.CollectorScope    { return engine.PerScyllaNode }
 func (c *systemConfigCollector) DependsOn() []engine.CollectorID { return nil }
 
 // RBAC implements engine.RBACProvider.
@@ -77,11 +77,11 @@ func (c *systemConfigCollector) RBAC() []rbacv1.PolicyRule {
 }
 
 func (c *systemConfigCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
-	if params.Pod == nil {
+	if params.ScyllaNode == nil {
 		return nil, fmt.Errorf("pod info not provided")
 	}
 
-	stdout, _, err := params.PodExecutor.Execute(ctx, params.Pod.Namespace, params.Pod.Name, scyllaContainerName,
+	stdout, _, err := params.PodExecutor.Execute(ctx, params.ScyllaNode.Namespace, params.ScyllaNode.Name, scyllaContainerName,
 		[]string{"cqlsh", "127.0.0.1", "9042", "--no-color", "-e",
 			"SELECT name, source, type, value FROM system.config"})
 	if err != nil {

@@ -9,7 +9,7 @@ import (
 )
 
 func TestSchemaVersionsCollector_HappyPath(t *testing.T) {
-	pod := &engine.PodInfo{Name: "pod-0", Namespace: "scylla"}
+	pod := &engine.ScyllaNodeInfo{Name: "pod-0", Namespace: "scylla"}
 	fakeExec := &sodatesting.FakePodExecutor{
 		Responses: map[string]sodatesting.FakeExecResponse{
 			"scylla/pod-0/scylla/curl -s http://localhost:10000/storage_proxy/schema_versions": {
@@ -22,7 +22,7 @@ func TestSchemaVersionsCollector_HappyPath(t *testing.T) {
 	collector := NewSchemaVersionsCollector()
 	result, err := collector.Collect(context.Background(), engine.CollectorParams{
 		Vitals:         engine.NewVitals(),
-		Pod:            pod,
+		ScyllaNode: pod,
 		PodExecutor:    fakeExec,
 		ArtifactWriter: fakeWriter,
 	})
@@ -60,7 +60,7 @@ func TestSchemaVersionsCollector_HappyPath(t *testing.T) {
 }
 
 func TestSchemaVersionsCollector_MultipleVersions(t *testing.T) {
-	pod := &engine.PodInfo{Name: "pod-0", Namespace: "ns"}
+	pod := &engine.ScyllaNodeInfo{Name: "pod-0", Namespace: "ns"}
 	fakeExec := &sodatesting.FakePodExecutor{
 		Responses: map[string]sodatesting.FakeExecResponse{
 			"ns/pod-0/scylla/curl -s http://localhost:10000/storage_proxy/schema_versions": {
@@ -72,7 +72,7 @@ func TestSchemaVersionsCollector_MultipleVersions(t *testing.T) {
 	collector := NewSchemaVersionsCollector()
 	result, err := collector.Collect(context.Background(), engine.CollectorParams{
 		Vitals:      engine.NewVitals(),
-		Pod:         pod,
+		ScyllaNode: pod,
 		PodExecutor: fakeExec,
 	})
 
@@ -90,7 +90,7 @@ func TestSchemaVersionsCollector_MultipleVersions(t *testing.T) {
 }
 
 func TestSchemaVersionsCollector_EmptyResponse(t *testing.T) {
-	pod := &engine.PodInfo{Name: "pod-0", Namespace: "ns"}
+	pod := &engine.ScyllaNodeInfo{Name: "pod-0", Namespace: "ns"}
 	fakeExec := &sodatesting.FakePodExecutor{
 		Responses: map[string]sodatesting.FakeExecResponse{
 			"ns/pod-0/scylla/curl -s http://localhost:10000/storage_proxy/schema_versions": {
@@ -102,7 +102,7 @@ func TestSchemaVersionsCollector_EmptyResponse(t *testing.T) {
 	collector := NewSchemaVersionsCollector()
 	result, err := collector.Collect(context.Background(), engine.CollectorParams{
 		Vitals:      engine.NewVitals(),
-		Pod:         pod,
+		ScyllaNode: pod,
 		PodExecutor: fakeExec,
 	})
 
@@ -117,7 +117,7 @@ func TestSchemaVersionsCollector_EmptyResponse(t *testing.T) {
 }
 
 func TestSchemaVersionsCollector_InvalidJSON(t *testing.T) {
-	pod := &engine.PodInfo{Name: "pod-0", Namespace: "ns"}
+	pod := &engine.ScyllaNodeInfo{Name: "pod-0", Namespace: "ns"}
 	fakeExec := &sodatesting.FakePodExecutor{
 		Responses: map[string]sodatesting.FakeExecResponse{
 			"ns/pod-0/scylla/curl -s http://localhost:10000/storage_proxy/schema_versions": {
@@ -129,7 +129,7 @@ func TestSchemaVersionsCollector_InvalidJSON(t *testing.T) {
 	collector := NewSchemaVersionsCollector()
 	_, err := collector.Collect(context.Background(), engine.CollectorParams{
 		Vitals:      engine.NewVitals(),
-		Pod:         pod,
+		ScyllaNode: pod,
 		PodExecutor: fakeExec,
 	})
 
@@ -139,7 +139,7 @@ func TestSchemaVersionsCollector_InvalidJSON(t *testing.T) {
 }
 
 func TestSchemaVersionsCollector_ExecError(t *testing.T) {
-	pod := &engine.PodInfo{Name: "pod-0", Namespace: "ns"}
+	pod := &engine.ScyllaNodeInfo{Name: "pod-0", Namespace: "ns"}
 	fakeExec := &sodatesting.FakePodExecutor{
 		Responses: map[string]sodatesting.FakeExecResponse{},
 	}
@@ -147,7 +147,7 @@ func TestSchemaVersionsCollector_ExecError(t *testing.T) {
 	collector := NewSchemaVersionsCollector()
 	_, err := collector.Collect(context.Background(), engine.CollectorParams{
 		Vitals:      engine.NewVitals(),
-		Pod:         pod,
+		ScyllaNode: pod,
 		PodExecutor: fakeExec,
 	})
 
@@ -174,7 +174,7 @@ func TestGetSchemaVersionsResult_TypedAccessor(t *testing.T) {
 		},
 	}
 	podKey := engine.ScopeKey{Namespace: "ns", Name: "pod-0"}
-	vitals.Store(SchemaVersionsCollectorID, engine.PerPod, podKey, &engine.CollectorResult{
+	vitals.Store(SchemaVersionsCollectorID, engine.PerScyllaNode, podKey, &engine.CollectorResult{
 		Status: engine.CollectorPassed,
 		Data:   expected,
 	})

@@ -44,7 +44,7 @@ type EngineConfig struct {
 
 	// Targets
 	ScyllaClusters []ScyllaClusterInfo
-	Pods           map[ScopeKey][]PodInfo // ScyllaCluster key → pods for that cluster
+	ScyllaNodes    map[ScopeKey][]ScyllaNodeInfo // ScyllaCluster key → Scylla nodes for that cluster
 
 	// Dependency-injected capabilities
 	PodExecutor         PodExecutor
@@ -152,13 +152,13 @@ func (e *Engine) executeCollectors(ctx context.Context, sortedCollectors []Colle
 				e.executePerScyllaClusterCollector(ctx, collector, &cluster, clusterKey, vitals)
 			}
 
-		case PerPod:
+		case PerScyllaNode:
 			for _, cluster := range e.config.ScyllaClusters {
 				clusterKey := ScopeKey{Namespace: cluster.Namespace, Name: cluster.Name}
-				pods := e.config.Pods[clusterKey]
-				for _, pod := range pods {
-					podKey := ScopeKey{Namespace: pod.Namespace, Name: pod.Name}
-					e.executePerPodCollector(ctx, collector, &cluster, &pod, podKey, vitals)
+				nodes := e.config.ScyllaNodes[clusterKey]
+				for _, node := range nodes {
+					nodeKey := ScopeKey{Namespace: node.Namespace, Name: node.Name}
+					e.executePerScyllaNodeCollector(ctx, collector, &cluster, &node, nodeKey, vitals)
 				}
 			}
 		}
@@ -250,23 +250,23 @@ func (e *Engine) executePerScyllaClusterCollector(ctx context.Context, collector
 	vitals.Store(collector.ID(), PerScyllaCluster, clusterKey, result)
 }
 
-func (e *Engine) executePerPodCollector(ctx context.Context, collector Collector, cluster *ScyllaClusterInfo, pod *PodInfo, podKey ScopeKey, vitals *Vitals) {
-	if result := e.checkCascade(collector, vitals, podKey); result != nil {
-		e.emitEvent(CollectorEvent{Kind: CollectorEventStarted, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerPod, ScopeKey: podKey})
-		e.emitEvent(CollectorEvent{Kind: CollectorEventFinished, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerPod, ScopeKey: podKey, Result: result})
-		vitals.Store(collector.ID(), PerPod, podKey, result)
+func (e *Engine) executePerScyllaNodeCollector(ctx context.Context, collector Collector, cluster *ScyllaClusterInfo, node *ScyllaNodeInfo, nodeKey ScopeKey, vitals *Vitals) {
+	if result := e.checkCascade(collector, vitals, nodeKey); result != nil {
+		e.emitEvent(CollectorEvent{Kind: CollectorEventStarted, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerScyllaNode, ScopeKey: nodeKey})
+		e.emitEvent(CollectorEvent{Kind: CollectorEventFinished, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerScyllaNode, ScopeKey: nodeKey, Result: result})
+		vitals.Store(collector.ID(), PerScyllaNode, nodeKey, result)
 		return
 	}
 
 	var artifactWriter ArtifactWriter
 	if e.config.ArtifactWriterFactory != nil {
-		artifactWriter = e.config.ArtifactWriterFactory.NewWriter(collector.ID(), PerPod, podKey)
+		artifactWriter = e.config.ArtifactWriterFactory.NewWriter(collector.ID(), PerScyllaNode, nodeKey)
 	}
 
 	params := CollectorParams{
 		Vitals:              vitals,
 		ScyllaCluster:       cluster,
-		Pod:                 pod,
+		ScyllaNode:          node,
 		PodExecutor:         e.config.PodExecutor,
 		ScyllaClusterLister: e.config.ScyllaClusterLister,
 		NodeLister:          e.config.NodeLister,
@@ -274,7 +274,7 @@ func (e *Engine) executePerPodCollector(ctx context.Context, collector Collector
 		ArtifactWriter:      artifactWriter,
 	}
 
-	e.emitEvent(CollectorEvent{Kind: CollectorEventStarted, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerPod, ScopeKey: podKey})
+	e.emitEvent(CollectorEvent{Kind: CollectorEventStarted, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerScyllaNode, ScopeKey: nodeKey})
 	start := time.Now()
 	result, err := collector.Collect(ctx, params)
 	if err != nil {
@@ -284,9 +284,9 @@ func (e *Engine) executePerPodCollector(ctx context.Context, collector Collector
 		}
 	}
 	result.Duration = time.Since(start)
-	e.emitEvent(CollectorEvent{Kind: CollectorEventFinished, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerPod, ScopeKey: podKey, Result: result})
+	e.emitEvent(CollectorEvent{Kind: CollectorEventFinished, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerScyllaNode, ScopeKey: nodeKey, Result: result})
 
-	vitals.Store(collector.ID(), PerPod, podKey, result)
+	vitals.Store(collector.ID(), PerScyllaNode, nodeKey, result)
 }
 
 // checkCascade checks if any of the collector's dependencies have failed or
@@ -378,11 +378,11 @@ func (e *Engine) executeAnalyzers(analyzerIDs []AnalyzerID, vitals *Vitals, arti
 			inner := make(map[ScopeKey]*AnalyzerResult, len(e.config.ScyllaClusters))
 			for _, cluster := range e.config.ScyllaClusters {
 				clusterKey := ScopeKey{Namespace: cluster.Namespace, Name: cluster.Name}
-				podKeys := make([]ScopeKey, 0, len(e.config.Pods[clusterKey]))
-				for _, pod := range e.config.Pods[clusterKey] {
-					podKeys = append(podKeys, ScopeKey{Namespace: pod.Namespace, Name: pod.Name})
+				scyllaNodeKeys := make([]ScopeKey, 0, len(e.config.ScyllaNodes[clusterKey]))
+				for _, node := range e.config.ScyllaNodes[clusterKey] {
+					scyllaNodeKeys = append(scyllaNodeKeys, ScopeKey{Namespace: node.Namespace, Name: node.Name})
 				}
-				scopedVitals := vitals.ForScyllaCluster(clusterKey, podKeys)
+				scopedVitals := vitals.ForScyllaCluster(clusterKey, scyllaNodeKeys)
 
 				if result := e.checkAnalyzerDeps(analyzer, scopedVitals); result != nil {
 					inner[clusterKey] = result
@@ -465,8 +465,8 @@ func (e *Engine) checkAnalyzerDeps(analyzer Analyzer, vitals *Vitals) *AnalyzerR
 				}
 			}
 
-		case PerPod:
-			for _, key := range vitals.PodKeys() {
+		case PerScyllaNode:
+			for _, key := range vitals.ScyllaNodeKeys() {
 				if result, ok := vitals.Get(depID, key); ok {
 					hasAnyResult = true
 					switch result.Status {

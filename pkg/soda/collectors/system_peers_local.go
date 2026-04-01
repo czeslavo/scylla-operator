@@ -78,7 +78,7 @@ func NewSystemPeersLocalCollector() engine.Collector {
 
 func (c *systemPeersLocalCollector) ID() engine.CollectorID          { return SystemPeersLocalCollectorID }
 func (c *systemPeersLocalCollector) Name() string                    { return "System local and peers" }
-func (c *systemPeersLocalCollector) Scope() engine.CollectorScope    { return engine.PerPod }
+func (c *systemPeersLocalCollector) Scope() engine.CollectorScope    { return engine.PerScyllaNode }
 func (c *systemPeersLocalCollector) DependsOn() []engine.CollectorID { return nil }
 
 // RBAC implements engine.RBACProvider.
@@ -95,12 +95,12 @@ func (c *systemPeersLocalCollector) RBAC() []rbacv1.PolicyRule {
 }
 
 func (c *systemPeersLocalCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
-	if params.Pod == nil {
+	if params.ScyllaNode == nil {
 		return nil, fmt.Errorf("pod info not provided")
 	}
 
 	// Query system.local.
-	localStdout, _, err := params.PodExecutor.Execute(ctx, params.Pod.Namespace, params.Pod.Name, scyllaContainerName,
+	localStdout, _, err := params.PodExecutor.Execute(ctx, params.ScyllaNode.Namespace, params.ScyllaNode.Name, scyllaContainerName,
 		[]string{"cqlsh", "127.0.0.1", "9042", "--no-color", "-e",
 			"SELECT cluster_name, data_center, rack, host_id, schema_version, release_version FROM system.local"})
 	if err != nil {
@@ -113,7 +113,7 @@ func (c *systemPeersLocalCollector) Collect(ctx context.Context, params engine.C
 	}
 
 	// Query system.peers.
-	peersStdout, _, err := params.PodExecutor.Execute(ctx, params.Pod.Namespace, params.Pod.Name, scyllaContainerName,
+	peersStdout, _, err := params.PodExecutor.Execute(ctx, params.ScyllaNode.Namespace, params.ScyllaNode.Name, scyllaContainerName,
 		[]string{"cqlsh", "127.0.0.1", "9042", "--no-color", "-e",
 			"SELECT peer, data_center, rack, host_id, schema_version FROM system.peers"})
 	if err != nil {

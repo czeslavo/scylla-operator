@@ -38,7 +38,7 @@ func (a *schemaAgreementAnalyzer) Analyze(params engine.AnalyzerParams) *engine.
 	allVersions := make(map[string][]string) // schema UUID → list of pod keys that reported it
 	podsChecked := 0
 
-	for _, podKey := range params.Vitals.PodKeys() {
+	for _, podKey := range params.Vitals.ScyllaNodeKeys() {
 		schemaResult, err := collectors.GetSchemaVersionsResult(params.Vitals, podKey)
 		if err != nil {
 			// Skip pods where the collector didn't pass.

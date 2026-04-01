@@ -12,7 +12,7 @@ func TestCollectorScopeString(t *testing.T) {
 	}{
 		{ClusterWide, "ClusterWide"},
 		{PerScyllaCluster, "PerScyllaCluster"},
-		{PerPod, "PerPod"},
+		{PerScyllaNode, "PerScyllaNode"},
 		{CollectorScope(99), "CollectorScope(99)"},
 	}
 	for _, tt := range tests {
@@ -154,8 +154,8 @@ func TestNewVitals(t *testing.T) {
 	if v.PerScyllaCluster == nil {
 		t.Fatal("NewVitals().PerScyllaCluster is nil")
 	}
-	if v.PerPod == nil {
-		t.Fatal("NewVitals().PerPod is nil")
+	if v.PerScyllaNode == nil {
+		t.Fatal("NewVitals().PerScyllaNode is nil")
 	}
 }
 
@@ -181,7 +181,7 @@ func TestVitalsStoreAndGet(t *testing.T) {
 	// Store results at different scopes.
 	v.Store("NodeResourcesCollector", ClusterWide, ScopeKey{}, clusterWideResult)
 	v.Store("ScyllaClusterStatusCollector", PerScyllaCluster, clusterKey, perClusterResult)
-	v.Store("OSInfoCollector", PerPod, podKey, perPodResult)
+	v.Store("OSInfoCollector", PerScyllaNode, podKey, perPodResult)
 
 	t.Run("Get ClusterWide result with any scopeKey", func(t *testing.T) {
 		result, ok := v.Get("NodeResourcesCollector", ScopeKey{})
@@ -219,17 +219,17 @@ func TestVitalsStoreAndGet(t *testing.T) {
 		}
 	})
 
-	t.Run("Get PerPod result", func(t *testing.T) {
+	t.Run("Get PerScyllaNode result", func(t *testing.T) {
 		result, ok := v.Get("OSInfoCollector", podKey)
 		if !ok {
-			t.Fatal("expected to find PerPod result")
+			t.Fatal("expected to find PerScyllaNode result")
 		}
 		if result.Message != "OS info collected" {
 			t.Errorf("unexpected message: %q", result.Message)
 		}
 	})
 
-	t.Run("Get PerPod result with wrong key", func(t *testing.T) {
+	t.Run("Get PerScyllaNode result with wrong key", func(t *testing.T) {
 		_, ok := v.Get("OSInfoCollector", ScopeKey{Namespace: "scylla", Name: "other-pod"})
 		if ok {
 			t.Error("expected not to find result with wrong scope key")
@@ -251,9 +251,9 @@ func TestVitalsStoreMultiplePerScope(t *testing.T) {
 	pod2 := ScopeKey{Namespace: "scylla", Name: "pod-1"}
 	pod3 := ScopeKey{Namespace: "other", Name: "pod-0"}
 
-	v.Store("OSInfoCollector", PerPod, pod1, &CollectorResult{Status: CollectorPassed, Message: "pod-0"})
-	v.Store("OSInfoCollector", PerPod, pod2, &CollectorResult{Status: CollectorPassed, Message: "pod-1"})
-	v.Store("OSInfoCollector", PerPod, pod3, &CollectorResult{Status: CollectorFailed, Message: "other/pod-0 failed"})
+	v.Store("OSInfoCollector", PerScyllaNode, pod1, &CollectorResult{Status: CollectorPassed, Message: "pod-0"})
+	v.Store("OSInfoCollector", PerScyllaNode, pod2, &CollectorResult{Status: CollectorPassed, Message: "pod-1"})
+	v.Store("OSInfoCollector", PerScyllaNode, pod3, &CollectorResult{Status: CollectorFailed, Message: "other/pod-0 failed"})
 
 	// Each pod key should return its own result.
 	r1, ok := v.Get("OSInfoCollector", pod1)
@@ -274,12 +274,12 @@ func TestVitalsPodKeys(t *testing.T) {
 	v := NewVitals()
 
 	// Add pods in non-sorted order.
-	v.Store("OSInfoCollector", PerPod, ScopeKey{Namespace: "scylla", Name: "pod-2"}, &CollectorResult{})
-	v.Store("OSInfoCollector", PerPod, ScopeKey{Namespace: "other", Name: "pod-0"}, &CollectorResult{})
-	v.Store("OSInfoCollector", PerPod, ScopeKey{Namespace: "scylla", Name: "pod-0"}, &CollectorResult{})
-	v.Store("OSInfoCollector", PerPod, ScopeKey{Namespace: "scylla", Name: "pod-1"}, &CollectorResult{})
+	v.Store("OSInfoCollector", PerScyllaNode, ScopeKey{Namespace: "scylla", Name: "pod-2"}, &CollectorResult{})
+	v.Store("OSInfoCollector", PerScyllaNode, ScopeKey{Namespace: "other", Name: "pod-0"}, &CollectorResult{})
+	v.Store("OSInfoCollector", PerScyllaNode, ScopeKey{Namespace: "scylla", Name: "pod-0"}, &CollectorResult{})
+	v.Store("OSInfoCollector", PerScyllaNode, ScopeKey{Namespace: "scylla", Name: "pod-1"}, &CollectorResult{})
 
-	keys := v.PodKeys()
+	keys := v.ScyllaNodeKeys()
 	if len(keys) != 4 {
 		t.Fatalf("expected 4 pod keys, got %d", len(keys))
 	}
@@ -324,7 +324,7 @@ func TestVitalsClusterKeys(t *testing.T) {
 func TestVitalsEmptyKeys(t *testing.T) {
 	v := NewVitals()
 
-	podKeys := v.PodKeys()
+	podKeys := v.ScyllaNodeKeys()
 	if len(podKeys) != 0 {
 		t.Errorf("expected 0 pod keys, got %d", len(podKeys))
 	}
@@ -443,7 +443,7 @@ func TestVitalsToSerializable_AllScopes(t *testing.T) {
 	})
 
 	podKey := ScopeKey{Namespace: "scylla", Name: "pod-0"}
-	v.Store("os-info", PerPod, podKey, &CollectorResult{
+	v.Store("os-info", PerScyllaNode, podKey, &CollectorResult{
 		Status:  CollectorPassed,
 		Message: "os collected",
 		Data:    &podData{OS: "Ubuntu"},
@@ -481,16 +481,16 @@ func TestVitalsToSerializable_AllScopes(t *testing.T) {
 		t.Errorf("PerScyllaCluster data = %s, want %s", string(pcResult.Data), `{"status":"ready"}`)
 	}
 
-	// Check PerPod.
-	if len(sv.PerPod) != 1 {
-		t.Fatalf("PerPod length = %d, want 1", len(sv.PerPod))
+	// Check PerScyllaNode.
+	if len(sv.PerScyllaNode) != 1 {
+		t.Fatalf("PerScyllaNode length = %d, want 1", len(sv.PerScyllaNode))
 	}
-	ppResult := sv.PerPod[podKey]["os-info"]
+	ppResult := sv.PerScyllaNode[podKey]["os-info"]
 	if ppResult == nil {
-		t.Fatal("PerPod[os-info] is nil")
+		t.Fatal("PerScyllaNode[os-info] is nil")
 	}
 	if string(ppResult.Data) != `{"os":"Ubuntu"}` {
-		t.Errorf("PerPod data = %s, want %s", string(ppResult.Data), `{"os":"Ubuntu"}`)
+		t.Errorf("PerScyllaNode data = %s, want %s", string(ppResult.Data), `{"os":"Ubuntu"}`)
 	}
 }
 
@@ -508,8 +508,8 @@ func TestVitalsToSerializable_Empty(t *testing.T) {
 	if len(sv.PerScyllaCluster) != 0 {
 		t.Errorf("PerScyllaCluster length = %d, want 0", len(sv.PerScyllaCluster))
 	}
-	if len(sv.PerPod) != 0 {
-		t.Errorf("PerPod length = %d, want 0", len(sv.PerPod))
+	if len(sv.PerScyllaNode) != 0 {
+		t.Errorf("PerScyllaNode length = %d, want 0", len(sv.PerScyllaNode))
 	}
 }
 
@@ -530,7 +530,7 @@ func TestVitalsToSerializable_JSONRoundTrip(t *testing.T) {
 	})
 
 	podKey := ScopeKey{Namespace: "ns", Name: "pod-1"}
-	v.Store("collector-b", PerPod, podKey, &CollectorResult{
+	v.Store("collector-b", PerScyllaNode, podKey, &CollectorResult{
 		Status:  CollectorFailed,
 		Message: "error occurred",
 	})
@@ -570,10 +570,10 @@ func TestVitalsToSerializable_JSONRoundTrip(t *testing.T) {
 		t.Errorf("Artifacts did not round-trip correctly: %+v", cwResult.Artifacts)
 	}
 
-	// Verify PerPod round-tripped correctly.
-	ppResult := sv2.PerPod[podKey]["collector-b"]
+	// Verify PerScyllaNode round-tripped correctly.
+	ppResult := sv2.PerScyllaNode[podKey]["collector-b"]
 	if ppResult == nil {
-		t.Fatal("round-tripped PerPod[collector-b] is nil")
+		t.Fatal("round-tripped PerScyllaNode[collector-b] is nil")
 	}
 	if ppResult.Status != CollectorFailed {
 		t.Errorf("Status = %v, want %v", ppResult.Status, CollectorFailed)

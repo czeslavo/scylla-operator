@@ -53,7 +53,7 @@ func NewRlimitsCollector() engine.Collector {
 
 func (c *rlimitsCollector) ID() engine.CollectorID          { return RlimitsCollectorID }
 func (c *rlimitsCollector) Name() string                    { return "Scylla process resource limits" }
-func (c *rlimitsCollector) Scope() engine.CollectorScope    { return engine.PerPod }
+func (c *rlimitsCollector) Scope() engine.CollectorScope    { return engine.PerScyllaNode }
 func (c *rlimitsCollector) DependsOn() []engine.CollectorID { return nil }
 
 // RBAC implements engine.RBACProvider.
@@ -70,12 +70,12 @@ func (c *rlimitsCollector) RBAC() []rbacv1.PolicyRule {
 }
 
 func (c *rlimitsCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
-	if params.Pod == nil {
+	if params.ScyllaNode == nil {
 		return nil, fmt.Errorf("pod info not provided")
 	}
 
 	// prlimit is not available in the scylla container; use /proc/<pid>/limits instead.
-	stdout, _, err := params.PodExecutor.Execute(ctx, params.Pod.Namespace, params.Pod.Name, scyllaContainerName,
+	stdout, _, err := params.PodExecutor.Execute(ctx, params.ScyllaNode.Namespace, params.ScyllaNode.Name, scyllaContainerName,
 		[]string{"bash", "-c", "cat /proc/$(pidof scylla)/limits"})
 	if err != nil {
 		return nil, fmt.Errorf("reading scylla process limits: %w", err)

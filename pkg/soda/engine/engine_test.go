@@ -259,12 +259,12 @@ func TestEngineCascadeFail(t *testing.T) {
 }
 
 func TestEngineScopeIteration(t *testing.T) {
-	// ClusterWide should run once, PerScyllaCluster twice, PerPod four times.
+	// ClusterWide should run once, PerScyllaCluster twice, PerScyllaNode four times.
 	var cwLog, pcLog, ppLog []CollectorID
 	collectors := map[CollectorID]Collector{
 		"CW": &recordingCollector{id: "CW", scope: ClusterWide, callLog: &cwLog},
 		"PC": &recordingCollector{id: "PC", scope: PerScyllaCluster, callLog: &pcLog},
-		"PP": &recordingCollector{id: "PP", scope: PerPod, callLog: &ppLog},
+		"PP": &recordingCollector{id: "PP", scope: PerScyllaNode, callLog: &ppLog},
 	}
 	analyzers := map[AnalyzerID]Analyzer{
 		"A1": &simpleAnalyzer{id: "A1", deps: []CollectorID{"CW", "PC", "PP"}},
@@ -277,7 +277,7 @@ func TestEngineScopeIteration(t *testing.T) {
 		{Name: "cluster-a", Namespace: "ns1"},
 		{Name: "cluster-b", Namespace: "ns2"},
 	}
-	pods := map[ScopeKey][]PodInfo{
+	pods := map[ScopeKey][]ScyllaNodeInfo{
 		{Namespace: "ns1", Name: "cluster-a"}: {
 			{Name: "pod-0", Namespace: "ns1", ClusterName: "cluster-a"},
 			{Name: "pod-1", Namespace: "ns1", ClusterName: "cluster-a"},
@@ -294,7 +294,7 @@ func TestEngineScopeIteration(t *testing.T) {
 		AllProfiles:    profiles,
 		ProfileName:    "test",
 		ScyllaClusters: clusters,
-		Pods:           pods,
+		ScyllaNodes: pods,
 	})
 
 	_, err := eng.Run(context.Background())
@@ -309,17 +309,17 @@ func TestEngineScopeIteration(t *testing.T) {
 		t.Errorf("PerScyllaCluster call count = %d, want 2", len(pcLog))
 	}
 	if len(ppLog) != 4 {
-		t.Errorf("PerPod call count = %d, want 4", len(ppLog))
+		t.Errorf("PerScyllaNode call count = %d, want 4", len(ppLog))
 	}
 }
 
 func TestEngineCrossScopeDep(t *testing.T) {
-	// PerPod collector depends on ClusterWide collector.
+	// PerScyllaNode collector depends on ClusterWide collector.
 	var callLog []CollectorID
 	collectors := map[CollectorID]Collector{
 		"CW": &recordingCollector{id: "CW", scope: ClusterWide, callLog: &callLog},
 		"PP": &recordingCollector{
-			id: "PP", scope: PerPod, deps: []CollectorID{"CW"}, callLog: &callLog,
+			id: "PP", scope: PerScyllaNode, deps: []CollectorID{"CW"}, callLog: &callLog,
 			callFunc: func(_ context.Context, params CollectorParams) (*CollectorResult, error) {
 				// Verify we can access the ClusterWide result.
 				result, ok := params.Vitals.Get("CW", ScopeKey{})
@@ -341,7 +341,7 @@ func TestEngineCrossScopeDep(t *testing.T) {
 	}
 
 	clusters := []ScyllaClusterInfo{{Name: "cluster-a", Namespace: "ns1"}}
-	pods := map[ScopeKey][]PodInfo{
+	pods := map[ScopeKey][]ScyllaNodeInfo{
 		{Namespace: "ns1", Name: "cluster-a"}: {
 			{Name: "pod-0", Namespace: "ns1", ClusterName: "cluster-a"},
 		},
@@ -353,7 +353,7 @@ func TestEngineCrossScopeDep(t *testing.T) {
 		AllProfiles:    profiles,
 		ProfileName:    "test",
 		ScyllaClusters: clusters,
-		Pods:           pods,
+		ScyllaNodes: pods,
 	})
 
 	result, err := eng.Run(context.Background())
@@ -447,7 +447,7 @@ func TestEngineAllCollectorsFail(t *testing.T) {
 	var callLog []CollectorID
 	collectors := map[CollectorID]Collector{
 		"C1": &recordingCollector{
-			id: "C1", scope: PerPod, callLog: &callLog,
+			id: "C1", scope: PerScyllaNode, callLog: &callLog,
 			result: &CollectorResult{Status: CollectorFailed, Message: "C1 failed"},
 		},
 	}
@@ -459,7 +459,7 @@ func TestEngineAllCollectorsFail(t *testing.T) {
 	}
 
 	clusters := []ScyllaClusterInfo{{Name: "cluster", Namespace: "ns"}}
-	pods := map[ScopeKey][]PodInfo{
+	pods := map[ScopeKey][]ScyllaNodeInfo{
 		{Namespace: "ns", Name: "cluster"}: {
 			{Name: "pod-0", Namespace: "ns"},
 			{Name: "pod-1", Namespace: "ns"},
@@ -472,7 +472,7 @@ func TestEngineAllCollectorsFail(t *testing.T) {
 		AllProfiles:    profiles,
 		ProfileName:    "test",
 		ScyllaClusters: clusters,
-		Pods:           pods,
+		ScyllaNodes: pods,
 	})
 
 	result, err := eng.Run(context.Background())
@@ -481,7 +481,7 @@ func TestEngineAllCollectorsFail(t *testing.T) {
 	}
 
 	// All pods should have FAILED results.
-	for _, podKey := range result.Vitals.PodKeys() {
+	for _, podKey := range result.Vitals.ScyllaNodeKeys() {
 		r, ok := result.Vitals.Get("C1", podKey)
 		if !ok {
 			t.Errorf("C1 result not found for %s", podKey)
@@ -524,7 +524,7 @@ func TestEngineArtifactWriterAssignment(t *testing.T) {
 			},
 		},
 		"PP": &recordingCollector{
-			id: "PP", scope: PerPod, callLog: &callLog,
+			id: "PP", scope: PerScyllaNode, callLog: &callLog,
 			callFunc: func(_ context.Context, params CollectorParams) (*CollectorResult, error) {
 				if params.ArtifactWriter == nil {
 					return &CollectorResult{Status: CollectorFailed, Message: "no artifact writer"}, nil
@@ -551,7 +551,7 @@ func TestEngineArtifactWriterAssignment(t *testing.T) {
 	}
 
 	clusters := []ScyllaClusterInfo{{Name: "cluster", Namespace: "ns"}}
-	pods := map[ScopeKey][]PodInfo{
+	pods := map[ScopeKey][]ScyllaNodeInfo{
 		{Namespace: "ns", Name: "cluster"}: {
 			{Name: "pod-0", Namespace: "ns"},
 		},
@@ -563,7 +563,7 @@ func TestEngineArtifactWriterAssignment(t *testing.T) {
 		AllProfiles:           profiles,
 		ProfileName:           "test",
 		ScyllaClusters:        clusters,
-		Pods:                  pods,
+		ScyllaNodes: pods,
 		ArtifactWriterFactory: factory,
 	})
 
@@ -625,12 +625,12 @@ func TestEngineAnalyzerReceivesVitals(t *testing.T) {
 	var callLog []CollectorID
 	collectors := map[CollectorID]Collector{
 		"PP": &recordingCollector{
-			id: "PP", scope: PerPod, callLog: &callLog,
+			id: "PP", scope: PerScyllaNode, callLog: &callLog,
 			callFunc: func(_ context.Context, params CollectorParams) (*CollectorResult, error) {
 				return &CollectorResult{
 					Status:  CollectorPassed,
-					Message: fmt.Sprintf("collected %s", params.Pod.Name),
-					Data:    params.Pod.Name, // Store pod name as data for testing.
+					Message: fmt.Sprintf("collected %s", params.ScyllaNode.Name),
+					Data:    params.ScyllaNode.Name, // Store pod name as data for testing.
 				}, nil
 			},
 		},
@@ -641,7 +641,7 @@ func TestEngineAnalyzerReceivesVitals(t *testing.T) {
 		"A1": &simpleAnalyzer{
 			id: "A1", deps: []CollectorID{"PP"},
 			fn: func(params AnalyzerParams) *AnalyzerResult {
-				analyzerPodCount = len(params.Vitals.PodKeys())
+				analyzerPodCount = len(params.Vitals.ScyllaNodeKeys())
 				return &AnalyzerResult{
 					Status:  AnalyzerPassed,
 					Message: fmt.Sprintf("analyzed %d pods", analyzerPodCount),
@@ -654,7 +654,7 @@ func TestEngineAnalyzerReceivesVitals(t *testing.T) {
 	}
 
 	clusters := []ScyllaClusterInfo{{Name: "cluster", Namespace: "ns"}}
-	pods := map[ScopeKey][]PodInfo{
+	pods := map[ScopeKey][]ScyllaNodeInfo{
 		{Namespace: "ns", Name: "cluster"}: {
 			{Name: "pod-0", Namespace: "ns"},
 			{Name: "pod-1", Namespace: "ns"},
@@ -668,7 +668,7 @@ func TestEngineAnalyzerReceivesVitals(t *testing.T) {
 		AllProfiles:    profiles,
 		ProfileName:    "test",
 		ScyllaClusters: clusters,
-		Pods:           pods,
+		ScyllaNodes: pods,
 	})
 
 	result, err := eng.Run(context.Background())
@@ -687,16 +687,16 @@ func TestEngineAnalyzerReceivesVitals(t *testing.T) {
 }
 
 func TestEngineAnalyzerMixedCollectorResults(t *testing.T) {
-	// One PerPod collector passes for some pods and fails for others.
+	// One PerScyllaNode collector passes for some pods and fails for others.
 	// The analyzer should still run since at least one result passed.
 	var callLog []CollectorID
 	callCount := 0
 	collectors := map[CollectorID]Collector{
 		"PP": &recordingCollector{
-			id: "PP", scope: PerPod, callLog: &callLog,
+			id: "PP", scope: PerScyllaNode, callLog: &callLog,
 			callFunc: func(_ context.Context, params CollectorParams) (*CollectorResult, error) {
 				callCount++
-				if params.Pod.Name == "pod-1" {
+				if params.ScyllaNode.Name == "pod-1" {
 					return &CollectorResult{
 						Status:  CollectorFailed,
 						Message: "pod-1 failed",
@@ -704,7 +704,7 @@ func TestEngineAnalyzerMixedCollectorResults(t *testing.T) {
 				}
 				return &CollectorResult{
 					Status:  CollectorPassed,
-					Message: fmt.Sprintf("%s OK", params.Pod.Name),
+					Message: fmt.Sprintf("%s OK", params.ScyllaNode.Name),
 				}, nil
 			},
 		},
@@ -717,7 +717,7 @@ func TestEngineAnalyzerMixedCollectorResults(t *testing.T) {
 	}
 
 	clusters := []ScyllaClusterInfo{{Name: "cluster", Namespace: "ns"}}
-	pods := map[ScopeKey][]PodInfo{
+	pods := map[ScopeKey][]ScyllaNodeInfo{
 		{Namespace: "ns", Name: "cluster"}: {
 			{Name: "pod-0", Namespace: "ns"},
 			{Name: "pod-1", Namespace: "ns"},
@@ -731,7 +731,7 @@ func TestEngineAnalyzerMixedCollectorResults(t *testing.T) {
 		AllProfiles:    profiles,
 		ProfileName:    "test",
 		ScyllaClusters: clusters,
-		Pods:           pods,
+		ScyllaNodes: pods,
 	})
 
 	result, err := eng.Run(context.Background())

@@ -22,8 +22,8 @@ const (
 	ClusterWide CollectorScope = iota
 	// PerScyllaCluster collectors run once per targeted ScyllaCluster/ScyllaDBDatacenter.
 	PerScyllaCluster
-	// PerPod collectors run once per Scylla pod.
-	PerPod
+	// PerScyllaNode collectors run once per Scylla pod.
+	PerScyllaNode
 )
 
 // AnalyzerScope defines whether an analyzer runs once cluster-wide or once per ScyllaCluster.
@@ -44,8 +44,8 @@ func (s CollectorScope) String() string {
 		return "ClusterWide"
 	case PerScyllaCluster:
 		return "PerScyllaCluster"
-	case PerPod:
-		return "PerPod"
+	case PerScyllaNode:
+		return "PerScyllaNode"
 	default:
 		return fmt.Sprintf("CollectorScope(%d)", int(s))
 	}
@@ -107,7 +107,7 @@ type CollectorID string
 type AnalyzerID string
 
 // ScopeKey identifies a namespaced resource (cluster or pod) used as a map key
-// in the Vitals store. It is only meaningful for PerScyllaCluster and PerPod
+// in the Vitals store. It is only meaningful for PerScyllaCluster and PerScyllaNode
 // scopes; ClusterWide collectors use an empty ScopeKey that is not stored
 // as a map key.
 type ScopeKey struct {
@@ -252,8 +252,8 @@ type ScyllaClusterInfo struct {
 	Object     any    // *scyllav1.ScyllaCluster or *scyllav1alpha1.ScyllaDBDatacenter
 }
 
-// PodInfo represents a discovered Scylla pod.
-type PodInfo struct {
+// ScyllaNodeInfo represents a discovered Scylla pod.
+type ScyllaNodeInfo struct {
 	Name           string
 	Namespace      string
 	ClusterName    string // from label scylla/cluster
@@ -267,8 +267,8 @@ type CollectorParams struct {
 	Vitals *Vitals // Results from upstream collectors
 
 	// Available based on scope:
-	ScyllaCluster *ScyllaClusterInfo // Non-nil for PerScyllaCluster and PerPod
-	Pod           *PodInfo           // Non-nil for PerPod
+	ScyllaCluster *ScyllaClusterInfo // Non-nil for PerScyllaCluster and PerScyllaNode
+	ScyllaNode    *ScyllaNodeInfo    // Non-nil for PerScyllaNode
 
 	// Dependency-injected capabilities:
 	PodExecutor         PodExecutor
@@ -289,7 +289,7 @@ type AnalyzerParams struct {
 type Vitals struct {
 	ClusterWide      map[CollectorID]*CollectorResult              `json:"cluster_wide"`
 	PerScyllaCluster map[ScopeKey]map[CollectorID]*CollectorResult `json:"per_scylla_cluster"`
-	PerPod           map[ScopeKey]map[CollectorID]*CollectorResult `json:"per_pod"`
+	PerScyllaNode    map[ScopeKey]map[CollectorID]*CollectorResult `json:"per_scylla_node"`
 }
 
 // NewVitals creates a new Vitals with initialized maps.
@@ -297,7 +297,7 @@ func NewVitals() *Vitals {
 	return &Vitals{
 		ClusterWide:      make(map[CollectorID]*CollectorResult),
 		PerScyllaCluster: make(map[ScopeKey]map[CollectorID]*CollectorResult),
-		PerPod:           make(map[ScopeKey]map[CollectorID]*CollectorResult),
+		PerScyllaNode:    make(map[ScopeKey]map[CollectorID]*CollectorResult),
 	}
 }
 
@@ -311,16 +311,16 @@ func (v *Vitals) Store(id CollectorID, scope CollectorScope, scopeKey ScopeKey, 
 			v.PerScyllaCluster[scopeKey] = make(map[CollectorID]*CollectorResult)
 		}
 		v.PerScyllaCluster[scopeKey][id] = result
-	case PerPod:
-		if v.PerPod[scopeKey] == nil {
-			v.PerPod[scopeKey] = make(map[CollectorID]*CollectorResult)
+	case PerScyllaNode:
+		if v.PerScyllaNode[scopeKey] == nil {
+			v.PerScyllaNode[scopeKey] = make(map[CollectorID]*CollectorResult)
 		}
-		v.PerPod[scopeKey][id] = result
+		v.PerScyllaNode[scopeKey][id] = result
 	}
 }
 
 // Get retrieves a collector result. For ClusterWide results, scopeKey is ignored.
-// For PerScyllaCluster/PerPod results, it searches in the scope-appropriate map.
+// For PerScyllaCluster/PerScyllaNode results, it searches in the scope-appropriate map.
 func (v *Vitals) Get(id CollectorID, scopeKey ScopeKey) (*CollectorResult, bool) {
 	// Check ClusterWide first (scopeKey is irrelevant for this scope).
 	if result, ok := v.ClusterWide[id]; ok {
@@ -334,8 +334,8 @@ func (v *Vitals) Get(id CollectorID, scopeKey ScopeKey) (*CollectorResult, bool)
 		}
 	}
 
-	// Check PerPod.
-	if perPod, ok := v.PerPod[scopeKey]; ok {
+	// Check PerScyllaNode.
+	if perPod, ok := v.PerScyllaNode[scopeKey]; ok {
 		if result, ok := perPod[id]; ok {
 			return result, true
 		}
@@ -344,10 +344,10 @@ func (v *Vitals) Get(id CollectorID, scopeKey ScopeKey) (*CollectorResult, bool)
 	return nil, false
 }
 
-// PodKeys returns all pod-scope keys in the store, sorted for deterministic output.
-func (v *Vitals) PodKeys() []ScopeKey {
-	keys := make([]ScopeKey, 0, len(v.PerPod))
-	for k := range v.PerPod {
+// ScyllaNodeKeys returns all Scylla-node scope keys in the store, sorted for deterministic output.
+func (v *Vitals) ScyllaNodeKeys() []ScopeKey {
+	keys := make([]ScopeKey, 0, len(v.PerScyllaNode))
+	for k := range v.PerScyllaNode {
 		keys = append(keys, k)
 	}
 	sort.Slice(keys, func(i, j int) bool {
@@ -376,22 +376,22 @@ func (v *Vitals) ScyllaClusterKeys() []ScopeKey {
 
 // ForScyllaCluster returns a new Vitals scoped to a single ScyllaCluster: it
 // contains the full ClusterWide map (shared, unfiltered), the single
-// PerScyllaCluster entry for clusterKey, and only the PerPod entries for the
-// pods belonging to that cluster (as supplied by podKeys).
-func (v *Vitals) ForScyllaCluster(clusterKey ScopeKey, podKeys []ScopeKey) *Vitals {
+// PerScyllaCluster entry for clusterKey, and only the PerScyllaNode entries for the
+// Scylla nodes belonging to that cluster (as supplied by scyllaNodeKeys).
+func (v *Vitals) ForScyllaCluster(clusterKey ScopeKey, scyllaNodeKeys []ScopeKey) *Vitals {
 	scoped := &Vitals{
 		ClusterWide:      v.ClusterWide, // shared reference — read-only during analysis
 		PerScyllaCluster: make(map[ScopeKey]map[CollectorID]*CollectorResult, 1),
-		PerPod:           make(map[ScopeKey]map[CollectorID]*CollectorResult, len(podKeys)),
+		PerScyllaNode:    make(map[ScopeKey]map[CollectorID]*CollectorResult, len(scyllaNodeKeys)),
 	}
 
 	if perCluster, ok := v.PerScyllaCluster[clusterKey]; ok {
 		scoped.PerScyllaCluster[clusterKey] = perCluster
 	}
 
-	for _, podKey := range podKeys {
-		if perPod, ok := v.PerPod[podKey]; ok {
-			scoped.PerPod[podKey] = perPod
+	for _, nodeKey := range scyllaNodeKeys {
+		if perNode, ok := v.PerScyllaNode[nodeKey]; ok {
+			scoped.PerScyllaNode[nodeKey] = perNode
 		}
 	}
 
@@ -418,12 +418,12 @@ type SerializableCollectorResult struct {
 	DurationMs int64           `json:"duration_ms,omitempty"` // Wall-clock milliseconds spent in Collect()
 }
 
-// SerializableClusterTopology stores the cluster and pod topology discovered
+// SerializableClusterTopology stores the cluster and Scylla-node topology discovered
 // during a live run so that offline re-analysis can reconstruct it faithfully
 // from vitals.json without connecting to the cluster.
 type SerializableClusterTopology struct {
-	Clusters []SerializableClusterInfo          `json:"clusters"`
-	Pods     map[ScopeKey][]SerializablePodInfo `json:"pods"`
+	Clusters    []SerializableClusterInfo                 `json:"clusters"`
+	ScyllaNodes map[ScopeKey][]SerializableScyllaNodeInfo `json:"scylla_nodes"`
 }
 
 // SerializableClusterInfo is the JSON-safe subset of ScyllaClusterInfo.
@@ -434,8 +434,8 @@ type SerializableClusterInfo struct {
 	APIVersion string `json:"api_version,omitempty"`
 }
 
-// SerializablePodInfo is the JSON-safe subset of PodInfo.
-type SerializablePodInfo struct {
+// SerializableScyllaNodeInfo is the JSON-safe subset of ScyllaNodeInfo.
+type SerializableScyllaNodeInfo struct {
 	Namespace      string `json:"namespace"`
 	Name           string `json:"name"`
 	ClusterName    string `json:"cluster_name,omitempty"`
@@ -446,13 +446,14 @@ type SerializablePodInfo struct {
 // SerializableVitals is the JSON-safe version of Vitals for persistence
 // to vitals.json. It mirrors the Vitals structure but uses
 // SerializableCollectorResult so that Data is preserved as raw JSON.
-// The Topology field stores the cluster/pod topology discovered during collection
-// so that offline re-analysis can reconstruct it without a live cluster connection.
+// The Topology field stores the cluster/Scylla-node topology discovered during
+// collection so that offline re-analysis can reconstruct it without a live
+// cluster connection.
 type SerializableVitals struct {
 	Topology         *SerializableClusterTopology                              `json:"topology,omitempty"`
 	ClusterWide      map[CollectorID]*SerializableCollectorResult              `json:"cluster_wide"`
 	PerScyllaCluster map[ScopeKey]map[CollectorID]*SerializableCollectorResult `json:"per_scylla_cluster"`
-	PerPod           map[ScopeKey]map[CollectorID]*SerializableCollectorResult `json:"per_pod"`
+	PerScyllaNode    map[ScopeKey]map[CollectorID]*SerializableCollectorResult `json:"per_scylla_node"`
 }
 
 // FromSerializable reconstructs a *Vitals from a *SerializableVitals by
@@ -485,16 +486,16 @@ func FromSerializable(sv *SerializableVitals, typeRegistry map[CollectorID]any) 
 		}
 	}
 
-	for key, perPod := range sv.PerPod {
-		for id, sr := range perPod {
+	for key, perNode := range sv.PerScyllaNode {
+		for id, sr := range perNode {
 			result, err := fromSerializableResult(id, sr, typeRegistry)
 			if err != nil {
-				return nil, fmt.Errorf("deserializing PerPod %s/%s: %w", key, id, err)
+				return nil, fmt.Errorf("deserializing PerScyllaNode %s/%s: %w", key, id, err)
 			}
-			if v.PerPod[key] == nil {
-				v.PerPod[key] = make(map[CollectorID]*CollectorResult)
+			if v.PerScyllaNode[key] == nil {
+				v.PerScyllaNode[key] = make(map[CollectorID]*CollectorResult)
 			}
-			v.PerPod[key][id] = result
+			v.PerScyllaNode[key][id] = result
 		}
 	}
 
@@ -552,7 +553,7 @@ func (v *Vitals) ToSerializable() (*SerializableVitals, error) {
 	sv := &SerializableVitals{
 		ClusterWide:      make(map[CollectorID]*SerializableCollectorResult, len(v.ClusterWide)),
 		PerScyllaCluster: make(map[ScopeKey]map[CollectorID]*SerializableCollectorResult, len(v.PerScyllaCluster)),
-		PerPod:           make(map[ScopeKey]map[CollectorID]*SerializableCollectorResult, len(v.PerPod)),
+		PerScyllaNode:    make(map[ScopeKey]map[CollectorID]*SerializableCollectorResult, len(v.PerScyllaNode)),
 	}
 
 	for id, r := range v.ClusterWide {
@@ -574,14 +575,14 @@ func (v *Vitals) ToSerializable() (*SerializableVitals, error) {
 		}
 	}
 
-	for key, perPod := range v.PerPod {
-		sv.PerPod[key] = make(map[CollectorID]*SerializableCollectorResult, len(perPod))
-		for id, r := range perPod {
+	for key, perNode := range v.PerScyllaNode {
+		sv.PerScyllaNode[key] = make(map[CollectorID]*SerializableCollectorResult, len(perNode))
+		for id, r := range perNode {
 			sr, err := toSerializableResult(r)
 			if err != nil {
-				return nil, fmt.Errorf("converting PerPod result %s/%s: %w", key, id, err)
+				return nil, fmt.Errorf("converting PerScyllaNode result %s/%s: %w", key, id, err)
 			}
-			sv.PerPod[key][id] = sr
+			sv.PerScyllaNode[key][id] = sr
 		}
 	}
 
