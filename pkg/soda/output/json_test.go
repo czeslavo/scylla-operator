@@ -68,10 +68,6 @@ func TestJSONWriter_WriteReport(t *testing.T) {
 		t.Error("missing NodeResourcesCollector in cluster_wide")
 	}
 
-	if _, ok := report.Collectors.PerScyllaCluster["scylla/my-cluster"]; !ok {
-		t.Error("missing scylla/my-cluster in per_scylla_cluster")
-	}
-
 	if _, ok := report.Collectors.PerScyllaNode["scylla/my-cluster-0"]; !ok {
 		t.Error("missing scylla/my-cluster-0 in per_pod")
 	}

@@ -22,7 +22,6 @@ func AllProfiles() map[string]engine.Profile {
 			// when no analyzer currently depends on a given collector.
 			Collectors: []engine.CollectorID{
 				collectors.NodeResourcesCollectorID,
-				collectors.ScyllaClusterStatusCollectorID,
 				collectors.OSInfoCollectorID,
 				collectors.SchemaVersionsCollectorID,
 				collectors.ScyllaVersionCollectorID,

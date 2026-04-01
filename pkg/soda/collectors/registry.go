@@ -10,7 +10,6 @@ import (
 func AllCollectors() []engine.Collector {
 	return []engine.Collector{
 		NewNodeResourcesCollector(),
-		NewScyllaClusterStatusCollector(),
 		NewOSInfoCollector(),
 		NewScyllaVersionCollector(),
 		NewSchemaVersionsCollector(),
@@ -44,18 +43,17 @@ func AllCollectorsMap() map[engine.CollectorID]engine.Collector {
 // correct Go type so that typed accessors (GetXxxResult) work without change.
 func ResultTypeRegistry() map[engine.CollectorID]any {
 	return map[engine.CollectorID]any{
-		NodeResourcesCollectorID:       &NodeResourcesResult{},
-		ScyllaClusterStatusCollectorID: &ScyllaClusterStatusResult{},
-		OSInfoCollectorID:              &OSInfoResult{},
-		ScyllaVersionCollectorID:       &ScyllaVersionResult{},
-		SchemaVersionsCollectorID:      &SchemaVersionsResult{},
-		ScyllaConfigCollectorID:        &ScyllaConfigResult{},
-		SystemPeersLocalCollectorID:    &SystemPeersLocalResult{},
-		GossipInfoCollectorID:          &GossipInfoResult{},
-		SystemTopologyCollectorID:      &SystemTopologyResult{},
-		SystemConfigCollectorID:        &SystemConfigResult{},
-		ScyllaDConfigCollectorID:       &ScyllaDConfigResult{},
-		DiskUsageCollectorID:           &DiskUsageResult{},
-		RlimitsCollectorID:             &RlimitsResult{},
+		NodeResourcesCollectorID:    &NodeResourcesResult{},
+		OSInfoCollectorID:           &OSInfoResult{},
+		ScyllaVersionCollectorID:    &ScyllaVersionResult{},
+		SchemaVersionsCollectorID:   &SchemaVersionsResult{},
+		ScyllaConfigCollectorID:     &ScyllaConfigResult{},
+		SystemPeersLocalCollectorID: &SystemPeersLocalResult{},
+		GossipInfoCollectorID:       &GossipInfoResult{},
+		SystemTopologyCollectorID:   &SystemTopologyResult{},
+		SystemConfigCollectorID:     &SystemConfigResult{},
+		ScyllaDConfigCollectorID:    &ScyllaDConfigResult{},
+		DiskUsageCollectorID:        &DiskUsageResult{},
+		RlimitsCollectorID:          &RlimitsResult{},
 	}
 }

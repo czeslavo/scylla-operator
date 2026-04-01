@@ -19,10 +19,6 @@ func testEngineResult() *engine.EngineResult {
 
 	// PerCluster collector result.
 	clusterKey := engine.ScopeKey{Namespace: "scylla", Name: "my-cluster"}
-	vitals.Store("ScyllaClusterStatusCollector", engine.PerScyllaCluster, clusterKey, &engine.CollectorResult{
-		Status:  engine.CollectorPassed,
-		Message: "3/3 members ready",
-	})
 
 	// PerScyllaNode collector results.
 	podKey := engine.ScopeKey{Namespace: "scylla", Name: "my-cluster-0"}
@@ -59,7 +55,6 @@ func testEngineResult() *engine.EngineResult {
 		},
 		ResolvedCollectors: []engine.CollectorID{
 			"NodeResourcesCollector",
-			"ScyllaClusterStatusCollector",
 			"OSInfoCollector",
 			"ScyllaVersionCollector",
 		},
@@ -122,11 +117,6 @@ func TestConsoleWriter_WriteReport(t *testing.T) {
 	}
 	if !strings.Contains(output, "Collected 3 nodes") {
 		t.Errorf("missing collector message, got:\n%s", output)
-	}
-
-	// Check scoped collector line has scope label.
-	if !strings.Contains(output, "scylla/my-cluster: 3/3 members ready") {
-		t.Errorf("missing scoped collector message, got:\n%s", output)
 	}
 
 	// Check analysis section.
