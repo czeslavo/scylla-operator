@@ -85,7 +85,7 @@ func (c *nodeResourcesCollector) RBAC() []rbacv1.PolicyRule {
 }
 
 func (c *nodeResourcesCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
-	nodes, err := params.NodeLister.ListNodes(ctx)
+	nodes, err := params.ResourceLister.ListNodes(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("listing nodes: %w", err)
 	}

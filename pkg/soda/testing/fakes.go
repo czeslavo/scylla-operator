@@ -10,7 +10,9 @@ import (
 	"strings"
 	"sync"
 
+	scyllav1alpha1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1alpha1"
 	"github.com/scylladb/scylla-operator/pkg/soda/engine"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
 )
@@ -59,32 +61,102 @@ func (f *FakePodExecutor) Execute(_ context.Context, namespace, podName, contain
 	return "", "", fmt.Errorf("no fake response configured for key %q", key)
 }
 
-// FakeNodeLister returns a preconfigured list of Nodes.
-type FakeNodeLister struct {
-	Nodes []corev1.Node
-	Err   error
+// FakeResourceLister implements engine.ResourceLister for testing.
+// Fields are set directly; unset fields return nil slices with no error.
+type FakeResourceLister struct {
+	// Kubernetes core
+	Nodes              []corev1.Node
+	NodesErr           error
+	Pods               map[string][]corev1.Pod // namespace → pods
+	PodsErr            error
+	ConfigMaps         map[string][]corev1.ConfigMap
+	ConfigMapsErr      error
+	Services           map[string][]corev1.Service
+	ServicesErr        error
+	ServiceAccounts    map[string][]corev1.ServiceAccount
+	ServiceAccountsErr error
+
+	// Kubernetes apps
+	Deployments     map[string][]appsv1.Deployment
+	DeploymentsErr  error
+	StatefulSets    map[string][]appsv1.StatefulSet
+	StatefulSetsErr error
+	DaemonSets      map[string][]appsv1.DaemonSet
+	DaemonSetsErr   error
+
+	// Scylla
+	ScyllaClusters           map[string][]engine.ScyllaClusterInfo
+	ScyllaClustersErr        error
+	ScyllaDBDatacenters      map[string][]*scyllav1alpha1.ScyllaDBDatacenter
+	ScyllaDBDatacentersErr   error
+	NodeConfigs              []*scyllav1alpha1.NodeConfig
+	NodeConfigsErr           error
+	ScyllaOperatorConfigs    []*scyllav1alpha1.ScyllaOperatorConfig
+	ScyllaOperatorConfigsErr error
 }
 
-func (f *FakeNodeLister) ListNodes(_ context.Context) ([]corev1.Node, error) {
-	return f.Nodes, f.Err
+var _ engine.ResourceLister = (*FakeResourceLister)(nil)
+
+func (f *FakeResourceLister) ListNodes(_ context.Context) ([]corev1.Node, error) {
+	return f.Nodes, f.NodesErr
 }
 
-// FakeScyllaClusterLister returns preconfigured ScyllaClusterInfo lists per namespace.
-type FakeScyllaClusterLister struct {
-	// ScyllaClusters maps namespace to the list of ScyllaClusters in that namespace.
-	// An empty string key matches all-namespaces queries.
-	ScyllaClusters map[string][]engine.ScyllaClusterInfo
-	Err            error
+func (f *FakeResourceLister) ListPods(_ context.Context, namespace string, _ labels.Selector) ([]corev1.Pod, error) {
+	if f.PodsErr != nil {
+		return nil, f.PodsErr
+	}
+	return f.Pods[namespace], nil
 }
 
-func (f *FakeScyllaClusterLister) ListScyllaClusters(_ context.Context, namespace string) ([]engine.ScyllaClusterInfo, error) {
-	if f.Err != nil {
-		return nil, f.Err
+func (f *FakeResourceLister) ListConfigMaps(_ context.Context, namespace string) ([]corev1.ConfigMap, error) {
+	if f.ConfigMapsErr != nil {
+		return nil, f.ConfigMapsErr
+	}
+	return f.ConfigMaps[namespace], nil
+}
+
+func (f *FakeResourceLister) ListServices(_ context.Context, namespace string) ([]corev1.Service, error) {
+	if f.ServicesErr != nil {
+		return nil, f.ServicesErr
+	}
+	return f.Services[namespace], nil
+}
+
+func (f *FakeResourceLister) ListServiceAccounts(_ context.Context, namespace string) ([]corev1.ServiceAccount, error) {
+	if f.ServiceAccountsErr != nil {
+		return nil, f.ServiceAccountsErr
+	}
+	return f.ServiceAccounts[namespace], nil
+}
+
+func (f *FakeResourceLister) ListDeployments(_ context.Context, namespace string) ([]appsv1.Deployment, error) {
+	if f.DeploymentsErr != nil {
+		return nil, f.DeploymentsErr
+	}
+	return f.Deployments[namespace], nil
+}
+
+func (f *FakeResourceLister) ListStatefulSets(_ context.Context, namespace string) ([]appsv1.StatefulSet, error) {
+	if f.StatefulSetsErr != nil {
+		return nil, f.StatefulSetsErr
+	}
+	return f.StatefulSets[namespace], nil
+}
+
+func (f *FakeResourceLister) ListDaemonSets(_ context.Context, namespace string) ([]appsv1.DaemonSet, error) {
+	if f.DaemonSetsErr != nil {
+		return nil, f.DaemonSetsErr
+	}
+	return f.DaemonSets[namespace], nil
+}
+
+func (f *FakeResourceLister) ListScyllaClusters(_ context.Context, namespace string) ([]engine.ScyllaClusterInfo, error) {
+	if f.ScyllaClustersErr != nil {
+		return nil, f.ScyllaClustersErr
 	}
 	if clusters, ok := f.ScyllaClusters[namespace]; ok {
 		return clusters, nil
 	}
-	// If namespace is empty, return all clusters across all namespaces.
 	if namespace == "" {
 		var all []engine.ScyllaClusterInfo
 		for _, clusters := range f.ScyllaClusters {
@@ -95,19 +167,19 @@ func (f *FakeScyllaClusterLister) ListScyllaClusters(_ context.Context, namespac
 	return nil, nil
 }
 
-// FakePodLister returns preconfigured pod lists per namespace.
-type FakePodLister struct {
-	// Pods maps namespace to pods. The selector is not evaluated by the fake;
-	// tests should set up pods that match the expected selector.
-	Pods map[string][]corev1.Pod
-	Err  error
+func (f *FakeResourceLister) ListScyllaDBDatacenters(_ context.Context, namespace string) ([]*scyllav1alpha1.ScyllaDBDatacenter, error) {
+	if f.ScyllaDBDatacentersErr != nil {
+		return nil, f.ScyllaDBDatacentersErr
+	}
+	return f.ScyllaDBDatacenters[namespace], nil
 }
 
-func (f *FakePodLister) ListPods(_ context.Context, namespace string, _ labels.Selector) ([]corev1.Pod, error) {
-	if f.Err != nil {
-		return nil, f.Err
-	}
-	return f.Pods[namespace], nil
+func (f *FakeResourceLister) ListNodeConfigs(_ context.Context) ([]*scyllav1alpha1.NodeConfig, error) {
+	return f.NodeConfigs, f.NodeConfigsErr
+}
+
+func (f *FakeResourceLister) ListScyllaOperatorConfigs(_ context.Context) ([]*scyllav1alpha1.ScyllaOperatorConfig, error) {
+	return f.ScyllaOperatorConfigs, f.ScyllaOperatorConfigsErr
 }
 
 // FakeCollector is a configurable fake that implements engine.Collector.

@@ -47,10 +47,8 @@ type EngineConfig struct {
 	ScyllaNodes    map[ScopeKey][]ScyllaNodeInfo // ScyllaCluster key → Scylla nodes for that cluster
 
 	// Dependency-injected capabilities
-	PodExecutor         PodExecutor
-	ScyllaClusterLister ScyllaClusterLister
-	NodeLister          NodeLister
-	PodLister           PodLister
+	PodExecutor    PodExecutor
+	ResourceLister ResourceLister
 
 	// Artifact management
 	ArtifactWriterFactory ArtifactWriterFactory
@@ -189,12 +187,10 @@ func (e *Engine) executeClusterWideCollector(ctx context.Context, collector Coll
 	}
 
 	params := CollectorParams{
-		Vitals:              vitals,
-		PodExecutor:         e.config.PodExecutor,
-		ScyllaClusterLister: e.config.ScyllaClusterLister,
-		NodeLister:          e.config.NodeLister,
-		PodLister:           e.config.PodLister,
-		ArtifactWriter:      artifactWriter,
+		Vitals:         vitals,
+		PodExecutor:    e.config.PodExecutor,
+		ResourceLister: e.config.ResourceLister,
+		ArtifactWriter: artifactWriter,
 	}
 
 	e.emitEvent(CollectorEvent{Kind: CollectorEventStarted, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: ClusterWide, ScopeKey: scopeKey})
@@ -226,13 +222,11 @@ func (e *Engine) executePerScyllaClusterCollector(ctx context.Context, collector
 	}
 
 	params := CollectorParams{
-		Vitals:              vitals,
-		ScyllaCluster:       cluster,
-		PodExecutor:         e.config.PodExecutor,
-		ScyllaClusterLister: e.config.ScyllaClusterLister,
-		NodeLister:          e.config.NodeLister,
-		PodLister:           e.config.PodLister,
-		ArtifactWriter:      artifactWriter,
+		Vitals:         vitals,
+		ScyllaCluster:  cluster,
+		PodExecutor:    e.config.PodExecutor,
+		ResourceLister: e.config.ResourceLister,
+		ArtifactWriter: artifactWriter,
 	}
 
 	e.emitEvent(CollectorEvent{Kind: CollectorEventStarted, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerScyllaCluster, ScopeKey: clusterKey})
@@ -264,14 +258,12 @@ func (e *Engine) executePerScyllaNodeCollector(ctx context.Context, collector Co
 	}
 
 	params := CollectorParams{
-		Vitals:              vitals,
-		ScyllaCluster:       cluster,
-		ScyllaNode:          node,
-		PodExecutor:         e.config.PodExecutor,
-		ScyllaClusterLister: e.config.ScyllaClusterLister,
-		NodeLister:          e.config.NodeLister,
-		PodLister:           e.config.PodLister,
-		ArtifactWriter:      artifactWriter,
+		Vitals:         vitals,
+		ScyllaCluster:  cluster,
+		ScyllaNode:     node,
+		PodExecutor:    e.config.PodExecutor,
+		ResourceLister: e.config.ResourceLister,
+		ArtifactWriter: artifactWriter,
 	}
 
 	e.emitEvent(CollectorEvent{Kind: CollectorEventStarted, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerScyllaNode, ScopeKey: nodeKey})

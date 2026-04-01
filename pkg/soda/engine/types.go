@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	scyllav1alpha1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1alpha1"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -214,19 +216,27 @@ type PodExecutor interface {
 	Execute(ctx context.Context, namespace, podName, containerName string, command []string) (stdout, stderr string, err error)
 }
 
-// ScyllaClusterLister discovers ScyllaCluster and ScyllaDBDatacenter objects.
-type ScyllaClusterLister interface {
-	ListScyllaClusters(ctx context.Context, namespace string) ([]ScyllaClusterInfo, error)
-}
-
-// NodeLister lists Kubernetes Node objects.
-type NodeLister interface {
+// ResourceLister provides access to all Kubernetes and Scylla resources needed
+// by collectors. Using a single interface avoids proliferating separate lister
+// types as new manifest collectors are added.
+type ResourceLister interface {
+	// Kubernetes core resources
 	ListNodes(ctx context.Context) ([]corev1.Node, error)
-}
-
-// PodLister lists pods matching a selector in a namespace.
-type PodLister interface {
 	ListPods(ctx context.Context, namespace string, selector labels.Selector) ([]corev1.Pod, error)
+	ListConfigMaps(ctx context.Context, namespace string) ([]corev1.ConfigMap, error)
+	ListServices(ctx context.Context, namespace string) ([]corev1.Service, error)
+	ListServiceAccounts(ctx context.Context, namespace string) ([]corev1.ServiceAccount, error)
+
+	// Kubernetes apps resources
+	ListDeployments(ctx context.Context, namespace string) ([]appsv1.Deployment, error)
+	ListStatefulSets(ctx context.Context, namespace string) ([]appsv1.StatefulSet, error)
+	ListDaemonSets(ctx context.Context, namespace string) ([]appsv1.DaemonSet, error)
+
+	// Scylla resources
+	ListScyllaClusters(ctx context.Context, namespace string) ([]ScyllaClusterInfo, error)
+	ListScyllaDBDatacenters(ctx context.Context, namespace string) ([]*scyllav1alpha1.ScyllaDBDatacenter, error)
+	ListNodeConfigs(ctx context.Context) ([]*scyllav1alpha1.NodeConfig, error)
+	ListScyllaOperatorConfigs(ctx context.Context) ([]*scyllav1alpha1.ScyllaOperatorConfig, error)
 }
 
 // ArtifactWriter is passed to collectors via CollectorParams.
@@ -271,11 +281,9 @@ type CollectorParams struct {
 	ScyllaNode    *ScyllaNodeInfo    // Non-nil for PerScyllaNode
 
 	// Dependency-injected capabilities:
-	PodExecutor         PodExecutor
-	ScyllaClusterLister ScyllaClusterLister
-	NodeLister          NodeLister
-	PodLister           PodLister
-	ArtifactWriter      ArtifactWriter // Write raw artifact files
+	PodExecutor    PodExecutor
+	ResourceLister ResourceLister
+	ArtifactWriter ArtifactWriter // Write raw artifact files
 }
 
 // AnalyzerParams holds everything an analyzer needs during execution.

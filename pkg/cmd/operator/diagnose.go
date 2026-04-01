@@ -23,6 +23,7 @@ import (
 	"github.com/scylladb/scylla-operator/pkg/soda/profiles"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -220,8 +221,8 @@ func (o *DiagnoseOptions) Run(streams genericclioptions.IOStreams, cmd *cobra.Co
 	}
 
 	// Discover targets.
-	clusterLister := &k8sScyllaClusterLister{scyllaClient: o.scyllaClient}
-	clusterInfos, err := o.discoverClusters(ctx, clusterLister)
+	resourceLister := &k8sResourceLister{kubeClient: o.kubeClient, scyllaClient: o.scyllaClient}
+	clusterInfos, err := o.discoverClusters(ctx, resourceLister)
 	if err != nil {
 		return fmt.Errorf("discovering clusters: %w", err)
 	}
@@ -234,8 +235,7 @@ func (o *DiagnoseOptions) Run(streams genericclioptions.IOStreams, cmd *cobra.Co
 	klog.InfoS("Discovered clusters", "Count", len(clusterInfos))
 
 	// Discover pods per cluster.
-	podLister := &k8sPodLister{kubeClient: o.kubeClient}
-	podsByCluster, err := o.discoverPods(ctx, podLister, clusterInfos)
+	podsByCluster, err := o.discoverPods(ctx, resourceLister, clusterInfos)
 	if err != nil {
 		return fmt.Errorf("discovering pods: %w", err)
 	}
@@ -264,10 +264,8 @@ func (o *DiagnoseOptions) Run(streams genericclioptions.IOStreams, cmd *cobra.Co
 		ScyllaClusters: clusterInfos,
 		ScyllaNodes:    podsByCluster,
 
-		PodExecutor:         &k8sPodExecutor{restConfig: o.restConfig, kubeClient: o.kubeClient},
-		ScyllaClusterLister: clusterLister,
-		NodeLister:          &k8sNodeLister{kubeClient: o.kubeClient},
-		PodLister:           podLister,
+		PodExecutor:    &k8sPodExecutor{restConfig: o.restConfig, kubeClient: o.kubeClient},
+		ResourceLister: resourceLister,
 
 		ArtifactWriterFactory: artifactFactory,
 		OnCollectorEvent:      makeProgressPrinter(streams.ErrOut),
@@ -481,7 +479,7 @@ func (o *DiagnoseOptions) printDryRunSummary(w io.Writer) error {
 }
 
 // discoverClusters finds ScyllaCluster and ScyllaDBDatacenter resources.
-func (o *DiagnoseOptions) discoverClusters(ctx context.Context, lister engine.ScyllaClusterLister) ([]engine.ScyllaClusterInfo, error) {
+func (o *DiagnoseOptions) discoverClusters(ctx context.Context, lister engine.ResourceLister) ([]engine.ScyllaClusterInfo, error) {
 	namespace := ""
 	if o.ConfigFlags.Namespace != nil && *o.ConfigFlags.Namespace != "" {
 		namespace = *o.ConfigFlags.Namespace
@@ -510,7 +508,7 @@ func (o *DiagnoseOptions) discoverClusters(ctx context.Context, lister engine.Sc
 }
 
 // discoverPods finds Scylla pods for each cluster.
-func (o *DiagnoseOptions) discoverPods(ctx context.Context, lister engine.PodLister, clusterInfos []engine.ScyllaClusterInfo) (map[engine.ScopeKey][]engine.ScyllaNodeInfo, error) {
+func (o *DiagnoseOptions) discoverPods(ctx context.Context, lister engine.ResourceLister, clusterInfos []engine.ScyllaClusterInfo) (map[engine.ScopeKey][]engine.ScyllaNodeInfo, error) {
 	result := make(map[engine.ScopeKey][]engine.ScyllaNodeInfo)
 
 	for _, cluster := range clusterInfos {
@@ -579,12 +577,81 @@ func (e *k8sPodExecutor) Execute(ctx context.Context, namespace, podName, contai
 	return stdout.String(), stderr.String(), nil
 }
 
-// k8sScyllaClusterLister implements engine.ScyllaClusterLister using typed Scylla clients.
-type k8sScyllaClusterLister struct {
+// k8sResourceLister implements engine.ResourceLister using the Kubernetes and Scylla API clients.
+type k8sResourceLister struct {
+	kubeClient   kubernetes.Interface
 	scyllaClient scyllaversionedclient.Interface
 }
 
-func (l *k8sScyllaClusterLister) ListScyllaClusters(ctx context.Context, namespace string) ([]engine.ScyllaClusterInfo, error) {
+var _ engine.ResourceLister = (*k8sResourceLister)(nil)
+
+func (l *k8sResourceLister) ListNodes(ctx context.Context) ([]corev1.Node, error) {
+	nodeList, err := l.kubeClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing nodes: %w", err)
+	}
+	return nodeList.Items, nil
+}
+
+func (l *k8sResourceLister) ListPods(ctx context.Context, namespace string, selector labels.Selector) ([]corev1.Pod, error) {
+	podList, err := l.kubeClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: selector.String(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("listing pods: %w", err)
+	}
+	return podList.Items, nil
+}
+
+func (l *k8sResourceLister) ListConfigMaps(ctx context.Context, namespace string) ([]corev1.ConfigMap, error) {
+	list, err := l.kubeClient.CoreV1().ConfigMaps(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing configmaps: %w", err)
+	}
+	return list.Items, nil
+}
+
+func (l *k8sResourceLister) ListServices(ctx context.Context, namespace string) ([]corev1.Service, error) {
+	list, err := l.kubeClient.CoreV1().Services(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing services: %w", err)
+	}
+	return list.Items, nil
+}
+
+func (l *k8sResourceLister) ListServiceAccounts(ctx context.Context, namespace string) ([]corev1.ServiceAccount, error) {
+	list, err := l.kubeClient.CoreV1().ServiceAccounts(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing serviceaccounts: %w", err)
+	}
+	return list.Items, nil
+}
+
+func (l *k8sResourceLister) ListDeployments(ctx context.Context, namespace string) ([]appsv1.Deployment, error) {
+	list, err := l.kubeClient.AppsV1().Deployments(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing deployments: %w", err)
+	}
+	return list.Items, nil
+}
+
+func (l *k8sResourceLister) ListStatefulSets(ctx context.Context, namespace string) ([]appsv1.StatefulSet, error) {
+	list, err := l.kubeClient.AppsV1().StatefulSets(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing statefulsets: %w", err)
+	}
+	return list.Items, nil
+}
+
+func (l *k8sResourceLister) ListDaemonSets(ctx context.Context, namespace string) ([]appsv1.DaemonSet, error) {
+	list, err := l.kubeClient.AppsV1().DaemonSets(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing daemonsets: %w", err)
+	}
+	return list.Items, nil
+}
+
+func (l *k8sResourceLister) ListScyllaClusters(ctx context.Context, namespace string) ([]engine.ScyllaClusterInfo, error) {
 	var result []engine.ScyllaClusterInfo
 
 	// List ScyllaClusters (v1).
@@ -631,6 +698,42 @@ func (l *k8sScyllaClusterLister) ListScyllaClusters(ctx context.Context, namespa
 	return result, nil
 }
 
+func (l *k8sResourceLister) ListScyllaDBDatacenters(ctx context.Context, namespace string) ([]*scyllav1alpha1.ScyllaDBDatacenter, error) {
+	list, err := l.scyllaClient.ScyllaV1alpha1().ScyllaDBDatacenters(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing scylladbdatacenters: %w", err)
+	}
+	result := make([]*scyllav1alpha1.ScyllaDBDatacenter, len(list.Items))
+	for i := range list.Items {
+		result[i] = &list.Items[i]
+	}
+	return result, nil
+}
+
+func (l *k8sResourceLister) ListNodeConfigs(ctx context.Context) ([]*scyllav1alpha1.NodeConfig, error) {
+	list, err := l.scyllaClient.ScyllaV1alpha1().NodeConfigs().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing nodeconfigs: %w", err)
+	}
+	result := make([]*scyllav1alpha1.NodeConfig, len(list.Items))
+	for i := range list.Items {
+		result[i] = &list.Items[i]
+	}
+	return result, nil
+}
+
+func (l *k8sResourceLister) ListScyllaOperatorConfigs(ctx context.Context) ([]*scyllav1alpha1.ScyllaOperatorConfig, error) {
+	list, err := l.scyllaClient.ScyllaV1alpha1().ScyllaOperatorConfigs().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("listing scyllaoperatorconfigs: %w", err)
+	}
+	result := make([]*scyllav1alpha1.ScyllaOperatorConfig, len(list.Items))
+	for i := range list.Items {
+		result[i] = &list.Items[i]
+	}
+	return result, nil
+}
+
 // hasControllerOwnerOfKind returns true if any of the ownerReferences has the
 // given kind and is marked as the controller.
 func hasControllerOwnerOfKind(refs []metav1.OwnerReference, kind string) bool {
@@ -640,34 +743,6 @@ func hasControllerOwnerOfKind(refs []metav1.OwnerReference, kind string) bool {
 		}
 	}
 	return false
-}
-
-// k8sNodeLister implements engine.NodeLister using the Kubernetes API.
-type k8sNodeLister struct {
-	kubeClient kubernetes.Interface
-}
-
-func (l *k8sNodeLister) ListNodes(ctx context.Context) ([]corev1.Node, error) {
-	nodeList, err := l.kubeClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("listing nodes: %w", err)
-	}
-	return nodeList.Items, nil
-}
-
-// k8sPodLister implements engine.PodLister using the Kubernetes API.
-type k8sPodLister struct {
-	kubeClient kubernetes.Interface
-}
-
-func (l *k8sPodLister) ListPods(ctx context.Context, namespace string, selector labels.Selector) ([]corev1.Pod, error) {
-	podList, err := l.kubeClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
-		LabelSelector: selector.String(),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("listing pods: %w", err)
-	}
-	return podList.Items, nil
 }
 
 // fsArtifactWriterFactory creates filesystem-backed ArtifactWriters.

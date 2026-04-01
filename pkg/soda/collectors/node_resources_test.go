@@ -48,13 +48,13 @@ func TestNodeResourcesCollector_HappyPath(t *testing.T) {
 		},
 	}
 
-	fakeNodeLister := &sodatesting.FakeNodeLister{Nodes: nodes}
+	fakeResourceLister := &sodatesting.FakeResourceLister{Nodes: nodes}
 	fakeWriter := sodatesting.NewFakeArtifactWriter()
 
 	collector := NewNodeResourcesCollector()
 	result, err := collector.Collect(context.Background(), engine.CollectorParams{
 		Vitals:         engine.NewVitals(),
-		NodeLister:     fakeNodeLister,
+		ResourceLister: fakeResourceLister,
 		ArtifactWriter: fakeWriter,
 	})
 
@@ -105,14 +105,14 @@ func TestNodeResourcesCollector_HappyPath(t *testing.T) {
 }
 
 func TestNodeResourcesCollector_Error(t *testing.T) {
-	fakeNodeLister := &sodatesting.FakeNodeLister{
-		Err: context.DeadlineExceeded,
+	fakeResourceLister := &sodatesting.FakeResourceLister{
+		NodesErr: context.DeadlineExceeded,
 	}
 
 	collector := NewNodeResourcesCollector()
 	_, err := collector.Collect(context.Background(), engine.CollectorParams{
-		Vitals:     engine.NewVitals(),
-		NodeLister: fakeNodeLister,
+		Vitals:         engine.NewVitals(),
+		ResourceLister: fakeResourceLister,
 	})
 
 	if err == nil {
@@ -121,12 +121,12 @@ func TestNodeResourcesCollector_Error(t *testing.T) {
 }
 
 func TestNodeResourcesCollector_EmptyNodes(t *testing.T) {
-	fakeNodeLister := &sodatesting.FakeNodeLister{Nodes: []corev1.Node{}}
+	fakeResourceLister := &sodatesting.FakeResourceLister{Nodes: []corev1.Node{}}
 
 	collector := NewNodeResourcesCollector()
 	result, err := collector.Collect(context.Background(), engine.CollectorParams{
-		Vitals:     engine.NewVitals(),
-		NodeLister: fakeNodeLister,
+		Vitals:         engine.NewVitals(),
+		ResourceLister: fakeResourceLister,
 	})
 
 	if err != nil {
