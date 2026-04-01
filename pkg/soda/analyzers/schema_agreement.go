@@ -15,25 +15,25 @@ const (
 )
 
 // schemaAgreementAnalyzer checks that all pods report the same schema version.
-type schemaAgreementAnalyzer struct{}
+type schemaAgreementAnalyzer struct {
+	engine.AnalyzerBase
+}
 
-var _ engine.Analyzer = (*schemaAgreementAnalyzer)(nil)
+var _ engine.PerScyllaClusterAnalyzer = (*schemaAgreementAnalyzer)(nil)
 
 // NewSchemaAgreementAnalyzer creates a new SchemaAgreementAnalyzer.
-func NewSchemaAgreementAnalyzer() engine.Analyzer {
-	return &schemaAgreementAnalyzer{}
+func NewSchemaAgreementAnalyzer() engine.PerScyllaClusterAnalyzer {
+	return &schemaAgreementAnalyzer{
+		AnalyzerBase: engine.NewAnalyzerBase(
+			SchemaAgreementAnalyzerID,
+			"Schema agreement check",
+			engine.AnalyzerPerScyllaCluster,
+			[]engine.CollectorID{collectors.SchemaVersionsCollectorID},
+		),
+	}
 }
 
-func (a *schemaAgreementAnalyzer) ID() engine.AnalyzerID { return SchemaAgreementAnalyzerID }
-func (a *schemaAgreementAnalyzer) Name() string          { return "Schema agreement check" }
-func (a *schemaAgreementAnalyzer) Scope() engine.AnalyzerScope {
-	return engine.AnalyzerPerScyllaCluster
-}
-func (a *schemaAgreementAnalyzer) DependsOn() []engine.CollectorID {
-	return []engine.CollectorID{collectors.SchemaVersionsCollectorID}
-}
-
-func (a *schemaAgreementAnalyzer) Analyze(params engine.AnalyzerParams) *engine.AnalyzerResult {
+func (a *schemaAgreementAnalyzer) AnalyzePerScyllaCluster(params engine.PerScyllaClusterAnalyzerParams) *engine.AnalyzerResult {
 	// Collect all unique schema version UUIDs across all pods.
 	allVersions := make(map[string][]string) // schema UUID → list of pod keys that reported it
 	podsChecked := 0

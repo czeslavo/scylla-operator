@@ -46,7 +46,7 @@ func TestSchemaAgreementAnalyzer_AllAgree(t *testing.T) {
 		})
 
 	a := NewSchemaAgreementAnalyzer()
-	result := a.Analyze(engine.AnalyzerParams{Vitals: vitals})
+	result := a.AnalyzePerScyllaCluster(engine.PerScyllaClusterAnalyzerParams{Vitals: vitals})
 
 	if result.Status != engine.AnalyzerPassed {
 		t.Errorf("status = %v, want PASSED", result.Status)
@@ -81,7 +81,7 @@ func TestSchemaAgreementAnalyzer_Disagreement(t *testing.T) {
 		})
 
 	a := NewSchemaAgreementAnalyzer()
-	result := a.Analyze(engine.AnalyzerParams{Vitals: vitals})
+	result := a.AnalyzePerScyllaCluster(engine.PerScyllaClusterAnalyzerParams{Vitals: vitals})
 
 	if result.Status != engine.AnalyzerFailed {
 		t.Errorf("status = %v, want FAILED", result.Status)
@@ -112,7 +112,7 @@ func TestSchemaAgreementAnalyzer_SinglePodMultipleVersions(t *testing.T) {
 		})
 
 	a := NewSchemaAgreementAnalyzer()
-	result := a.Analyze(engine.AnalyzerParams{Vitals: vitals})
+	result := a.AnalyzePerScyllaCluster(engine.PerScyllaClusterAnalyzerParams{Vitals: vitals})
 
 	if result.Status != engine.AnalyzerFailed {
 		t.Errorf("status = %v, want FAILED", result.Status)
@@ -123,7 +123,7 @@ func TestSchemaAgreementAnalyzer_NoPods(t *testing.T) {
 	vitals := engine.NewVitals()
 
 	a := NewSchemaAgreementAnalyzer()
-	result := a.Analyze(engine.AnalyzerParams{Vitals: vitals})
+	result := a.AnalyzePerScyllaCluster(engine.PerScyllaClusterAnalyzerParams{Vitals: vitals})
 
 	if result.Status != engine.AnalyzerWarning {
 		t.Errorf("status = %v, want WARNING", result.Status)
@@ -142,7 +142,7 @@ func TestSchemaAgreementAnalyzer_SkipsFailedCollector(t *testing.T) {
 		})
 
 	a := NewSchemaAgreementAnalyzer()
-	result := a.Analyze(engine.AnalyzerParams{Vitals: vitals})
+	result := a.AnalyzePerScyllaCluster(engine.PerScyllaClusterAnalyzerParams{Vitals: vitals})
 
 	if result.Status != engine.AnalyzerWarning {
 		t.Errorf("status = %v, want WARNING", result.Status)
@@ -158,7 +158,7 @@ func TestSchemaAgreementAnalyzer_EmptyVersionsFromPod(t *testing.T) {
 		})
 
 	a := NewSchemaAgreementAnalyzer()
-	result := a.Analyze(engine.AnalyzerParams{Vitals: vitals})
+	result := a.AnalyzePerScyllaCluster(engine.PerScyllaClusterAnalyzerParams{Vitals: vitals})
 
 	// Pod checked, but no versions reported.
 	if result.Status != engine.AnalyzerWarning {
@@ -187,7 +187,7 @@ func TestSchemaAgreementAnalyzer_MixedPassAndFail(t *testing.T) {
 		})
 
 	a := NewSchemaAgreementAnalyzer()
-	result := a.Analyze(engine.AnalyzerParams{Vitals: vitals})
+	result := a.AnalyzePerScyllaCluster(engine.PerScyllaClusterAnalyzerParams{Vitals: vitals})
 
 	// Only one pod's data available, single version → passed.
 	if result.Status != engine.AnalyzerPassed {

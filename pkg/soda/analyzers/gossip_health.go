@@ -15,25 +15,25 @@ const (
 )
 
 // gossipHealthAnalyzer checks that all gossip endpoints report is_alive == true.
-type gossipHealthAnalyzer struct{}
+type gossipHealthAnalyzer struct {
+	engine.AnalyzerBase
+}
 
-var _ engine.Analyzer = (*gossipHealthAnalyzer)(nil)
+var _ engine.PerScyllaClusterAnalyzer = (*gossipHealthAnalyzer)(nil)
 
 // NewGossipHealthAnalyzer creates a new GossipHealthAnalyzer.
-func NewGossipHealthAnalyzer() engine.Analyzer {
-	return &gossipHealthAnalyzer{}
+func NewGossipHealthAnalyzer() engine.PerScyllaClusterAnalyzer {
+	return &gossipHealthAnalyzer{
+		AnalyzerBase: engine.NewAnalyzerBase(
+			GossipHealthAnalyzerID,
+			"Gossip health check",
+			engine.AnalyzerPerScyllaCluster,
+			[]engine.CollectorID{collectors.GossipInfoCollectorID},
+		),
+	}
 }
 
-func (a *gossipHealthAnalyzer) ID() engine.AnalyzerID { return GossipHealthAnalyzerID }
-func (a *gossipHealthAnalyzer) Name() string          { return "Gossip health check" }
-func (a *gossipHealthAnalyzer) Scope() engine.AnalyzerScope {
-	return engine.AnalyzerPerScyllaCluster
-}
-func (a *gossipHealthAnalyzer) DependsOn() []engine.CollectorID {
-	return []engine.CollectorID{collectors.GossipInfoCollectorID}
-}
-
-func (a *gossipHealthAnalyzer) Analyze(params engine.AnalyzerParams) *engine.AnalyzerResult {
+func (a *gossipHealthAnalyzer) AnalyzePerScyllaCluster(params engine.PerScyllaClusterAnalyzerParams) *engine.AnalyzerResult {
 	// Each pod in the cluster sees all endpoints via gossip. We use the first
 	// pod whose GossipInfoCollector succeeded; they should all be equivalent.
 	podKeys := params.Vitals.ScyllaNodeKeys()

@@ -26,23 +26,25 @@ var supportedOSNames = map[string]bool{
 }
 
 // osSupportAnalyzer checks that the OS running on Scylla pods is a supported distribution.
-type osSupportAnalyzer struct{}
+type osSupportAnalyzer struct {
+	engine.AnalyzerBase
+}
 
-var _ engine.Analyzer = (*osSupportAnalyzer)(nil)
+var _ engine.PerScyllaClusterAnalyzer = (*osSupportAnalyzer)(nil)
 
 // NewOSSupportAnalyzer creates a new OSSupportAnalyzer.
-func NewOSSupportAnalyzer() engine.Analyzer {
-	return &osSupportAnalyzer{}
+func NewOSSupportAnalyzer() engine.PerScyllaClusterAnalyzer {
+	return &osSupportAnalyzer{
+		AnalyzerBase: engine.NewAnalyzerBase(
+			OSSupportAnalyzerID,
+			"OS support check",
+			engine.AnalyzerPerScyllaCluster,
+			[]engine.CollectorID{collectors.OSInfoCollectorID},
+		),
+	}
 }
 
-func (a *osSupportAnalyzer) ID() engine.AnalyzerID       { return OSSupportAnalyzerID }
-func (a *osSupportAnalyzer) Name() string                { return "OS support check" }
-func (a *osSupportAnalyzer) Scope() engine.AnalyzerScope { return engine.AnalyzerPerScyllaCluster }
-func (a *osSupportAnalyzer) DependsOn() []engine.CollectorID {
-	return []engine.CollectorID{collectors.OSInfoCollectorID}
-}
-
-func (a *osSupportAnalyzer) Analyze(params engine.AnalyzerParams) *engine.AnalyzerResult {
+func (a *osSupportAnalyzer) AnalyzePerScyllaCluster(params engine.PerScyllaClusterAnalyzerParams) *engine.AnalyzerResult {
 	var supported []string
 	var unknown []string
 	podsChecked := 0

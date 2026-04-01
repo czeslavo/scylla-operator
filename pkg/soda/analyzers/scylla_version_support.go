@@ -15,25 +15,25 @@ const (
 )
 
 // scyllaVersionSupportAnalyzer checks Scylla versions against known-supported ranges.
-type scyllaVersionSupportAnalyzer struct{}
+type scyllaVersionSupportAnalyzer struct {
+	engine.AnalyzerBase
+}
 
-var _ engine.Analyzer = (*scyllaVersionSupportAnalyzer)(nil)
+var _ engine.PerScyllaClusterAnalyzer = (*scyllaVersionSupportAnalyzer)(nil)
 
 // NewScyllaVersionSupportAnalyzer creates a new ScyllaVersionSupportAnalyzer.
-func NewScyllaVersionSupportAnalyzer() engine.Analyzer {
-	return &scyllaVersionSupportAnalyzer{}
+func NewScyllaVersionSupportAnalyzer() engine.PerScyllaClusterAnalyzer {
+	return &scyllaVersionSupportAnalyzer{
+		AnalyzerBase: engine.NewAnalyzerBase(
+			ScyllaVersionSupportAnalyzerID,
+			"Scylla version support check",
+			engine.AnalyzerPerScyllaCluster,
+			[]engine.CollectorID{collectors.ScyllaVersionCollectorID},
+		),
+	}
 }
 
-func (a *scyllaVersionSupportAnalyzer) ID() engine.AnalyzerID { return ScyllaVersionSupportAnalyzerID }
-func (a *scyllaVersionSupportAnalyzer) Name() string          { return "Scylla version support check" }
-func (a *scyllaVersionSupportAnalyzer) Scope() engine.AnalyzerScope {
-	return engine.AnalyzerPerScyllaCluster
-}
-func (a *scyllaVersionSupportAnalyzer) DependsOn() []engine.CollectorID {
-	return []engine.CollectorID{collectors.ScyllaVersionCollectorID}
-}
-
-func (a *scyllaVersionSupportAnalyzer) Analyze(params engine.AnalyzerParams) *engine.AnalyzerResult {
+func (a *scyllaVersionSupportAnalyzer) AnalyzePerScyllaCluster(params engine.PerScyllaClusterAnalyzerParams) *engine.AnalyzerResult {
 	var versions []string
 	var unsupported []string
 	var warnings []string

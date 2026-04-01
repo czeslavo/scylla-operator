@@ -31,7 +31,7 @@ func TestScyllaVersionSupportAnalyzer_SupportedOSS(t *testing.T) {
 	})
 
 	a := NewScyllaVersionSupportAnalyzer()
-	result := a.Analyze(engine.AnalyzerParams{Vitals: vitals})
+	result := a.AnalyzePerScyllaCluster(engine.PerScyllaClusterAnalyzerParams{Vitals: vitals})
 
 	if result.Status != engine.AnalyzerPassed {
 		t.Errorf("status = %v, want PASSED", result.Status)
@@ -50,7 +50,7 @@ func TestScyllaVersionSupportAnalyzer_SupportedEnterprise(t *testing.T) {
 	})
 
 	a := NewScyllaVersionSupportAnalyzer()
-	result := a.Analyze(engine.AnalyzerParams{Vitals: vitals})
+	result := a.AnalyzePerScyllaCluster(engine.PerScyllaClusterAnalyzerParams{Vitals: vitals})
 
 	if result.Status != engine.AnalyzerPassed {
 		t.Errorf("status = %v, want PASSED", result.Status)
@@ -66,7 +66,7 @@ func TestScyllaVersionSupportAnalyzer_WarningOSS(t *testing.T) {
 	})
 
 	a := NewScyllaVersionSupportAnalyzer()
-	result := a.Analyze(engine.AnalyzerParams{Vitals: vitals})
+	result := a.AnalyzePerScyllaCluster(engine.PerScyllaClusterAnalyzerParams{Vitals: vitals})
 
 	if result.Status != engine.AnalyzerWarning {
 		t.Errorf("status = %v, want WARNING", result.Status)
@@ -85,7 +85,7 @@ func TestScyllaVersionSupportAnalyzer_WarningEnterprise(t *testing.T) {
 	})
 
 	a := NewScyllaVersionSupportAnalyzer()
-	result := a.Analyze(engine.AnalyzerParams{Vitals: vitals})
+	result := a.AnalyzePerScyllaCluster(engine.PerScyllaClusterAnalyzerParams{Vitals: vitals})
 
 	if result.Status != engine.AnalyzerWarning {
 		t.Errorf("status = %v, want WARNING", result.Status)
@@ -101,7 +101,7 @@ func TestScyllaVersionSupportAnalyzer_UnsupportedOSS(t *testing.T) {
 	})
 
 	a := NewScyllaVersionSupportAnalyzer()
-	result := a.Analyze(engine.AnalyzerParams{Vitals: vitals})
+	result := a.AnalyzePerScyllaCluster(engine.PerScyllaClusterAnalyzerParams{Vitals: vitals})
 
 	if result.Status != engine.AnalyzerFailed {
 		t.Errorf("status = %v, want FAILED", result.Status)
@@ -126,7 +126,7 @@ func TestScyllaVersionSupportAnalyzer_MultiplePods_MixedVersions(t *testing.T) {
 		})
 
 	a := NewScyllaVersionSupportAnalyzer()
-	result := a.Analyze(engine.AnalyzerParams{Vitals: vitals})
+	result := a.AnalyzePerScyllaCluster(engine.PerScyllaClusterAnalyzerParams{Vitals: vitals})
 
 	// Unsupported takes priority.
 	if result.Status != engine.AnalyzerFailed {
@@ -138,7 +138,7 @@ func TestScyllaVersionSupportAnalyzer_NoPods(t *testing.T) {
 	vitals := engine.NewVitals()
 
 	a := NewScyllaVersionSupportAnalyzer()
-	result := a.Analyze(engine.AnalyzerParams{Vitals: vitals})
+	result := a.AnalyzePerScyllaCluster(engine.PerScyllaClusterAnalyzerParams{Vitals: vitals})
 
 	if result.Status != engine.AnalyzerWarning {
 		t.Errorf("status = %v, want WARNING", result.Status)
@@ -157,7 +157,7 @@ func TestScyllaVersionSupportAnalyzer_SkipsFailedCollector(t *testing.T) {
 	})
 
 	a := NewScyllaVersionSupportAnalyzer()
-	result := a.Analyze(engine.AnalyzerParams{Vitals: vitals})
+	result := a.AnalyzePerScyllaCluster(engine.PerScyllaClusterAnalyzerParams{Vitals: vitals})
 
 	// No versions available → warning.
 	if result.Status != engine.AnalyzerWarning {
@@ -174,7 +174,7 @@ func TestScyllaVersionSupportAnalyzer_EmptyVersion(t *testing.T) {
 	})
 
 	a := NewScyllaVersionSupportAnalyzer()
-	result := a.Analyze(engine.AnalyzerParams{Vitals: vitals})
+	result := a.AnalyzePerScyllaCluster(engine.PerScyllaClusterAnalyzerParams{Vitals: vitals})
 
 	if result.Status != engine.AnalyzerWarning {
 		t.Errorf("status = %v, want WARNING", result.Status)
@@ -196,7 +196,7 @@ func TestScyllaVersionSupportAnalyzer_DeduplicatesVersions(t *testing.T) {
 		})
 
 	a := NewScyllaVersionSupportAnalyzer()
-	result := a.Analyze(engine.AnalyzerParams{Vitals: vitals})
+	result := a.AnalyzePerScyllaCluster(engine.PerScyllaClusterAnalyzerParams{Vitals: vitals})
 
 	if result.Status != engine.AnalyzerPassed {
 		t.Errorf("status = %v, want PASSED", result.Status)

@@ -34,7 +34,7 @@ func TestOSSupportAnalyzer_SupportedUbuntu(t *testing.T) {
 	})
 
 	a := NewOSSupportAnalyzer()
-	result := a.Analyze(engine.AnalyzerParams{Vitals: vitals})
+	result := a.AnalyzePerScyllaCluster(engine.PerScyllaClusterAnalyzerParams{Vitals: vitals})
 
 	if result.Status != engine.AnalyzerPassed {
 		t.Errorf("status = %v, want PASSED", result.Status)
@@ -56,7 +56,7 @@ func TestOSSupportAnalyzer_SupportedRHEL(t *testing.T) {
 	})
 
 	a := NewOSSupportAnalyzer()
-	result := a.Analyze(engine.AnalyzerParams{Vitals: vitals})
+	result := a.AnalyzePerScyllaCluster(engine.PerScyllaClusterAnalyzerParams{Vitals: vitals})
 
 	if result.Status != engine.AnalyzerPassed {
 		t.Errorf("status = %v, want PASSED", result.Status)
@@ -75,7 +75,7 @@ func TestOSSupportAnalyzer_SupportedDebian(t *testing.T) {
 	})
 
 	a := NewOSSupportAnalyzer()
-	result := a.Analyze(engine.AnalyzerParams{Vitals: vitals})
+	result := a.AnalyzePerScyllaCluster(engine.PerScyllaClusterAnalyzerParams{Vitals: vitals})
 
 	if result.Status != engine.AnalyzerPassed {
 		t.Errorf("status = %v, want PASSED", result.Status)
@@ -94,7 +94,7 @@ func TestOSSupportAnalyzer_SupportedRockyLinux(t *testing.T) {
 	})
 
 	a := NewOSSupportAnalyzer()
-	result := a.Analyze(engine.AnalyzerParams{Vitals: vitals})
+	result := a.AnalyzePerScyllaCluster(engine.PerScyllaClusterAnalyzerParams{Vitals: vitals})
 
 	if result.Status != engine.AnalyzerPassed {
 		t.Errorf("status = %v, want PASSED", result.Status)
@@ -113,7 +113,7 @@ func TestOSSupportAnalyzer_SupportedAmazonLinux(t *testing.T) {
 	})
 
 	a := NewOSSupportAnalyzer()
-	result := a.Analyze(engine.AnalyzerParams{Vitals: vitals})
+	result := a.AnalyzePerScyllaCluster(engine.PerScyllaClusterAnalyzerParams{Vitals: vitals})
 
 	if result.Status != engine.AnalyzerPassed {
 		t.Errorf("status = %v, want PASSED", result.Status)
@@ -132,7 +132,7 @@ func TestOSSupportAnalyzer_UnknownOS(t *testing.T) {
 	})
 
 	a := NewOSSupportAnalyzer()
-	result := a.Analyze(engine.AnalyzerParams{Vitals: vitals})
+	result := a.AnalyzePerScyllaCluster(engine.PerScyllaClusterAnalyzerParams{Vitals: vitals})
 
 	if result.Status != engine.AnalyzerWarning {
 		t.Errorf("status = %v, want WARNING", result.Status)
@@ -154,7 +154,7 @@ func TestOSSupportAnalyzer_EmptyOSName(t *testing.T) {
 	})
 
 	a := NewOSSupportAnalyzer()
-	result := a.Analyze(engine.AnalyzerParams{Vitals: vitals})
+	result := a.AnalyzePerScyllaCluster(engine.PerScyllaClusterAnalyzerParams{Vitals: vitals})
 
 	if result.Status != engine.AnalyzerWarning {
 		t.Errorf("status = %v, want WARNING", result.Status)
@@ -184,7 +184,7 @@ func TestOSSupportAnalyzer_MultiplePods_AllSupported(t *testing.T) {
 		})
 
 	a := NewOSSupportAnalyzer()
-	result := a.Analyze(engine.AnalyzerParams{Vitals: vitals})
+	result := a.AnalyzePerScyllaCluster(engine.PerScyllaClusterAnalyzerParams{Vitals: vitals})
 
 	if result.Status != engine.AnalyzerPassed {
 		t.Errorf("status = %v, want PASSED", result.Status)
@@ -211,7 +211,7 @@ func TestOSSupportAnalyzer_MultiplePods_MixedSupport(t *testing.T) {
 		})
 
 	a := NewOSSupportAnalyzer()
-	result := a.Analyze(engine.AnalyzerParams{Vitals: vitals})
+	result := a.AnalyzePerScyllaCluster(engine.PerScyllaClusterAnalyzerParams{Vitals: vitals})
 
 	if result.Status != engine.AnalyzerWarning {
 		t.Errorf("status = %v, want WARNING", result.Status)
@@ -225,7 +225,7 @@ func TestOSSupportAnalyzer_NoPods(t *testing.T) {
 	vitals := engine.NewVitals()
 
 	a := NewOSSupportAnalyzer()
-	result := a.Analyze(engine.AnalyzerParams{Vitals: vitals})
+	result := a.AnalyzePerScyllaCluster(engine.PerScyllaClusterAnalyzerParams{Vitals: vitals})
 
 	if result.Status != engine.AnalyzerWarning {
 		t.Errorf("status = %v, want WARNING", result.Status)
@@ -244,7 +244,7 @@ func TestOSSupportAnalyzer_SkipsFailedCollector(t *testing.T) {
 		})
 
 	a := NewOSSupportAnalyzer()
-	result := a.Analyze(engine.AnalyzerParams{Vitals: vitals})
+	result := a.AnalyzePerScyllaCluster(engine.PerScyllaClusterAnalyzerParams{Vitals: vitals})
 
 	if result.Status != engine.AnalyzerWarning {
 		t.Errorf("status = %v, want WARNING", result.Status)
@@ -295,7 +295,7 @@ func TestOSSupportAnalyzer_DeduplicatesOS(t *testing.T) {
 	}
 
 	a := NewOSSupportAnalyzer()
-	result := a.Analyze(engine.AnalyzerParams{Vitals: vitals})
+	result := a.AnalyzePerScyllaCluster(engine.PerScyllaClusterAnalyzerParams{Vitals: vitals})
 
 	if result.Status != engine.AnalyzerPassed {
 		t.Errorf("status = %v, want PASSED", result.Status)

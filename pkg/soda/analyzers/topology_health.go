@@ -16,25 +16,25 @@ const (
 
 // topologyHealthAnalyzer checks that all nodes in system.topology are in a
 // healthy state (node_state == "normal" and upgrade_state == "done").
-type topologyHealthAnalyzer struct{}
+type topologyHealthAnalyzer struct {
+	engine.AnalyzerBase
+}
 
-var _ engine.Analyzer = (*topologyHealthAnalyzer)(nil)
+var _ engine.PerScyllaClusterAnalyzer = (*topologyHealthAnalyzer)(nil)
 
 // NewTopologyHealthAnalyzer creates a new TopologyHealthAnalyzer.
-func NewTopologyHealthAnalyzer() engine.Analyzer {
-	return &topologyHealthAnalyzer{}
+func NewTopologyHealthAnalyzer() engine.PerScyllaClusterAnalyzer {
+	return &topologyHealthAnalyzer{
+		AnalyzerBase: engine.NewAnalyzerBase(
+			TopologyHealthAnalyzerID,
+			"Topology health check",
+			engine.AnalyzerPerScyllaCluster,
+			[]engine.CollectorID{collectors.SystemTopologyCollectorID},
+		),
+	}
 }
 
-func (a *topologyHealthAnalyzer) ID() engine.AnalyzerID { return TopologyHealthAnalyzerID }
-func (a *topologyHealthAnalyzer) Name() string          { return "Topology health check" }
-func (a *topologyHealthAnalyzer) Scope() engine.AnalyzerScope {
-	return engine.AnalyzerPerScyllaCluster
-}
-func (a *topologyHealthAnalyzer) DependsOn() []engine.CollectorID {
-	return []engine.CollectorID{collectors.SystemTopologyCollectorID}
-}
-
-func (a *topologyHealthAnalyzer) Analyze(params engine.AnalyzerParams) *engine.AnalyzerResult {
+func (a *topologyHealthAnalyzer) AnalyzePerScyllaCluster(params engine.PerScyllaClusterAnalyzerParams) *engine.AnalyzerResult {
 	// system.topology is a cluster-wide table; every pod sees the same rows.
 	// Use the first pod whose SystemTopologyCollector succeeded.
 	podKeys := params.Vitals.ScyllaNodeKeys()
