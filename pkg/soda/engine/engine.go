@@ -48,6 +48,7 @@ type EngineConfig struct {
 
 	// Dependency-injected capabilities
 	PodExecutor    PodExecutor
+	PodLogFetcher  PodLogFetcher
 	ResourceLister ResourceLister
 
 	// Artifact management
@@ -189,6 +190,7 @@ func (e *Engine) executeClusterWideCollector(ctx context.Context, collector Coll
 	params := CollectorParams{
 		Vitals:         vitals,
 		PodExecutor:    e.config.PodExecutor,
+		PodLogFetcher:  e.config.PodLogFetcher,
 		ResourceLister: e.config.ResourceLister,
 		ArtifactWriter: artifactWriter,
 	}
@@ -225,6 +227,7 @@ func (e *Engine) executePerScyllaClusterCollector(ctx context.Context, collector
 		Vitals:         vitals,
 		ScyllaCluster:  cluster,
 		PodExecutor:    e.config.PodExecutor,
+		PodLogFetcher:  e.config.PodLogFetcher,
 		ResourceLister: e.config.ResourceLister,
 		ArtifactWriter: artifactWriter,
 	}
@@ -262,6 +265,7 @@ func (e *Engine) executePerScyllaNodeCollector(ctx context.Context, collector Co
 		ScyllaCluster:  cluster,
 		ScyllaNode:     node,
 		PodExecutor:    e.config.PodExecutor,
+		PodLogFetcher:  e.config.PodLogFetcher,
 		ResourceLister: e.config.ResourceLister,
 		ArtifactWriter: artifactWriter,
 	}

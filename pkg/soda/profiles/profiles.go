@@ -55,6 +55,10 @@ func AllProfiles() map[string]engine.Profile {
 				collectors.ScyllaClusterServiceAccountCollectorID,
 				collectors.ScyllaClusterRoleBindingCollectorID,
 				collectors.ScyllaClusterPVCCollectorID,
+				// Log collectors.
+				collectors.ScyllaNodeLogsCollectorID,
+				collectors.OperatorPodLogsCollectorID,
+				collectors.ScyllaClusterJobLogsCollectorID,
 			},
 			Analyzers: []engine.AnalyzerID{
 				analyzers.ScyllaVersionSupportAnalyzerID,

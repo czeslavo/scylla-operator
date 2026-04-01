@@ -1,0 +1,132 @@
+package collectors
+
+import (
+	"context"
+	"fmt"
+	"path"
+
+	"github.com/scylladb/scylla-operator/pkg/naming"
+	"github.com/scylladb/scylla-operator/pkg/soda/engine"
+	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/labels"
+)
+
+const (
+	// ScyllaClusterJobLogsCollectorID is the unique identifier for the ScyllaClusterJobLogsCollector.
+	ScyllaClusterJobLogsCollectorID engine.CollectorID = "ScyllaClusterJobLogsCollector"
+)
+
+// ScyllaClusterJobLogsResult holds metadata about collected container logs from cleanup job pods.
+type ScyllaClusterJobLogsResult struct {
+	PodCount      int `json:"pod_count"`
+	ArtifactCount int `json:"artifact_count"`
+}
+
+// scyllaClusterJobLogsCollector collects current and previous container logs from
+// cleanup job pods belonging to a ScyllaCluster/ScyllaDBDatacenter.
+type scyllaClusterJobLogsCollector struct{}
+
+var _ engine.Collector = (*scyllaClusterJobLogsCollector)(nil)
+
+// NewScyllaClusterJobLogsCollector creates a new ScyllaClusterJobLogsCollector.
+func NewScyllaClusterJobLogsCollector() engine.Collector {
+	return &scyllaClusterJobLogsCollector{}
+}
+
+func (c *scyllaClusterJobLogsCollector) ID() engine.CollectorID {
+	return ScyllaClusterJobLogsCollectorID
+}
+func (c *scyllaClusterJobLogsCollector) Name() string                    { return "ScyllaCluster cleanup job pod logs" }
+func (c *scyllaClusterJobLogsCollector) Scope() engine.CollectorScope    { return engine.PerScyllaCluster }
+func (c *scyllaClusterJobLogsCollector) DependsOn() []engine.CollectorID { return nil }
+
+// RBAC implements engine.RBACProvider.
+// Required permissions:
+//   - core/v1: pods — get, list
+//   - core/v1: pods/log — get
+func (c *scyllaClusterJobLogsCollector) RBAC() []rbacv1.PolicyRule {
+	return []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{""},
+			Resources: []string{"pods"},
+			Verbs:     []string{"get", "list"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"pods/log"},
+			Verbs:     []string{"get"},
+		},
+	}
+}
+
+func (c *scyllaClusterJobLogsCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
+	if params.PodLogFetcher == nil {
+		return &engine.CollectorResult{
+			Status:  engine.CollectorSkipped,
+			Message: "PodLogFetcher not available (offline mode)",
+		}, nil
+	}
+
+	sc := params.ScyllaCluster
+	selector := labels.SelectorFromSet(labels.Set{
+		naming.PodTypeLabel: string(naming.PodTypeCleanupJob),
+	})
+
+	pods, err := params.ResourceLister.ListPods(ctx, sc.Namespace, selector)
+	if err != nil {
+		return nil, fmt.Errorf("listing cleanup job pods in namespace %s: %w", sc.Namespace, err)
+	}
+
+	var artifacts []engine.Artifact
+
+	for i := range pods {
+		pod := &pods[i]
+
+		// Collect all init container names followed by regular container names.
+		var containerNames []string
+		for _, ic := range pod.Spec.InitContainers {
+			containerNames = append(containerNames, ic.Name)
+		}
+		for _, c := range pod.Spec.Containers {
+			containerNames = append(containerNames, c.Name)
+		}
+
+		for _, containerName := range containerNames {
+			// Current logs.
+			currentLogs, err := params.PodLogFetcher.GetPodLogs(ctx, sc.Namespace, pod.Name, containerName, false)
+			if err == nil && params.ArtifactWriter != nil {
+				filename := path.Join(pod.Name, containerName+".current.log")
+				relPath, err := params.ArtifactWriter.WriteArtifact(filename, currentLogs)
+				if err == nil {
+					artifacts = append(artifacts, engine.Artifact{
+						RelativePath: relPath,
+						Description:  fmt.Sprintf("Current logs for container %s in pod %s/%s", containerName, sc.Namespace, pod.Name),
+					})
+				}
+			}
+
+			// Previous logs (best-effort: skip if no previous run).
+			previousLogs, err := params.PodLogFetcher.GetPodLogs(ctx, sc.Namespace, pod.Name, containerName, true)
+			if err == nil && params.ArtifactWriter != nil {
+				filename := path.Join(pod.Name, containerName+".previous.log")
+				relPath, err := params.ArtifactWriter.WriteArtifact(filename, previousLogs)
+				if err == nil {
+					artifacts = append(artifacts, engine.Artifact{
+						RelativePath: relPath,
+						Description:  fmt.Sprintf("Previous logs for container %s in pod %s/%s", containerName, sc.Namespace, pod.Name),
+					})
+				}
+			}
+		}
+	}
+
+	return &engine.CollectorResult{
+		Status:  engine.CollectorPassed,
+		Message: fmt.Sprintf("Collected logs from %d cleanup job pod(s) for ScyllaCluster %s/%s", len(pods), sc.Namespace, sc.Name),
+		Data: &ScyllaClusterJobLogsResult{
+			PodCount:      len(pods),
+			ArtifactCount: len(artifacts),
+		},
+		Artifacts: artifacts,
+	}, nil
+}

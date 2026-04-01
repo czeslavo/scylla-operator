@@ -217,6 +217,13 @@ type PodExecutor interface {
 	Execute(ctx context.Context, namespace, podName, containerName string, command []string) (stdout, stderr string, err error)
 }
 
+// PodLogFetcher retrieves container logs from pods using the Kubernetes pods/log API.
+// It is a separate interface from PodExecutor because log fetching uses a different
+// Kubernetes mechanism (HTTP streaming vs. SPDY exec).
+type PodLogFetcher interface {
+	GetPodLogs(ctx context.Context, namespace, podName, containerName string, previous bool) ([]byte, error)
+}
+
 // ResourceLister provides access to all Kubernetes and Scylla resources needed
 // by collectors. Using a single interface avoids proliferating separate lister
 // types as new manifest collectors are added.
@@ -290,6 +297,7 @@ type CollectorParams struct {
 
 	// Dependency-injected capabilities:
 	PodExecutor    PodExecutor
+	PodLogFetcher  PodLogFetcher
 	ResourceLister ResourceLister
 	ArtifactWriter ArtifactWriter // Write raw artifact files
 }

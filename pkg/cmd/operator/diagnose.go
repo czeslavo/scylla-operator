@@ -267,6 +267,7 @@ func (o *DiagnoseOptions) Run(streams genericclioptions.IOStreams, cmd *cobra.Co
 		ScyllaNodes:    podsByCluster,
 
 		PodExecutor:    &k8sPodExecutor{restConfig: o.restConfig, kubeClient: o.kubeClient},
+		PodLogFetcher:  &k8sPodLogFetcher{kubeClient: o.kubeClient},
 		ResourceLister: resourceLister,
 
 		ArtifactWriterFactory: artifactFactory,
@@ -577,6 +578,32 @@ func (e *k8sPodExecutor) Execute(ctx context.Context, namespace, podName, contai
 	}
 
 	return stdout.String(), stderr.String(), nil
+}
+
+// k8sPodLogFetcher implements engine.PodLogFetcher using the Kubernetes pods/log API.
+type k8sPodLogFetcher struct {
+	kubeClient kubernetes.Interface
+}
+
+var _ engine.PodLogFetcher = (*k8sPodLogFetcher)(nil)
+
+func (f *k8sPodLogFetcher) GetPodLogs(ctx context.Context, namespace, podName, containerName string, previous bool) ([]byte, error) {
+	req := f.kubeClient.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{
+		Container:  containerName,
+		Previous:   previous,
+		Timestamps: true,
+	})
+	stream, err := req.Stream(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("opening log stream for %s/%s/%s (previous=%v): %w", namespace, podName, containerName, previous, err)
+	}
+	defer stream.Close()
+
+	data, err := io.ReadAll(stream)
+	if err != nil {
+		return nil, fmt.Errorf("reading log stream for %s/%s/%s (previous=%v): %w", namespace, podName, containerName, previous, err)
+	}
+	return data, nil
 }
 
 // k8sResourceLister implements engine.ResourceLister using the Kubernetes and Scylla API clients.

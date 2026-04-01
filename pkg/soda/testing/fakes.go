@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -384,4 +385,67 @@ func (f *FakeArtifactReader) ListArtifacts(collectorID engine.CollectorID, scope
 		}
 	}
 	return nil, nil
+}
+
+// FakePodLogResponse holds the preconfigured response for a pod log fetch call.
+type FakePodLogResponse struct {
+	Content []byte
+	Err     error
+}
+
+// FakePodLogFetcher returns preconfigured log content per call key.
+// The key is built as "namespace/podName/containerName/<previous>" where
+// <previous> is the string "true" or "false".
+type FakePodLogFetcher struct {
+	mu        sync.Mutex
+	Responses map[string]FakePodLogResponse
+	Calls     []FakePodLogCall
+}
+
+// FakePodLogCall records an individual GetPodLogs invocation.
+type FakePodLogCall struct {
+	Namespace     string
+	PodName       string
+	ContainerName string
+	Previous      bool
+}
+
+var _ engine.PodLogFetcher = (*FakePodLogFetcher)(nil)
+
+// NewFakePodLogFetcher creates a new FakePodLogFetcher with an initialized Responses map.
+func NewFakePodLogFetcher() *FakePodLogFetcher {
+	return &FakePodLogFetcher{
+		Responses: make(map[string]FakePodLogResponse),
+	}
+}
+
+// SetResponse registers a preconfigured response for the given call parameters.
+func (f *FakePodLogFetcher) SetResponse(namespace, podName, containerName string, previous bool, content []byte, err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	key := f.buildKey(namespace, podName, containerName, previous)
+	f.Responses[key] = FakePodLogResponse{Content: content, Err: err}
+}
+
+func (f *FakePodLogFetcher) buildKey(namespace, podName, containerName string, previous bool) string {
+	return namespace + "/" + podName + "/" + containerName + "/" + strconv.FormatBool(previous)
+}
+
+func (f *FakePodLogFetcher) GetPodLogs(_ context.Context, namespace, podName, containerName string, previous bool) ([]byte, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.Calls = append(f.Calls, FakePodLogCall{
+		Namespace:     namespace,
+		PodName:       podName,
+		ContainerName: containerName,
+		Previous:      previous,
+	})
+
+	key := f.buildKey(namespace, podName, containerName, previous)
+	if resp, ok := f.Responses[key]; ok {
+		return resp.Content, resp.Err
+	}
+
+	return nil, fmt.Errorf("no fake response configured for key %q", key)
 }

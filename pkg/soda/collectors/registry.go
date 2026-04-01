@@ -43,6 +43,10 @@ func AllCollectors() []engine.Collector {
 		NewScyllaClusterServiceAccountCollector(),
 		NewScyllaClusterRoleBindingCollector(),
 		NewScyllaClusterPVCCollector(),
+		// Log collectors.
+		NewScyllaNodeLogsCollector(),
+		NewOperatorPodLogsCollector(),
+		NewScyllaClusterJobLogsCollector(),
 	}
 }
 
@@ -97,5 +101,9 @@ func ResultTypeRegistry() map[engine.CollectorID]any {
 		ScyllaClusterServiceAccountCollectorID: &ScyllaClusterServiceAccountResult{},
 		ScyllaClusterRoleBindingCollectorID:    &ScyllaClusterRoleBindingResult{},
 		ScyllaClusterPVCCollectorID:            &ScyllaClusterPVCResult{},
+		// Log collectors.
+		ScyllaNodeLogsCollectorID:       &ScyllaNodeLogsResult{},
+		OperatorPodLogsCollectorID:      &OperatorPodLogsResult{},
+		ScyllaClusterJobLogsCollectorID: &ScyllaClusterJobLogsResult{},
 	}
 }
