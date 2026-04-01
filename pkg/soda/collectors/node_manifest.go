@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/scylladb/scylla-operator/pkg/soda/engine"
+	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -57,24 +57,12 @@ func (c *nodeManifestCollector) CollectClusterWide(ctx context.Context, params e
 		return nil, fmt.Errorf("listing nodes: %w", err)
 	}
 
-	var artifacts []engine.Artifact
-	if params.ArtifactWriter != nil {
-		for i := range nodes {
-			node := &nodes[i]
-			data, err := yaml.Marshal(node)
-			if err != nil {
-				return nil, fmt.Errorf("marshaling node %s: %w", node.Name, err)
-			}
-			relPath, err := params.ArtifactWriter.WriteArtifact(node.Name+".yaml", data)
-			if err != nil {
-				return nil, fmt.Errorf("writing artifact for node %s: %w", node.Name, err)
-			}
-			artifacts = append(artifacts, engine.Artifact{
-				RelativePath: relPath,
-				Description:  fmt.Sprintf("Node %s manifest", node.Name),
-			})
-		}
-	}
+	artifacts := collectAndWriteManifests(params.ArtifactWriter, nodes,
+		func(node *corev1.Node) string { return node.Name + ".yaml" },
+		func(node *corev1.Node) string {
+			return fmt.Sprintf("Node %s manifest", node.Name)
+		},
+	)
 
 	return &engine.CollectorResult{
 		Status:    engine.CollectorPassed,

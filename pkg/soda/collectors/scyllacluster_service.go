@@ -6,9 +6,9 @@ import (
 
 	"github.com/scylladb/scylla-operator/pkg/naming"
 	"github.com/scylladb/scylla-operator/pkg/soda/engine"
+	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -62,24 +62,12 @@ func (c *scyllaClusterServiceCollector) CollectPerScyllaCluster(ctx context.Cont
 		return nil, fmt.Errorf("listing services in namespace %s: %w", sc.Namespace, err)
 	}
 
-	var artifacts []engine.Artifact
-	for i := range services {
-		svc := &services[i]
-		if params.ArtifactWriter != nil {
-			data, err := yaml.Marshal(svc)
-			if err != nil {
-				return nil, fmt.Errorf("marshaling service %s/%s: %w", svc.Namespace, svc.Name, err)
-			}
-			relPath, err := params.ArtifactWriter.WriteArtifact(svc.Name+".yaml", data)
-			if err != nil {
-				return nil, fmt.Errorf("writing artifact for service %s/%s: %w", svc.Namespace, svc.Name, err)
-			}
-			artifacts = append(artifacts, engine.Artifact{
-				RelativePath: relPath,
-				Description:  fmt.Sprintf("Service %s/%s manifest", svc.Namespace, svc.Name),
-			})
-		}
-	}
+	artifacts := collectAndWriteManifests(params.ArtifactWriter, services,
+		func(svc *corev1.Service) string { return svc.Name + ".yaml" },
+		func(svc *corev1.Service) string {
+			return fmt.Sprintf("Service %s/%s manifest", svc.Namespace, svc.Name)
+		},
+	)
 
 	return &engine.CollectorResult{
 		Status:    engine.CollectorPassed,

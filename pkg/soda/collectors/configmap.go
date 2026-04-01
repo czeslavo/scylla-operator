@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 
 	"github.com/scylladb/scylla-operator/pkg/soda/engine"
+	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -62,25 +62,13 @@ func (c *configMapCollector) CollectClusterWide(ctx context.Context, params engi
 		if err != nil {
 			return nil, fmt.Errorf("listing configmaps in namespace %s: %w", ns, err)
 		}
-		for i := range configMaps {
-			cm := &configMaps[i]
-			total++
-			if params.ArtifactWriter != nil {
-				data, err := yaml.Marshal(cm)
-				if err != nil {
-					return nil, fmt.Errorf("marshaling configmap %s/%s: %w", cm.Namespace, cm.Name, err)
-				}
-				filename := filepath.Join(cm.Namespace, cm.Name+".yaml")
-				relPath, err := params.ArtifactWriter.WriteArtifact(filename, data)
-				if err != nil {
-					return nil, fmt.Errorf("writing artifact for configmap %s/%s: %w", cm.Namespace, cm.Name, err)
-				}
-				artifacts = append(artifacts, engine.Artifact{
-					RelativePath: relPath,
-					Description:  fmt.Sprintf("ConfigMap %s/%s manifest", cm.Namespace, cm.Name),
-				})
-			}
-		}
+		total += len(configMaps)
+		artifacts = append(artifacts, collectAndWriteManifests(params.ArtifactWriter, configMaps,
+			func(cm *corev1.ConfigMap) string { return filepath.Join(cm.Namespace, cm.Name+".yaml") },
+			func(cm *corev1.ConfigMap) string {
+				return fmt.Sprintf("ConfigMap %s/%s manifest", cm.Namespace, cm.Name)
+			},
+		)...)
 	}
 
 	return &engine.CollectorResult{

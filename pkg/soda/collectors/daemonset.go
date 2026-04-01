@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 
 	"github.com/scylladb/scylla-operator/pkg/soda/engine"
+	appsv1 "k8s.io/api/apps/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -62,25 +62,13 @@ func (c *daemonSetCollector) CollectClusterWide(ctx context.Context, params engi
 		if err != nil {
 			return nil, fmt.Errorf("listing daemonsets in namespace %s: %w", ns, err)
 		}
-		for i := range daemonSets {
-			ds := &daemonSets[i]
-			total++
-			if params.ArtifactWriter != nil {
-				data, err := yaml.Marshal(ds)
-				if err != nil {
-					return nil, fmt.Errorf("marshaling daemonset %s/%s: %w", ds.Namespace, ds.Name, err)
-				}
-				filename := filepath.Join(ds.Namespace, ds.Name+".yaml")
-				relPath, err := params.ArtifactWriter.WriteArtifact(filename, data)
-				if err != nil {
-					return nil, fmt.Errorf("writing artifact for daemonset %s/%s: %w", ds.Namespace, ds.Name, err)
-				}
-				artifacts = append(artifacts, engine.Artifact{
-					RelativePath: relPath,
-					Description:  fmt.Sprintf("DaemonSet %s/%s manifest", ds.Namespace, ds.Name),
-				})
-			}
-		}
+		total += len(daemonSets)
+		artifacts = append(artifacts, collectAndWriteManifests(params.ArtifactWriter, daemonSets,
+			func(ds *appsv1.DaemonSet) string { return filepath.Join(ds.Namespace, ds.Name+".yaml") },
+			func(ds *appsv1.DaemonSet) string {
+				return fmt.Sprintf("DaemonSet %s/%s manifest", ds.Namespace, ds.Name)
+			},
+		)...)
 	}
 
 	return &engine.CollectorResult{

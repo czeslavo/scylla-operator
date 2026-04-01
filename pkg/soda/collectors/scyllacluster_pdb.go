@@ -6,9 +6,9 @@ import (
 
 	"github.com/scylladb/scylla-operator/pkg/naming"
 	"github.com/scylladb/scylla-operator/pkg/soda/engine"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -62,24 +62,12 @@ func (c *scyllaClusterPDBCollector) CollectPerScyllaCluster(ctx context.Context,
 		return nil, fmt.Errorf("listing poddisruptionbudgets in namespace %s: %w", sc.Namespace, err)
 	}
 
-	var artifacts []engine.Artifact
-	for i := range pdbs {
-		pdb := &pdbs[i]
-		if params.ArtifactWriter != nil {
-			data, err := yaml.Marshal(pdb)
-			if err != nil {
-				return nil, fmt.Errorf("marshaling poddisruptionbudget %s/%s: %w", pdb.Namespace, pdb.Name, err)
-			}
-			relPath, err := params.ArtifactWriter.WriteArtifact(pdb.Name+".yaml", data)
-			if err != nil {
-				return nil, fmt.Errorf("writing artifact for poddisruptionbudget %s/%s: %w", pdb.Namespace, pdb.Name, err)
-			}
-			artifacts = append(artifacts, engine.Artifact{
-				RelativePath: relPath,
-				Description:  fmt.Sprintf("PodDisruptionBudget %s/%s manifest", pdb.Namespace, pdb.Name),
-			})
-		}
-	}
+	artifacts := collectAndWriteManifests(params.ArtifactWriter, pdbs,
+		func(pdb *policyv1.PodDisruptionBudget) string { return pdb.Name + ".yaml" },
+		func(pdb *policyv1.PodDisruptionBudget) string {
+			return fmt.Sprintf("PodDisruptionBudget %s/%s manifest", pdb.Namespace, pdb.Name)
+		},
+	)
 
 	return &engine.CollectorResult{
 		Status:    engine.CollectorPassed,

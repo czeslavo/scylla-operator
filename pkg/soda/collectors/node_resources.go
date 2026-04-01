@@ -6,7 +6,6 @@ import (
 
 	"github.com/scylladb/scylla-operator/pkg/soda/engine"
 	rbacv1 "k8s.io/api/rbac/v1"
-	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -110,20 +109,7 @@ func (c *nodeResourcesCollector) CollectClusterWide(ctx context.Context, params 
 
 	// Write artifact.
 	var artifacts []engine.Artifact
-	if params.ArtifactWriter != nil {
-		yamlBytes, err := yaml.Marshal(nodes)
-		if err != nil {
-			return nil, fmt.Errorf("marshaling nodes to YAML: %w", err)
-		}
-		relPath, err := params.ArtifactWriter.WriteArtifact("nodes.yaml", yamlBytes)
-		if err != nil {
-			return nil, fmt.Errorf("writing nodes.yaml artifact: %w", err)
-		}
-		artifacts = append(artifacts, engine.Artifact{
-			RelativePath: relPath,
-			Description:  "Raw Node objects YAML",
-		})
-	}
+	marshalAndWriteYAML(params.ArtifactWriter, "nodes.yaml", "Raw Node objects YAML", nodes, &artifacts)
 
 	return &engine.CollectorResult{
 		Status:    engine.CollectorPassed,

@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 
 	"github.com/scylladb/scylla-operator/pkg/soda/engine"
+	appsv1 "k8s.io/api/apps/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -62,25 +62,13 @@ func (c *statefulSetCollector) CollectClusterWide(ctx context.Context, params en
 		if err != nil {
 			return nil, fmt.Errorf("listing statefulsets in namespace %s: %w", ns, err)
 		}
-		for i := range statefulSets {
-			ss := &statefulSets[i]
-			total++
-			if params.ArtifactWriter != nil {
-				data, err := yaml.Marshal(ss)
-				if err != nil {
-					return nil, fmt.Errorf("marshaling statefulset %s/%s: %w", ss.Namespace, ss.Name, err)
-				}
-				filename := filepath.Join(ss.Namespace, ss.Name+".yaml")
-				relPath, err := params.ArtifactWriter.WriteArtifact(filename, data)
-				if err != nil {
-					return nil, fmt.Errorf("writing artifact for statefulset %s/%s: %w", ss.Namespace, ss.Name, err)
-				}
-				artifacts = append(artifacts, engine.Artifact{
-					RelativePath: relPath,
-					Description:  fmt.Sprintf("StatefulSet %s/%s manifest", ss.Namespace, ss.Name),
-				})
-			}
-		}
+		total += len(statefulSets)
+		artifacts = append(artifacts, collectAndWriteManifests(params.ArtifactWriter, statefulSets,
+			func(ss *appsv1.StatefulSet) string { return filepath.Join(ss.Namespace, ss.Name+".yaml") },
+			func(ss *appsv1.StatefulSet) string {
+				return fmt.Sprintf("StatefulSet %s/%s manifest", ss.Namespace, ss.Name)
+			},
+		)...)
 	}
 
 	return &engine.CollectorResult{

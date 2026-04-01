@@ -6,9 +6,9 @@ import (
 
 	"github.com/scylladb/scylla-operator/pkg/naming"
 	"github.com/scylladb/scylla-operator/pkg/soda/engine"
+	appsv1 "k8s.io/api/apps/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -62,24 +62,12 @@ func (c *scyllaClusterStatefulSetCollector) CollectPerScyllaCluster(ctx context.
 		return nil, fmt.Errorf("listing statefulsets in namespace %s: %w", sc.Namespace, err)
 	}
 
-	var artifacts []engine.Artifact
-	for i := range statefulSets {
-		ss := &statefulSets[i]
-		if params.ArtifactWriter != nil {
-			data, err := yaml.Marshal(ss)
-			if err != nil {
-				return nil, fmt.Errorf("marshaling statefulset %s/%s: %w", ss.Namespace, ss.Name, err)
-			}
-			relPath, err := params.ArtifactWriter.WriteArtifact(ss.Name+".yaml", data)
-			if err != nil {
-				return nil, fmt.Errorf("writing artifact for statefulset %s/%s: %w", ss.Namespace, ss.Name, err)
-			}
-			artifacts = append(artifacts, engine.Artifact{
-				RelativePath: relPath,
-				Description:  fmt.Sprintf("StatefulSet %s/%s manifest", ss.Namespace, ss.Name),
-			})
-		}
-	}
+	artifacts := collectAndWriteManifests(params.ArtifactWriter, statefulSets,
+		func(ss *appsv1.StatefulSet) string { return ss.Name + ".yaml" },
+		func(ss *appsv1.StatefulSet) string {
+			return fmt.Sprintf("StatefulSet %s/%s manifest", ss.Namespace, ss.Name)
+		},
+	)
 
 	return &engine.CollectorResult{
 		Status:    engine.CollectorPassed,

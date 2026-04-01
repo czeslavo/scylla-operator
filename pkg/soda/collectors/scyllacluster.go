@@ -9,7 +9,6 @@ import (
 	"github.com/scylladb/scylla-operator/pkg/soda/engine"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -69,22 +68,9 @@ func (c *scyllaClusterCollector) CollectClusterWide(ctx context.Context, params 
 	}
 
 	var artifacts []engine.Artifact
-	if params.ArtifactWriter != nil {
-		for _, sc := range clusters {
-			data, err := yaml.Marshal(sc)
-			if err != nil {
-				return nil, fmt.Errorf("marshaling scyllacluster %s/%s: %w", sc.Namespace, sc.Name, err)
-			}
-			filename := filepath.Join(sc.Namespace, sc.Name+".yaml")
-			relPath, err := params.ArtifactWriter.WriteArtifact(filename, data)
-			if err != nil {
-				return nil, fmt.Errorf("writing artifact for scyllacluster %s/%s: %w", sc.Namespace, sc.Name, err)
-			}
-			artifacts = append(artifacts, engine.Artifact{
-				RelativePath: relPath,
-				Description:  fmt.Sprintf("ScyllaCluster %s/%s manifest", sc.Namespace, sc.Name),
-			})
-		}
+	for _, sc := range clusters {
+		marshalAndWriteYAML(params.ArtifactWriter, filepath.Join(sc.Namespace, sc.Name+".yaml"),
+			fmt.Sprintf("ScyllaCluster %s/%s manifest", sc.Namespace, sc.Name), sc, &artifacts)
 	}
 
 	return &engine.CollectorResult{

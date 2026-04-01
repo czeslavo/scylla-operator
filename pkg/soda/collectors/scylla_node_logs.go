@@ -3,7 +3,6 @@ package collectors
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/scylladb/scylla-operator/pkg/soda/engine"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -100,45 +99,9 @@ func (c *scyllaNodeLogsCollector) CollectPerScyllaNode(ctx context.Context, para
 	// Collect all init container names followed by regular container names.
 	allContainers := append(targetPod.initContainerNames, targetPod.regularContainerNames...)
 
-	var artifacts []engine.Artifact
 	containerCount := len(allContainers)
-
-	for _, containerName := range allContainers {
-		// Current logs.
-		currentLogs, err := params.PodLogFetcher.GetPodLogs(ctx, node.Namespace, node.Name, containerName, false)
-		if err != nil {
-			// Non-fatal: log the error in the artifact filename via a best-effort approach.
-			// We still continue with other containers.
-		} else if params.ArtifactWriter != nil {
-			filename := containerName + ".current.log"
-			relPath, err := params.ArtifactWriter.WriteArtifact(filename, currentLogs)
-			if err == nil {
-				artifacts = append(artifacts, engine.Artifact{
-					RelativePath: relPath,
-					Description:  fmt.Sprintf("Current logs for container %s in pod %s/%s", containerName, node.Namespace, node.Name),
-				})
-			}
-		}
-
-		// Previous logs (best-effort: skip if no previous run).
-		previousLogs, err := params.PodLogFetcher.GetPodLogs(ctx, node.Namespace, node.Name, containerName, true)
-		if err != nil {
-			// "previous" container run doesn't exist — silently skip.
-			if !isPreviousContainerNotFoundError(err) {
-				// Unexpected error — also skip silently for best-effort collection.
-				_ = err
-			}
-		} else if params.ArtifactWriter != nil {
-			filename := containerName + ".previous.log"
-			relPath, err := params.ArtifactWriter.WriteArtifact(filename, previousLogs)
-			if err == nil {
-				artifacts = append(artifacts, engine.Artifact{
-					RelativePath: relPath,
-					Description:  fmt.Sprintf("Previous logs for container %s in pod %s/%s", containerName, node.Namespace, node.Name),
-				})
-			}
-		}
-	}
+	artifacts := collectContainerLogs(ctx, params.PodLogFetcher, params.ArtifactWriter,
+		node.Namespace, node.Name, allContainers, "")
 
 	return &engine.CollectorResult{
 		Status:  engine.CollectorPassed,
@@ -149,17 +112,4 @@ func (c *scyllaNodeLogsCollector) CollectPerScyllaNode(ctx context.Context, para
 		},
 		Artifacts: artifacts,
 	}, nil
-}
-
-// isPreviousContainerNotFoundError checks whether the error indicates that there
-// is no previous container run to fetch logs from. This is a best-effort heuristic
-// based on the Kubernetes API error message.
-func isPreviousContainerNotFoundError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := err.Error()
-	return strings.Contains(msg, "previous terminated container") ||
-		strings.Contains(msg, "no previous") ||
-		strings.Contains(msg, "PreviousContainerNotFound")
 }

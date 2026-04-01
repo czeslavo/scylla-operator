@@ -6,7 +6,6 @@ import (
 
 	"github.com/scylladb/scylla-operator/pkg/soda/engine"
 	rbacv1 "k8s.io/api/rbac/v1"
-	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -58,21 +57,9 @@ func (c *scyllaOperatorConfigCollector) CollectClusterWide(ctx context.Context, 
 	}
 
 	var artifacts []engine.Artifact
-	if params.ArtifactWriter != nil {
-		for _, cfg := range configs {
-			data, err := yaml.Marshal(cfg)
-			if err != nil {
-				return nil, fmt.Errorf("marshaling scyllaoperatorconfig %s: %w", cfg.Name, err)
-			}
-			relPath, err := params.ArtifactWriter.WriteArtifact(cfg.Name+".yaml", data)
-			if err != nil {
-				return nil, fmt.Errorf("writing artifact for scyllaoperatorconfig %s: %w", cfg.Name, err)
-			}
-			artifacts = append(artifacts, engine.Artifact{
-				RelativePath: relPath,
-				Description:  fmt.Sprintf("ScyllaOperatorConfig %s manifest", cfg.Name),
-			})
-		}
+	for _, cfg := range configs {
+		marshalAndWriteYAML(params.ArtifactWriter, cfg.Name+".yaml",
+			fmt.Sprintf("ScyllaOperatorConfig %s manifest", cfg.Name), cfg, &artifacts)
 	}
 
 	return &engine.CollectorResult{

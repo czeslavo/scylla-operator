@@ -8,7 +8,6 @@ import (
 	"github.com/scylladb/scylla-operator/pkg/soda/engine"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -62,24 +61,12 @@ func (c *scyllaClusterRoleBindingCollector) CollectPerScyllaCluster(ctx context.
 		return nil, fmt.Errorf("listing rolebindings in namespace %s: %w", sc.Namespace, err)
 	}
 
-	var artifacts []engine.Artifact
-	for i := range roleBindings {
-		rb := &roleBindings[i]
-		if params.ArtifactWriter != nil {
-			data, err := yaml.Marshal(rb)
-			if err != nil {
-				return nil, fmt.Errorf("marshaling rolebinding %s/%s: %w", rb.Namespace, rb.Name, err)
-			}
-			relPath, err := params.ArtifactWriter.WriteArtifact(rb.Name+".yaml", data)
-			if err != nil {
-				return nil, fmt.Errorf("writing artifact for rolebinding %s/%s: %w", rb.Namespace, rb.Name, err)
-			}
-			artifacts = append(artifacts, engine.Artifact{
-				RelativePath: relPath,
-				Description:  fmt.Sprintf("RoleBinding %s/%s manifest", rb.Namespace, rb.Name),
-			})
-		}
-	}
+	artifacts := collectAndWriteManifests(params.ArtifactWriter, roleBindings,
+		func(rb *rbacv1.RoleBinding) string { return rb.Name + ".yaml" },
+		func(rb *rbacv1.RoleBinding) string {
+			return fmt.Sprintf("RoleBinding %s/%s manifest", rb.Namespace, rb.Name)
+		},
+	)
 
 	return &engine.CollectorResult{
 		Status:    engine.CollectorPassed,

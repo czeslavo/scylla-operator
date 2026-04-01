@@ -3,7 +3,6 @@ package collectors
 import (
 	"context"
 	"fmt"
-	"path"
 
 	"github.com/scylladb/scylla-operator/pkg/naming"
 	"github.com/scylladb/scylla-operator/pkg/soda/engine"
@@ -88,33 +87,8 @@ func (c *scyllaClusterJobLogsCollector) CollectPerScyllaCluster(ctx context.Cont
 			containerNames = append(containerNames, c.Name)
 		}
 
-		for _, containerName := range containerNames {
-			// Current logs.
-			currentLogs, err := params.PodLogFetcher.GetPodLogs(ctx, sc.Namespace, pod.Name, containerName, false)
-			if err == nil && params.ArtifactWriter != nil {
-				filename := path.Join(pod.Name, containerName+".current.log")
-				relPath, err := params.ArtifactWriter.WriteArtifact(filename, currentLogs)
-				if err == nil {
-					artifacts = append(artifacts, engine.Artifact{
-						RelativePath: relPath,
-						Description:  fmt.Sprintf("Current logs for container %s in pod %s/%s", containerName, sc.Namespace, pod.Name),
-					})
-				}
-			}
-
-			// Previous logs (best-effort: skip if no previous run).
-			previousLogs, err := params.PodLogFetcher.GetPodLogs(ctx, sc.Namespace, pod.Name, containerName, true)
-			if err == nil && params.ArtifactWriter != nil {
-				filename := path.Join(pod.Name, containerName+".previous.log")
-				relPath, err := params.ArtifactWriter.WriteArtifact(filename, previousLogs)
-				if err == nil {
-					artifacts = append(artifacts, engine.Artifact{
-						RelativePath: relPath,
-						Description:  fmt.Sprintf("Previous logs for container %s in pod %s/%s", containerName, sc.Namespace, pod.Name),
-					})
-				}
-			}
-		}
+		artifacts = append(artifacts, collectContainerLogs(ctx, params.PodLogFetcher, params.ArtifactWriter,
+			sc.Namespace, pod.Name, containerNames, pod.Name)...)
 	}
 
 	return &engine.CollectorResult{

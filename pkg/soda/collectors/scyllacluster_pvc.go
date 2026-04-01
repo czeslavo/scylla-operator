@@ -6,9 +6,9 @@ import (
 
 	"github.com/scylladb/scylla-operator/pkg/naming"
 	"github.com/scylladb/scylla-operator/pkg/soda/engine"
+	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -62,24 +62,12 @@ func (c *scyllaClusterPVCCollector) CollectPerScyllaCluster(ctx context.Context,
 		return nil, fmt.Errorf("listing persistentvolumeclaims in namespace %s: %w", sc.Namespace, err)
 	}
 
-	var artifacts []engine.Artifact
-	for i := range pvcs {
-		pvc := &pvcs[i]
-		if params.ArtifactWriter != nil {
-			data, err := yaml.Marshal(pvc)
-			if err != nil {
-				return nil, fmt.Errorf("marshaling persistentvolumeclaim %s/%s: %w", pvc.Namespace, pvc.Name, err)
-			}
-			relPath, err := params.ArtifactWriter.WriteArtifact(pvc.Name+".yaml", data)
-			if err != nil {
-				return nil, fmt.Errorf("writing artifact for persistentvolumeclaim %s/%s: %w", pvc.Namespace, pvc.Name, err)
-			}
-			artifacts = append(artifacts, engine.Artifact{
-				RelativePath: relPath,
-				Description:  fmt.Sprintf("PersistentVolumeClaim %s/%s manifest", pvc.Namespace, pvc.Name),
-			})
-		}
-	}
+	artifacts := collectAndWriteManifests(params.ArtifactWriter, pvcs,
+		func(pvc *corev1.PersistentVolumeClaim) string { return pvc.Name + ".yaml" },
+		func(pvc *corev1.PersistentVolumeClaim) string {
+			return fmt.Sprintf("PersistentVolumeClaim %s/%s manifest", pvc.Namespace, pvc.Name)
+		},
+	)
 
 	return &engine.CollectorResult{
 		Status:    engine.CollectorPassed,

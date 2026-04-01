@@ -7,7 +7,6 @@ import (
 
 	"github.com/scylladb/scylla-operator/pkg/soda/engine"
 	rbacv1 "k8s.io/api/rbac/v1"
-	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -59,22 +58,9 @@ func (c *scyllaDBDatacenterCollector) CollectClusterWide(ctx context.Context, pa
 	}
 
 	var artifacts []engine.Artifact
-	if params.ArtifactWriter != nil {
-		for _, sdc := range datacenters {
-			data, err := yaml.Marshal(sdc)
-			if err != nil {
-				return nil, fmt.Errorf("marshaling scylladbdatacenter %s/%s: %w", sdc.Namespace, sdc.Name, err)
-			}
-			filename := filepath.Join(sdc.Namespace, sdc.Name+".yaml")
-			relPath, err := params.ArtifactWriter.WriteArtifact(filename, data)
-			if err != nil {
-				return nil, fmt.Errorf("writing artifact for scylladbdatacenter %s/%s: %w", sdc.Namespace, sdc.Name, err)
-			}
-			artifacts = append(artifacts, engine.Artifact{
-				RelativePath: relPath,
-				Description:  fmt.Sprintf("ScyllaDBDatacenter %s/%s manifest", sdc.Namespace, sdc.Name),
-			})
-		}
+	for _, sdc := range datacenters {
+		marshalAndWriteYAML(params.ArtifactWriter, filepath.Join(sdc.Namespace, sdc.Name+".yaml"),
+			fmt.Sprintf("ScyllaDBDatacenter %s/%s manifest", sdc.Namespace, sdc.Name), sdc, &artifacts)
 	}
 
 	return &engine.CollectorResult{

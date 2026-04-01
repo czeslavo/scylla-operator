@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 
 	"github.com/scylladb/scylla-operator/pkg/soda/engine"
+	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -62,25 +62,13 @@ func (c *podManifestCollector) CollectClusterWide(ctx context.Context, params en
 		if err != nil {
 			return nil, fmt.Errorf("listing pods in namespace %s: %w", ns, err)
 		}
-		for i := range pods {
-			pod := &pods[i]
-			total++
-			if params.ArtifactWriter != nil {
-				data, err := yaml.Marshal(pod)
-				if err != nil {
-					return nil, fmt.Errorf("marshaling pod %s/%s: %w", pod.Namespace, pod.Name, err)
-				}
-				filename := filepath.Join(pod.Namespace, pod.Name+".yaml")
-				relPath, err := params.ArtifactWriter.WriteArtifact(filename, data)
-				if err != nil {
-					return nil, fmt.Errorf("writing artifact for pod %s/%s: %w", pod.Namespace, pod.Name, err)
-				}
-				artifacts = append(artifacts, engine.Artifact{
-					RelativePath: relPath,
-					Description:  fmt.Sprintf("Pod %s/%s manifest", pod.Namespace, pod.Name),
-				})
-			}
-		}
+		total += len(pods)
+		artifacts = append(artifacts, collectAndWriteManifests(params.ArtifactWriter, pods,
+			func(pod *corev1.Pod) string { return filepath.Join(pod.Namespace, pod.Name+".yaml") },
+			func(pod *corev1.Pod) string {
+				return fmt.Sprintf("Pod %s/%s manifest", pod.Namespace, pod.Name)
+			},
+		)...)
 	}
 
 	return &engine.CollectorResult{

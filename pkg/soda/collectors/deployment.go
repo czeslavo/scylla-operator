@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 
 	"github.com/scylladb/scylla-operator/pkg/soda/engine"
+	appsv1 "k8s.io/api/apps/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -62,25 +62,13 @@ func (c *deploymentCollector) CollectClusterWide(ctx context.Context, params eng
 		if err != nil {
 			return nil, fmt.Errorf("listing deployments in namespace %s: %w", ns, err)
 		}
-		for i := range deployments {
-			d := &deployments[i]
-			total++
-			if params.ArtifactWriter != nil {
-				data, err := yaml.Marshal(d)
-				if err != nil {
-					return nil, fmt.Errorf("marshaling deployment %s/%s: %w", d.Namespace, d.Name, err)
-				}
-				filename := filepath.Join(d.Namespace, d.Name+".yaml")
-				relPath, err := params.ArtifactWriter.WriteArtifact(filename, data)
-				if err != nil {
-					return nil, fmt.Errorf("writing artifact for deployment %s/%s: %w", d.Namespace, d.Name, err)
-				}
-				artifacts = append(artifacts, engine.Artifact{
-					RelativePath: relPath,
-					Description:  fmt.Sprintf("Deployment %s/%s manifest", d.Namespace, d.Name),
-				})
-			}
-		}
+		total += len(deployments)
+		artifacts = append(artifacts, collectAndWriteManifests(params.ArtifactWriter, deployments,
+			func(d *appsv1.Deployment) string { return filepath.Join(d.Namespace, d.Name+".yaml") },
+			func(d *appsv1.Deployment) string {
+				return fmt.Sprintf("Deployment %s/%s manifest", d.Namespace, d.Name)
+			},
+		)...)
 	}
 
 	return &engine.CollectorResult{

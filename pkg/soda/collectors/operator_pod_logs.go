@@ -85,33 +85,8 @@ func (c *operatorPodLogsCollector) CollectClusterWide(ctx context.Context, param
 				containerNames = append(containerNames, c.Name)
 			}
 
-			for _, containerName := range containerNames {
-				// Current logs.
-				currentLogs, err := params.PodLogFetcher.GetPodLogs(ctx, ns, pod.Name, containerName, false)
-				if err == nil && params.ArtifactWriter != nil {
-					filename := path.Join(ns, pod.Name, containerName+".current.log")
-					relPath, err := params.ArtifactWriter.WriteArtifact(filename, currentLogs)
-					if err == nil {
-						artifacts = append(artifacts, engine.Artifact{
-							RelativePath: relPath,
-							Description:  fmt.Sprintf("Current logs for container %s in pod %s/%s", containerName, ns, pod.Name),
-						})
-					}
-				}
-
-				// Previous logs (best-effort: skip if no previous run).
-				previousLogs, err := params.PodLogFetcher.GetPodLogs(ctx, ns, pod.Name, containerName, true)
-				if err == nil && params.ArtifactWriter != nil {
-					filename := path.Join(ns, pod.Name, containerName+".previous.log")
-					relPath, err := params.ArtifactWriter.WriteArtifact(filename, previousLogs)
-					if err == nil {
-						artifacts = append(artifacts, engine.Artifact{
-							RelativePath: relPath,
-							Description:  fmt.Sprintf("Previous logs for container %s in pod %s/%s", containerName, ns, pod.Name),
-						})
-					}
-				}
-			}
+			artifacts = append(artifacts, collectContainerLogs(ctx, params.PodLogFetcher, params.ArtifactWriter,
+				ns, pod.Name, containerNames, path.Join(ns, pod.Name))...)
 		}
 	}
 
