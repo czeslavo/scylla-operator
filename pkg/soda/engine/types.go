@@ -213,6 +213,7 @@ type PerScyllaClusterCollectorParams struct {
 	Vitals         *Vitals
 	ScyllaCluster  *ScyllaClusterInfo // Always non-nil.
 	ResourceLister ResourceLister
+	PodLogFetcher  PodLogFetcher // May be nil in offline mode.
 	ArtifactWriter ArtifactWriter
 }
 

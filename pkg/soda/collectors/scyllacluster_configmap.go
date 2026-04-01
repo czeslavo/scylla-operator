@@ -23,38 +23,22 @@ type ScyllaClusterConfigMapResult struct {
 
 // GetScyllaClusterConfigMapResult is the typed accessor for ScyllaClusterConfigMapCollector results.
 func GetScyllaClusterConfigMapResult(vitals *engine.Vitals, scopeKey engine.ScopeKey) (*ScyllaClusterConfigMapResult, error) {
-	result, ok := vitals.Get(ScyllaClusterConfigMapCollectorID, scopeKey)
-	if !ok {
-		return nil, fmt.Errorf("ScyllaClusterConfigMapCollector result not found for %v", scopeKey)
-	}
-	if result.Status != engine.CollectorPassed {
-		return nil, fmt.Errorf("ScyllaClusterConfigMapCollector did not pass for %v: %s", scopeKey, result.Message)
-	}
-	typed, ok := result.Data.(*ScyllaClusterConfigMapResult)
-	if !ok {
-		return nil, fmt.Errorf("unexpected data type %T for ScyllaClusterConfigMapCollector", result.Data)
-	}
-	return typed, nil
+	return engine.GetResult[ScyllaClusterConfigMapResult](vitals, ScyllaClusterConfigMapCollectorID, scopeKey)
 }
 
 // scyllaClusterConfigMapCollector collects ConfigMap manifests owned by a ScyllaCluster.
-type scyllaClusterConfigMapCollector struct{}
+type scyllaClusterConfigMapCollector struct {
+	engine.CollectorBase
+}
 
-var _ engine.Collector = (*scyllaClusterConfigMapCollector)(nil)
+var _ engine.PerScyllaClusterCollector = (*scyllaClusterConfigMapCollector)(nil)
 
 // NewScyllaClusterConfigMapCollector creates a new ScyllaClusterConfigMapCollector.
-func NewScyllaClusterConfigMapCollector() engine.Collector {
-	return &scyllaClusterConfigMapCollector{}
+func NewScyllaClusterConfigMapCollector() engine.PerScyllaClusterCollector {
+	return &scyllaClusterConfigMapCollector{
+		CollectorBase: engine.NewCollectorBase(ScyllaClusterConfigMapCollectorID, "ScyllaCluster ConfigMap manifests", engine.PerScyllaCluster, nil),
+	}
 }
-
-func (c *scyllaClusterConfigMapCollector) ID() engine.CollectorID {
-	return ScyllaClusterConfigMapCollectorID
-}
-func (c *scyllaClusterConfigMapCollector) Name() string { return "ScyllaCluster ConfigMap manifests" }
-func (c *scyllaClusterConfigMapCollector) Scope() engine.CollectorScope {
-	return engine.PerScyllaCluster
-}
-func (c *scyllaClusterConfigMapCollector) DependsOn() []engine.CollectorID { return nil }
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -69,7 +53,7 @@ func (c *scyllaClusterConfigMapCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *scyllaClusterConfigMapCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
+func (c *scyllaClusterConfigMapCollector) CollectPerScyllaCluster(ctx context.Context, params engine.PerScyllaClusterCollectorParams) (*engine.CollectorResult, error) {
 	sc := params.ScyllaCluster
 	selector := labels.SelectorFromSet(labels.Set{naming.ClusterNameLabel: sc.Name})
 

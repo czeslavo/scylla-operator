@@ -23,36 +23,22 @@ type ScyllaClusterServiceResult struct {
 
 // GetScyllaClusterServiceResult is the typed accessor for ScyllaClusterServiceCollector results.
 func GetScyllaClusterServiceResult(vitals *engine.Vitals, scopeKey engine.ScopeKey) (*ScyllaClusterServiceResult, error) {
-	result, ok := vitals.Get(ScyllaClusterServiceCollectorID, scopeKey)
-	if !ok {
-		return nil, fmt.Errorf("ScyllaClusterServiceCollector result not found for %v", scopeKey)
-	}
-	if result.Status != engine.CollectorPassed {
-		return nil, fmt.Errorf("ScyllaClusterServiceCollector did not pass for %v: %s", scopeKey, result.Message)
-	}
-	typed, ok := result.Data.(*ScyllaClusterServiceResult)
-	if !ok {
-		return nil, fmt.Errorf("unexpected data type %T for ScyllaClusterServiceCollector", result.Data)
-	}
-	return typed, nil
+	return engine.GetResult[ScyllaClusterServiceResult](vitals, ScyllaClusterServiceCollectorID, scopeKey)
 }
 
 // scyllaClusterServiceCollector collects Service manifests owned by a ScyllaCluster.
-type scyllaClusterServiceCollector struct{}
+type scyllaClusterServiceCollector struct {
+	engine.CollectorBase
+}
 
-var _ engine.Collector = (*scyllaClusterServiceCollector)(nil)
+var _ engine.PerScyllaClusterCollector = (*scyllaClusterServiceCollector)(nil)
 
 // NewScyllaClusterServiceCollector creates a new ScyllaClusterServiceCollector.
-func NewScyllaClusterServiceCollector() engine.Collector {
-	return &scyllaClusterServiceCollector{}
+func NewScyllaClusterServiceCollector() engine.PerScyllaClusterCollector {
+	return &scyllaClusterServiceCollector{
+		CollectorBase: engine.NewCollectorBase(ScyllaClusterServiceCollectorID, "ScyllaCluster Service manifests", engine.PerScyllaCluster, nil),
+	}
 }
-
-func (c *scyllaClusterServiceCollector) ID() engine.CollectorID {
-	return ScyllaClusterServiceCollectorID
-}
-func (c *scyllaClusterServiceCollector) Name() string                    { return "ScyllaCluster Service manifests" }
-func (c *scyllaClusterServiceCollector) Scope() engine.CollectorScope    { return engine.PerScyllaCluster }
-func (c *scyllaClusterServiceCollector) DependsOn() []engine.CollectorID { return nil }
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -67,7 +53,7 @@ func (c *scyllaClusterServiceCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *scyllaClusterServiceCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
+func (c *scyllaClusterServiceCollector) CollectPerScyllaCluster(ctx context.Context, params engine.PerScyllaClusterCollectorParams) (*engine.CollectorResult, error) {
 	sc := params.ScyllaCluster
 	selector := labels.SelectorFromSet(labels.Set{naming.ClusterNameLabel: sc.Name})
 

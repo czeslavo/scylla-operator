@@ -23,40 +23,22 @@ type ScyllaClusterRoleBindingResult struct {
 
 // GetScyllaClusterRoleBindingResult is the typed accessor for ScyllaClusterRoleBindingCollector results.
 func GetScyllaClusterRoleBindingResult(vitals *engine.Vitals, scopeKey engine.ScopeKey) (*ScyllaClusterRoleBindingResult, error) {
-	result, ok := vitals.Get(ScyllaClusterRoleBindingCollectorID, scopeKey)
-	if !ok {
-		return nil, fmt.Errorf("ScyllaClusterRoleBindingCollector result not found for %v", scopeKey)
-	}
-	if result.Status != engine.CollectorPassed {
-		return nil, fmt.Errorf("ScyllaClusterRoleBindingCollector did not pass for %v: %s", scopeKey, result.Message)
-	}
-	typed, ok := result.Data.(*ScyllaClusterRoleBindingResult)
-	if !ok {
-		return nil, fmt.Errorf("unexpected data type %T for ScyllaClusterRoleBindingCollector", result.Data)
-	}
-	return typed, nil
+	return engine.GetResult[ScyllaClusterRoleBindingResult](vitals, ScyllaClusterRoleBindingCollectorID, scopeKey)
 }
 
 // scyllaClusterRoleBindingCollector collects RoleBinding manifests owned by a ScyllaCluster.
-type scyllaClusterRoleBindingCollector struct{}
+type scyllaClusterRoleBindingCollector struct {
+	engine.CollectorBase
+}
 
-var _ engine.Collector = (*scyllaClusterRoleBindingCollector)(nil)
+var _ engine.PerScyllaClusterCollector = (*scyllaClusterRoleBindingCollector)(nil)
 
 // NewScyllaClusterRoleBindingCollector creates a new ScyllaClusterRoleBindingCollector.
-func NewScyllaClusterRoleBindingCollector() engine.Collector {
-	return &scyllaClusterRoleBindingCollector{}
+func NewScyllaClusterRoleBindingCollector() engine.PerScyllaClusterCollector {
+	return &scyllaClusterRoleBindingCollector{
+		CollectorBase: engine.NewCollectorBase(ScyllaClusterRoleBindingCollectorID, "ScyllaCluster RoleBinding manifests", engine.PerScyllaCluster, nil),
+	}
 }
-
-func (c *scyllaClusterRoleBindingCollector) ID() engine.CollectorID {
-	return ScyllaClusterRoleBindingCollectorID
-}
-func (c *scyllaClusterRoleBindingCollector) Name() string {
-	return "ScyllaCluster RoleBinding manifests"
-}
-func (c *scyllaClusterRoleBindingCollector) Scope() engine.CollectorScope {
-	return engine.PerScyllaCluster
-}
-func (c *scyllaClusterRoleBindingCollector) DependsOn() []engine.CollectorID { return nil }
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -71,7 +53,7 @@ func (c *scyllaClusterRoleBindingCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *scyllaClusterRoleBindingCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
+func (c *scyllaClusterRoleBindingCollector) CollectPerScyllaCluster(ctx context.Context, params engine.PerScyllaClusterCollectorParams) (*engine.CollectorResult, error) {
 	sc := params.ScyllaCluster
 	selector := labels.SelectorFromSet(labels.Set{naming.ClusterNameLabel: sc.Name})
 

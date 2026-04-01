@@ -23,36 +23,22 @@ type ScyllaClusterPVCResult struct {
 
 // GetScyllaClusterPVCResult is the typed accessor for ScyllaClusterPVCCollector results.
 func GetScyllaClusterPVCResult(vitals *engine.Vitals, scopeKey engine.ScopeKey) (*ScyllaClusterPVCResult, error) {
-	result, ok := vitals.Get(ScyllaClusterPVCCollectorID, scopeKey)
-	if !ok {
-		return nil, fmt.Errorf("ScyllaClusterPVCCollector result not found for %v", scopeKey)
-	}
-	if result.Status != engine.CollectorPassed {
-		return nil, fmt.Errorf("ScyllaClusterPVCCollector did not pass for %v: %s", scopeKey, result.Message)
-	}
-	typed, ok := result.Data.(*ScyllaClusterPVCResult)
-	if !ok {
-		return nil, fmt.Errorf("unexpected data type %T for ScyllaClusterPVCCollector", result.Data)
-	}
-	return typed, nil
+	return engine.GetResult[ScyllaClusterPVCResult](vitals, ScyllaClusterPVCCollectorID, scopeKey)
 }
 
 // scyllaClusterPVCCollector collects PersistentVolumeClaim manifests owned by a ScyllaCluster.
-type scyllaClusterPVCCollector struct{}
+type scyllaClusterPVCCollector struct {
+	engine.CollectorBase
+}
 
-var _ engine.Collector = (*scyllaClusterPVCCollector)(nil)
+var _ engine.PerScyllaClusterCollector = (*scyllaClusterPVCCollector)(nil)
 
 // NewScyllaClusterPVCCollector creates a new ScyllaClusterPVCCollector.
-func NewScyllaClusterPVCCollector() engine.Collector {
-	return &scyllaClusterPVCCollector{}
+func NewScyllaClusterPVCCollector() engine.PerScyllaClusterCollector {
+	return &scyllaClusterPVCCollector{
+		CollectorBase: engine.NewCollectorBase(ScyllaClusterPVCCollectorID, "ScyllaCluster PersistentVolumeClaim manifests", engine.PerScyllaCluster, nil),
+	}
 }
-
-func (c *scyllaClusterPVCCollector) ID() engine.CollectorID { return ScyllaClusterPVCCollectorID }
-func (c *scyllaClusterPVCCollector) Name() string {
-	return "ScyllaCluster PersistentVolumeClaim manifests"
-}
-func (c *scyllaClusterPVCCollector) Scope() engine.CollectorScope    { return engine.PerScyllaCluster }
-func (c *scyllaClusterPVCCollector) DependsOn() []engine.CollectorID { return nil }
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -67,7 +53,7 @@ func (c *scyllaClusterPVCCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *scyllaClusterPVCCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
+func (c *scyllaClusterPVCCollector) CollectPerScyllaCluster(ctx context.Context, params engine.PerScyllaClusterCollectorParams) (*engine.CollectorResult, error) {
 	sc := params.ScyllaCluster
 	selector := labels.SelectorFromSet(labels.Set{naming.ClusterNameLabel: sc.Name})
 

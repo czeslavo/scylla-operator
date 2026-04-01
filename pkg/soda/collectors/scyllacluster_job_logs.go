@@ -24,21 +24,18 @@ type ScyllaClusterJobLogsResult struct {
 
 // scyllaClusterJobLogsCollector collects current and previous container logs from
 // cleanup job pods belonging to a ScyllaCluster/ScyllaDBDatacenter.
-type scyllaClusterJobLogsCollector struct{}
+type scyllaClusterJobLogsCollector struct {
+	engine.CollectorBase
+}
 
-var _ engine.Collector = (*scyllaClusterJobLogsCollector)(nil)
+var _ engine.PerScyllaClusterCollector = (*scyllaClusterJobLogsCollector)(nil)
 
 // NewScyllaClusterJobLogsCollector creates a new ScyllaClusterJobLogsCollector.
-func NewScyllaClusterJobLogsCollector() engine.Collector {
-	return &scyllaClusterJobLogsCollector{}
+func NewScyllaClusterJobLogsCollector() engine.PerScyllaClusterCollector {
+	return &scyllaClusterJobLogsCollector{
+		CollectorBase: engine.NewCollectorBase(ScyllaClusterJobLogsCollectorID, "ScyllaCluster cleanup job pod logs", engine.PerScyllaCluster, nil),
+	}
 }
-
-func (c *scyllaClusterJobLogsCollector) ID() engine.CollectorID {
-	return ScyllaClusterJobLogsCollectorID
-}
-func (c *scyllaClusterJobLogsCollector) Name() string                    { return "ScyllaCluster cleanup job pod logs" }
-func (c *scyllaClusterJobLogsCollector) Scope() engine.CollectorScope    { return engine.PerScyllaCluster }
-func (c *scyllaClusterJobLogsCollector) DependsOn() []engine.CollectorID { return nil }
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -59,7 +56,7 @@ func (c *scyllaClusterJobLogsCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *scyllaClusterJobLogsCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
+func (c *scyllaClusterJobLogsCollector) CollectPerScyllaCluster(ctx context.Context, params engine.PerScyllaClusterCollectorParams) (*engine.CollectorResult, error) {
 	if params.PodLogFetcher == nil {
 		return &engine.CollectorResult{
 			Status:  engine.CollectorSkipped,

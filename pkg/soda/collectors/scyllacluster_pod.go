@@ -23,34 +23,22 @@ type ScyllaClusterPodResult struct {
 
 // GetScyllaClusterPodResult is the typed accessor for ScyllaClusterPodCollector results.
 func GetScyllaClusterPodResult(vitals *engine.Vitals, scopeKey engine.ScopeKey) (*ScyllaClusterPodResult, error) {
-	result, ok := vitals.Get(ScyllaClusterPodCollectorID, scopeKey)
-	if !ok {
-		return nil, fmt.Errorf("ScyllaClusterPodCollector result not found for %v", scopeKey)
-	}
-	if result.Status != engine.CollectorPassed {
-		return nil, fmt.Errorf("ScyllaClusterPodCollector did not pass for %v: %s", scopeKey, result.Message)
-	}
-	typed, ok := result.Data.(*ScyllaClusterPodResult)
-	if !ok {
-		return nil, fmt.Errorf("unexpected data type %T for ScyllaClusterPodCollector", result.Data)
-	}
-	return typed, nil
+	return engine.GetResult[ScyllaClusterPodResult](vitals, ScyllaClusterPodCollectorID, scopeKey)
 }
 
 // scyllaClusterPodCollector collects Pod manifests owned by a ScyllaCluster.
-type scyllaClusterPodCollector struct{}
-
-var _ engine.Collector = (*scyllaClusterPodCollector)(nil)
-
-// NewScyllaClusterPodCollector creates a new ScyllaClusterPodCollector.
-func NewScyllaClusterPodCollector() engine.Collector {
-	return &scyllaClusterPodCollector{}
+type scyllaClusterPodCollector struct {
+	engine.CollectorBase
 }
 
-func (c *scyllaClusterPodCollector) ID() engine.CollectorID          { return ScyllaClusterPodCollectorID }
-func (c *scyllaClusterPodCollector) Name() string                    { return "ScyllaCluster Pod manifests" }
-func (c *scyllaClusterPodCollector) Scope() engine.CollectorScope    { return engine.PerScyllaCluster }
-func (c *scyllaClusterPodCollector) DependsOn() []engine.CollectorID { return nil }
+var _ engine.PerScyllaClusterCollector = (*scyllaClusterPodCollector)(nil)
+
+// NewScyllaClusterPodCollector creates a new ScyllaClusterPodCollector.
+func NewScyllaClusterPodCollector() engine.PerScyllaClusterCollector {
+	return &scyllaClusterPodCollector{
+		CollectorBase: engine.NewCollectorBase(ScyllaClusterPodCollectorID, "ScyllaCluster Pod manifests", engine.PerScyllaCluster, nil),
+	}
+}
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -65,7 +53,7 @@ func (c *scyllaClusterPodCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *scyllaClusterPodCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
+func (c *scyllaClusterPodCollector) CollectPerScyllaCluster(ctx context.Context, params engine.PerScyllaClusterCollectorParams) (*engine.CollectorResult, error) {
 	sc := params.ScyllaCluster
 	selector := labels.SelectorFromSet(labels.Set{naming.ClusterNameLabel: sc.Name})
 

@@ -250,6 +250,7 @@ func (e *Engine) executePerScyllaClusterCollector(ctx context.Context, collector
 			Vitals:         vitals,
 			ScyllaCluster:  cluster,
 			ResourceLister: e.config.ResourceLister,
+			PodLogFetcher:  e.config.PodLogFetcher,
 			ArtifactWriter: artifactWriter,
 		})
 	case Collector:

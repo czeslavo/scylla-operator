@@ -23,36 +23,22 @@ type ScyllaClusterPDBResult struct {
 
 // GetScyllaClusterPDBResult is the typed accessor for ScyllaClusterPDBCollector results.
 func GetScyllaClusterPDBResult(vitals *engine.Vitals, scopeKey engine.ScopeKey) (*ScyllaClusterPDBResult, error) {
-	result, ok := vitals.Get(ScyllaClusterPDBCollectorID, scopeKey)
-	if !ok {
-		return nil, fmt.Errorf("ScyllaClusterPDBCollector result not found for %v", scopeKey)
-	}
-	if result.Status != engine.CollectorPassed {
-		return nil, fmt.Errorf("ScyllaClusterPDBCollector did not pass for %v: %s", scopeKey, result.Message)
-	}
-	typed, ok := result.Data.(*ScyllaClusterPDBResult)
-	if !ok {
-		return nil, fmt.Errorf("unexpected data type %T for ScyllaClusterPDBCollector", result.Data)
-	}
-	return typed, nil
+	return engine.GetResult[ScyllaClusterPDBResult](vitals, ScyllaClusterPDBCollectorID, scopeKey)
 }
 
 // scyllaClusterPDBCollector collects PodDisruptionBudget manifests owned by a ScyllaCluster.
-type scyllaClusterPDBCollector struct{}
+type scyllaClusterPDBCollector struct {
+	engine.CollectorBase
+}
 
-var _ engine.Collector = (*scyllaClusterPDBCollector)(nil)
+var _ engine.PerScyllaClusterCollector = (*scyllaClusterPDBCollector)(nil)
 
 // NewScyllaClusterPDBCollector creates a new ScyllaClusterPDBCollector.
-func NewScyllaClusterPDBCollector() engine.Collector {
-	return &scyllaClusterPDBCollector{}
+func NewScyllaClusterPDBCollector() engine.PerScyllaClusterCollector {
+	return &scyllaClusterPDBCollector{
+		CollectorBase: engine.NewCollectorBase(ScyllaClusterPDBCollectorID, "ScyllaCluster PodDisruptionBudget manifests", engine.PerScyllaCluster, nil),
+	}
 }
-
-func (c *scyllaClusterPDBCollector) ID() engine.CollectorID { return ScyllaClusterPDBCollectorID }
-func (c *scyllaClusterPDBCollector) Name() string {
-	return "ScyllaCluster PodDisruptionBudget manifests"
-}
-func (c *scyllaClusterPDBCollector) Scope() engine.CollectorScope    { return engine.PerScyllaCluster }
-func (c *scyllaClusterPDBCollector) DependsOn() []engine.CollectorID { return nil }
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -67,7 +53,7 @@ func (c *scyllaClusterPDBCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *scyllaClusterPDBCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
+func (c *scyllaClusterPDBCollector) CollectPerScyllaCluster(ctx context.Context, params engine.PerScyllaClusterCollectorParams) (*engine.CollectorResult, error) {
 	sc := params.ScyllaCluster
 	selector := labels.SelectorFromSet(labels.Set{naming.ClusterNameLabel: sc.Name})
 

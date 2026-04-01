@@ -23,40 +23,22 @@ type ScyllaClusterStatefulSetResult struct {
 
 // GetScyllaClusterStatefulSetResult is the typed accessor for ScyllaClusterStatefulSetCollector results.
 func GetScyllaClusterStatefulSetResult(vitals *engine.Vitals, scopeKey engine.ScopeKey) (*ScyllaClusterStatefulSetResult, error) {
-	result, ok := vitals.Get(ScyllaClusterStatefulSetCollectorID, scopeKey)
-	if !ok {
-		return nil, fmt.Errorf("ScyllaClusterStatefulSetCollector result not found for %v", scopeKey)
-	}
-	if result.Status != engine.CollectorPassed {
-		return nil, fmt.Errorf("ScyllaClusterStatefulSetCollector did not pass for %v: %s", scopeKey, result.Message)
-	}
-	typed, ok := result.Data.(*ScyllaClusterStatefulSetResult)
-	if !ok {
-		return nil, fmt.Errorf("unexpected data type %T for ScyllaClusterStatefulSetCollector", result.Data)
-	}
-	return typed, nil
+	return engine.GetResult[ScyllaClusterStatefulSetResult](vitals, ScyllaClusterStatefulSetCollectorID, scopeKey)
 }
 
 // scyllaClusterStatefulSetCollector collects StatefulSet manifests owned by a ScyllaCluster.
-type scyllaClusterStatefulSetCollector struct{}
+type scyllaClusterStatefulSetCollector struct {
+	engine.CollectorBase
+}
 
-var _ engine.Collector = (*scyllaClusterStatefulSetCollector)(nil)
+var _ engine.PerScyllaClusterCollector = (*scyllaClusterStatefulSetCollector)(nil)
 
 // NewScyllaClusterStatefulSetCollector creates a new ScyllaClusterStatefulSetCollector.
-func NewScyllaClusterStatefulSetCollector() engine.Collector {
-	return &scyllaClusterStatefulSetCollector{}
+func NewScyllaClusterStatefulSetCollector() engine.PerScyllaClusterCollector {
+	return &scyllaClusterStatefulSetCollector{
+		CollectorBase: engine.NewCollectorBase(ScyllaClusterStatefulSetCollectorID, "ScyllaCluster StatefulSet manifests", engine.PerScyllaCluster, nil),
+	}
 }
-
-func (c *scyllaClusterStatefulSetCollector) ID() engine.CollectorID {
-	return ScyllaClusterStatefulSetCollectorID
-}
-func (c *scyllaClusterStatefulSetCollector) Name() string {
-	return "ScyllaCluster StatefulSet manifests"
-}
-func (c *scyllaClusterStatefulSetCollector) Scope() engine.CollectorScope {
-	return engine.PerScyllaCluster
-}
-func (c *scyllaClusterStatefulSetCollector) DependsOn() []engine.CollectorID { return nil }
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -71,7 +53,7 @@ func (c *scyllaClusterStatefulSetCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *scyllaClusterStatefulSetCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
+func (c *scyllaClusterStatefulSetCollector) CollectPerScyllaCluster(ctx context.Context, params engine.PerScyllaClusterCollectorParams) (*engine.CollectorResult, error) {
 	sc := params.ScyllaCluster
 	selector := labels.SelectorFromSet(labels.Set{naming.ClusterNameLabel: sc.Name})
 
