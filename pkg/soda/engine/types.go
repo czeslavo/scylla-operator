@@ -12,6 +12,7 @@ import (
 	scyllav1alpha1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/labels"
 )
@@ -223,14 +224,21 @@ type ResourceLister interface {
 	// Kubernetes core resources
 	ListNodes(ctx context.Context) ([]corev1.Node, error)
 	ListPods(ctx context.Context, namespace string, selector labels.Selector) ([]corev1.Pod, error)
-	ListConfigMaps(ctx context.Context, namespace string) ([]corev1.ConfigMap, error)
-	ListServices(ctx context.Context, namespace string) ([]corev1.Service, error)
-	ListServiceAccounts(ctx context.Context, namespace string) ([]corev1.ServiceAccount, error)
+	ListConfigMaps(ctx context.Context, namespace string, selector labels.Selector) ([]corev1.ConfigMap, error)
+	ListServices(ctx context.Context, namespace string, selector labels.Selector) ([]corev1.Service, error)
+	ListServiceAccounts(ctx context.Context, namespace string, selector labels.Selector) ([]corev1.ServiceAccount, error)
+	ListPersistentVolumeClaims(ctx context.Context, namespace string, selector labels.Selector) ([]corev1.PersistentVolumeClaim, error)
 
 	// Kubernetes apps resources
-	ListDeployments(ctx context.Context, namespace string) ([]appsv1.Deployment, error)
-	ListStatefulSets(ctx context.Context, namespace string) ([]appsv1.StatefulSet, error)
-	ListDaemonSets(ctx context.Context, namespace string) ([]appsv1.DaemonSet, error)
+	ListDeployments(ctx context.Context, namespace string, selector labels.Selector) ([]appsv1.Deployment, error)
+	ListStatefulSets(ctx context.Context, namespace string, selector labels.Selector) ([]appsv1.StatefulSet, error)
+	ListDaemonSets(ctx context.Context, namespace string, selector labels.Selector) ([]appsv1.DaemonSet, error)
+
+	// Kubernetes policy resources
+	ListPodDisruptionBudgets(ctx context.Context, namespace string, selector labels.Selector) ([]policyv1.PodDisruptionBudget, error)
+
+	// Kubernetes RBAC resources
+	ListRoleBindings(ctx context.Context, namespace string, selector labels.Selector) ([]rbacv1.RoleBinding, error)
 
 	// Scylla resources
 	ListScyllaClusters(ctx context.Context, namespace string) ([]ScyllaClusterInfo, error)
