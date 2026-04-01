@@ -18,6 +18,7 @@ func AllCollectors() []engine.Collector {
 		NewSystemPeersLocalCollector(),
 		NewGossipInfoCollector(),
 		NewSystemTopologyCollector(),
+		NewSystemConfigCollector(),
 	}
 }
 
@@ -49,5 +50,6 @@ func ResultTypeRegistry() map[engine.CollectorID]any {
 		SystemPeersLocalCollectorID:    &SystemPeersLocalResult{},
 		GossipInfoCollectorID:          &GossipInfoResult{},
 		SystemTopologyCollectorID:      &SystemTopologyResult{},
+		SystemConfigCollectorID:        &SystemConfigResult{},
 	}
 }
