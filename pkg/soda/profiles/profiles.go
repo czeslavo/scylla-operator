@@ -28,6 +28,7 @@ func AllProfiles() map[string]engine.Profile {
 				collectors.ScyllaVersionCollectorID,
 				collectors.ScyllaConfigCollectorID,
 				collectors.SystemPeersLocalCollectorID,
+				collectors.GossipInfoCollectorID,
 			},
 			Analyzers: []engine.AnalyzerID{
 				analyzers.ScyllaVersionSupportAnalyzerID,

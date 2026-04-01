@@ -16,6 +16,7 @@ func AllCollectors() []engine.Collector {
 		NewSchemaVersionsCollector(),
 		NewScyllaConfigCollector(),
 		NewSystemPeersLocalCollector(),
+		NewGossipInfoCollector(),
 	}
 }
 
@@ -45,5 +46,6 @@ func ResultTypeRegistry() map[engine.CollectorID]any {
 		SchemaVersionsCollectorID:      &SchemaVersionsResult{},
 		ScyllaConfigCollectorID:        &ScyllaConfigResult{},
 		SystemPeersLocalCollectorID:    &SystemPeersLocalResult{},
+		GossipInfoCollectorID:          &GossipInfoResult{},
 	}
 }
