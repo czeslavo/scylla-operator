@@ -37,18 +37,7 @@ type NodeConditionInfo struct {
 
 // GetNodeResourcesResult is the typed accessor for NodeResourcesCollector results.
 func GetNodeResourcesResult(vitals *engine.Vitals, scopeKey engine.ScopeKey) (*NodeResourcesResult, error) {
-	result, ok := vitals.Get(NodeResourcesCollectorID, scopeKey)
-	if !ok {
-		return nil, fmt.Errorf("NodeResourcesCollector result not found for %v", scopeKey)
-	}
-	if result.Status != engine.CollectorPassed {
-		return nil, fmt.Errorf("NodeResourcesCollector did not pass for %v: %s", scopeKey, result.Message)
-	}
-	typed, ok := result.Data.(*NodeResourcesResult)
-	if !ok {
-		return nil, fmt.Errorf("unexpected data type %T for NodeResourcesCollector", result.Data)
-	}
-	return typed, nil
+	return engine.GetResult[NodeResourcesResult](vitals, NodeResourcesCollectorID, scopeKey)
 }
 
 // ReadNodesYAML reads the raw nodes.yaml artifact.
@@ -57,19 +46,18 @@ func ReadNodesYAML(reader engine.ArtifactReader, scopeKey engine.ScopeKey) ([]by
 }
 
 // nodeResourcesCollector collects Kubernetes Node information.
-type nodeResourcesCollector struct{}
-
-var _ engine.Collector = (*nodeResourcesCollector)(nil)
-
-// NewNodeResourcesCollector creates a new NodeResourcesCollector.
-func NewNodeResourcesCollector() engine.Collector {
-	return &nodeResourcesCollector{}
+type nodeResourcesCollector struct {
+	engine.CollectorBase
 }
 
-func (c *nodeResourcesCollector) ID() engine.CollectorID          { return NodeResourcesCollectorID }
-func (c *nodeResourcesCollector) Name() string                    { return "Kubernetes Node resources" }
-func (c *nodeResourcesCollector) Scope() engine.CollectorScope    { return engine.ClusterWide }
-func (c *nodeResourcesCollector) DependsOn() []engine.CollectorID { return nil }
+var _ engine.ClusterWideCollector = (*nodeResourcesCollector)(nil)
+
+// NewNodeResourcesCollector creates a new NodeResourcesCollector.
+func NewNodeResourcesCollector() engine.ClusterWideCollector {
+	return &nodeResourcesCollector{
+		CollectorBase: engine.NewCollectorBase(NodeResourcesCollectorID, "Kubernetes Node resources", engine.ClusterWide, nil),
+	}
+}
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -84,7 +72,7 @@ func (c *nodeResourcesCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *nodeResourcesCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
+func (c *nodeResourcesCollector) CollectClusterWide(ctx context.Context, params engine.ClusterWideCollectorParams) (*engine.CollectorResult, error) {
 	nodes, err := params.ResourceLister.ListNodes(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("listing nodes: %w", err)

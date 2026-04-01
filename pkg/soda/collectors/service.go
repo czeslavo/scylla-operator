@@ -23,34 +23,22 @@ type ServiceResult struct {
 
 // GetServiceResult is the typed accessor for ServiceCollector results.
 func GetServiceResult(vitals *engine.Vitals, scopeKey engine.ScopeKey) (*ServiceResult, error) {
-	result, ok := vitals.Get(ServiceCollectorID, scopeKey)
-	if !ok {
-		return nil, fmt.Errorf("ServiceCollector result not found for %v", scopeKey)
-	}
-	if result.Status != engine.CollectorPassed {
-		return nil, fmt.Errorf("ServiceCollector did not pass for %v: %s", scopeKey, result.Message)
-	}
-	typed, ok := result.Data.(*ServiceResult)
-	if !ok {
-		return nil, fmt.Errorf("unexpected data type %T for ServiceCollector", result.Data)
-	}
-	return typed, nil
+	return engine.GetResult[ServiceResult](vitals, ServiceCollectorID, scopeKey)
 }
 
 // serviceCollector collects Service manifests from operator namespaces.
-type serviceCollector struct{}
-
-var _ engine.Collector = (*serviceCollector)(nil)
-
-// NewServiceCollector creates a new ServiceCollector.
-func NewServiceCollector() engine.Collector {
-	return &serviceCollector{}
+type serviceCollector struct {
+	engine.CollectorBase
 }
 
-func (c *serviceCollector) ID() engine.CollectorID          { return ServiceCollectorID }
-func (c *serviceCollector) Name() string                    { return "Service manifests" }
-func (c *serviceCollector) Scope() engine.CollectorScope    { return engine.ClusterWide }
-func (c *serviceCollector) DependsOn() []engine.CollectorID { return nil }
+var _ engine.ClusterWideCollector = (*serviceCollector)(nil)
+
+// NewServiceCollector creates a new ServiceCollector.
+func NewServiceCollector() engine.ClusterWideCollector {
+	return &serviceCollector{
+		CollectorBase: engine.NewCollectorBase(ServiceCollectorID, "Service manifests", engine.ClusterWide, nil),
+	}
+}
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -65,7 +53,7 @@ func (c *serviceCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *serviceCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
+func (c *serviceCollector) CollectClusterWide(ctx context.Context, params engine.ClusterWideCollectorParams) (*engine.CollectorResult, error) {
 	var artifacts []engine.Artifact
 	total := 0
 

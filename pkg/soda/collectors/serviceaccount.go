@@ -23,34 +23,22 @@ type ServiceAccountResult struct {
 
 // GetServiceAccountResult is the typed accessor for ServiceAccountCollector results.
 func GetServiceAccountResult(vitals *engine.Vitals, scopeKey engine.ScopeKey) (*ServiceAccountResult, error) {
-	result, ok := vitals.Get(ServiceAccountCollectorID, scopeKey)
-	if !ok {
-		return nil, fmt.Errorf("ServiceAccountCollector result not found for %v", scopeKey)
-	}
-	if result.Status != engine.CollectorPassed {
-		return nil, fmt.Errorf("ServiceAccountCollector did not pass for %v: %s", scopeKey, result.Message)
-	}
-	typed, ok := result.Data.(*ServiceAccountResult)
-	if !ok {
-		return nil, fmt.Errorf("unexpected data type %T for ServiceAccountCollector", result.Data)
-	}
-	return typed, nil
+	return engine.GetResult[ServiceAccountResult](vitals, ServiceAccountCollectorID, scopeKey)
 }
 
 // serviceAccountCollector collects ServiceAccount manifests from operator namespaces.
-type serviceAccountCollector struct{}
-
-var _ engine.Collector = (*serviceAccountCollector)(nil)
-
-// NewServiceAccountCollector creates a new ServiceAccountCollector.
-func NewServiceAccountCollector() engine.Collector {
-	return &serviceAccountCollector{}
+type serviceAccountCollector struct {
+	engine.CollectorBase
 }
 
-func (c *serviceAccountCollector) ID() engine.CollectorID          { return ServiceAccountCollectorID }
-func (c *serviceAccountCollector) Name() string                    { return "ServiceAccount manifests" }
-func (c *serviceAccountCollector) Scope() engine.CollectorScope    { return engine.ClusterWide }
-func (c *serviceAccountCollector) DependsOn() []engine.CollectorID { return nil }
+var _ engine.ClusterWideCollector = (*serviceAccountCollector)(nil)
+
+// NewServiceAccountCollector creates a new ServiceAccountCollector.
+func NewServiceAccountCollector() engine.ClusterWideCollector {
+	return &serviceAccountCollector{
+		CollectorBase: engine.NewCollectorBase(ServiceAccountCollectorID, "ServiceAccount manifests", engine.ClusterWide, nil),
+	}
+}
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -65,7 +53,7 @@ func (c *serviceAccountCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *serviceAccountCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
+func (c *serviceAccountCollector) CollectClusterWide(ctx context.Context, params engine.ClusterWideCollectorParams) (*engine.CollectorResult, error) {
 	var artifacts []engine.Artifact
 	total := 0
 

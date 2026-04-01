@@ -198,6 +198,7 @@ func (e *Engine) executeClusterWideCollector(ctx context.Context, collector Coll
 		result, err = c.CollectClusterWide(ctx, ClusterWideCollectorParams{
 			Vitals:         vitals,
 			ResourceLister: e.config.ResourceLister,
+			PodLogFetcher:  e.config.PodLogFetcher,
 			ArtifactWriter: artifactWriter,
 		})
 	case Collector:

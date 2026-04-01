@@ -21,36 +21,22 @@ type ScyllaOperatorConfigResult struct {
 
 // GetScyllaOperatorConfigResult is the typed accessor for ScyllaOperatorConfigCollector results.
 func GetScyllaOperatorConfigResult(vitals *engine.Vitals, scopeKey engine.ScopeKey) (*ScyllaOperatorConfigResult, error) {
-	result, ok := vitals.Get(ScyllaOperatorConfigCollectorID, scopeKey)
-	if !ok {
-		return nil, fmt.Errorf("ScyllaOperatorConfigCollector result not found for %v", scopeKey)
-	}
-	if result.Status != engine.CollectorPassed {
-		return nil, fmt.Errorf("ScyllaOperatorConfigCollector did not pass for %v: %s", scopeKey, result.Message)
-	}
-	typed, ok := result.Data.(*ScyllaOperatorConfigResult)
-	if !ok {
-		return nil, fmt.Errorf("unexpected data type %T for ScyllaOperatorConfigCollector", result.Data)
-	}
-	return typed, nil
+	return engine.GetResult[ScyllaOperatorConfigResult](vitals, ScyllaOperatorConfigCollectorID, scopeKey)
 }
 
 // scyllaOperatorConfigCollector collects ScyllaOperatorConfig manifests.
-type scyllaOperatorConfigCollector struct{}
+type scyllaOperatorConfigCollector struct {
+	engine.CollectorBase
+}
 
-var _ engine.Collector = (*scyllaOperatorConfigCollector)(nil)
+var _ engine.ClusterWideCollector = (*scyllaOperatorConfigCollector)(nil)
 
 // NewScyllaOperatorConfigCollector creates a new ScyllaOperatorConfigCollector.
-func NewScyllaOperatorConfigCollector() engine.Collector {
-	return &scyllaOperatorConfigCollector{}
+func NewScyllaOperatorConfigCollector() engine.ClusterWideCollector {
+	return &scyllaOperatorConfigCollector{
+		CollectorBase: engine.NewCollectorBase(ScyllaOperatorConfigCollectorID, "ScyllaOperatorConfig manifests", engine.ClusterWide, nil),
+	}
 }
-
-func (c *scyllaOperatorConfigCollector) ID() engine.CollectorID {
-	return ScyllaOperatorConfigCollectorID
-}
-func (c *scyllaOperatorConfigCollector) Name() string                    { return "ScyllaOperatorConfig manifests" }
-func (c *scyllaOperatorConfigCollector) Scope() engine.CollectorScope    { return engine.ClusterWide }
-func (c *scyllaOperatorConfigCollector) DependsOn() []engine.CollectorID { return nil }
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -65,7 +51,7 @@ func (c *scyllaOperatorConfigCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *scyllaOperatorConfigCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
+func (c *scyllaOperatorConfigCollector) CollectClusterWide(ctx context.Context, params engine.ClusterWideCollectorParams) (*engine.CollectorResult, error) {
 	configs, err := params.ResourceLister.ListScyllaOperatorConfigs(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("listing scyllaoperatorconfigs: %w", err)

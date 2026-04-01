@@ -23,34 +23,22 @@ type DeploymentResult struct {
 
 // GetDeploymentResult is the typed accessor for DeploymentCollector results.
 func GetDeploymentResult(vitals *engine.Vitals, scopeKey engine.ScopeKey) (*DeploymentResult, error) {
-	result, ok := vitals.Get(DeploymentCollectorID, scopeKey)
-	if !ok {
-		return nil, fmt.Errorf("DeploymentCollector result not found for %v", scopeKey)
-	}
-	if result.Status != engine.CollectorPassed {
-		return nil, fmt.Errorf("DeploymentCollector did not pass for %v: %s", scopeKey, result.Message)
-	}
-	typed, ok := result.Data.(*DeploymentResult)
-	if !ok {
-		return nil, fmt.Errorf("unexpected data type %T for DeploymentCollector", result.Data)
-	}
-	return typed, nil
+	return engine.GetResult[DeploymentResult](vitals, DeploymentCollectorID, scopeKey)
 }
 
 // deploymentCollector collects Deployment manifests from operator namespaces.
-type deploymentCollector struct{}
-
-var _ engine.Collector = (*deploymentCollector)(nil)
-
-// NewDeploymentCollector creates a new DeploymentCollector.
-func NewDeploymentCollector() engine.Collector {
-	return &deploymentCollector{}
+type deploymentCollector struct {
+	engine.CollectorBase
 }
 
-func (c *deploymentCollector) ID() engine.CollectorID          { return DeploymentCollectorID }
-func (c *deploymentCollector) Name() string                    { return "Deployment manifests" }
-func (c *deploymentCollector) Scope() engine.CollectorScope    { return engine.ClusterWide }
-func (c *deploymentCollector) DependsOn() []engine.CollectorID { return nil }
+var _ engine.ClusterWideCollector = (*deploymentCollector)(nil)
+
+// NewDeploymentCollector creates a new DeploymentCollector.
+func NewDeploymentCollector() engine.ClusterWideCollector {
+	return &deploymentCollector{
+		CollectorBase: engine.NewCollectorBase(DeploymentCollectorID, "Deployment manifests", engine.ClusterWide, nil),
+	}
+}
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -65,7 +53,7 @@ func (c *deploymentCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *deploymentCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
+func (c *deploymentCollector) CollectClusterWide(ctx context.Context, params engine.ClusterWideCollectorParams) (*engine.CollectorResult, error) {
 	var artifacts []engine.Artifact
 	total := 0
 

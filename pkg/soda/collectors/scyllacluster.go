@@ -24,34 +24,22 @@ type ScyllaClusterResult struct {
 
 // GetScyllaClusterResult is the typed accessor for ScyllaClusterCollector results.
 func GetScyllaClusterResult(vitals *engine.Vitals, scopeKey engine.ScopeKey) (*ScyllaClusterResult, error) {
-	result, ok := vitals.Get(ScyllaClusterCollectorID, scopeKey)
-	if !ok {
-		return nil, fmt.Errorf("ScyllaClusterCollector result not found for %v", scopeKey)
-	}
-	if result.Status != engine.CollectorPassed {
-		return nil, fmt.Errorf("ScyllaClusterCollector did not pass for %v: %s", scopeKey, result.Message)
-	}
-	typed, ok := result.Data.(*ScyllaClusterResult)
-	if !ok {
-		return nil, fmt.Errorf("unexpected data type %T for ScyllaClusterCollector", result.Data)
-	}
-	return typed, nil
+	return engine.GetResult[ScyllaClusterResult](vitals, ScyllaClusterCollectorID, scopeKey)
 }
 
 // scyllaClusterCollector collects ScyllaCluster manifests across all namespaces.
-type scyllaClusterCollector struct{}
-
-var _ engine.Collector = (*scyllaClusterCollector)(nil)
-
-// NewScyllaClusterCollector creates a new ScyllaClusterCollector.
-func NewScyllaClusterCollector() engine.Collector {
-	return &scyllaClusterCollector{}
+type scyllaClusterCollector struct {
+	engine.CollectorBase
 }
 
-func (c *scyllaClusterCollector) ID() engine.CollectorID          { return ScyllaClusterCollectorID }
-func (c *scyllaClusterCollector) Name() string                    { return "ScyllaCluster manifests" }
-func (c *scyllaClusterCollector) Scope() engine.CollectorScope    { return engine.ClusterWide }
-func (c *scyllaClusterCollector) DependsOn() []engine.CollectorID { return nil }
+var _ engine.ClusterWideCollector = (*scyllaClusterCollector)(nil)
+
+// NewScyllaClusterCollector creates a new ScyllaClusterCollector.
+func NewScyllaClusterCollector() engine.ClusterWideCollector {
+	return &scyllaClusterCollector{
+		CollectorBase: engine.NewCollectorBase(ScyllaClusterCollectorID, "ScyllaCluster manifests", engine.ClusterWide, nil),
+	}
+}
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -66,7 +54,7 @@ func (c *scyllaClusterCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *scyllaClusterCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
+func (c *scyllaClusterCollector) CollectClusterWide(ctx context.Context, params engine.ClusterWideCollectorParams) (*engine.CollectorResult, error) {
 	clusterInfos, err := params.ResourceLister.ListScyllaClusters(ctx, metav1.NamespaceAll)
 	if err != nil {
 		return nil, fmt.Errorf("listing scyllaclusters: %w", err)

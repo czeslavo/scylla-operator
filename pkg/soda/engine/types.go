@@ -204,6 +204,7 @@ type AnalyzerMeta interface {
 type ClusterWideCollectorParams struct {
 	Vitals         *Vitals
 	ResourceLister ResourceLister
+	PodLogFetcher  PodLogFetcher  // May be nil in offline mode.
 	ArtifactWriter ArtifactWriter // May be nil if no factory is configured.
 }
 

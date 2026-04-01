@@ -23,34 +23,22 @@ type PodManifestResult struct {
 
 // GetPodManifestResult is the typed accessor for PodManifestCollector results.
 func GetPodManifestResult(vitals *engine.Vitals, scopeKey engine.ScopeKey) (*PodManifestResult, error) {
-	result, ok := vitals.Get(PodManifestCollectorID, scopeKey)
-	if !ok {
-		return nil, fmt.Errorf("PodManifestCollector result not found for %v", scopeKey)
-	}
-	if result.Status != engine.CollectorPassed {
-		return nil, fmt.Errorf("PodManifestCollector did not pass for %v: %s", scopeKey, result.Message)
-	}
-	typed, ok := result.Data.(*PodManifestResult)
-	if !ok {
-		return nil, fmt.Errorf("unexpected data type %T for PodManifestCollector", result.Data)
-	}
-	return typed, nil
+	return engine.GetResult[PodManifestResult](vitals, PodManifestCollectorID, scopeKey)
 }
 
 // podManifestCollector collects Pod manifests from operator namespaces (no exec).
-type podManifestCollector struct{}
-
-var _ engine.Collector = (*podManifestCollector)(nil)
-
-// NewPodManifestCollector creates a new PodManifestCollector.
-func NewPodManifestCollector() engine.Collector {
-	return &podManifestCollector{}
+type podManifestCollector struct {
+	engine.CollectorBase
 }
 
-func (c *podManifestCollector) ID() engine.CollectorID          { return PodManifestCollectorID }
-func (c *podManifestCollector) Name() string                    { return "Pod manifests (operator namespaces)" }
-func (c *podManifestCollector) Scope() engine.CollectorScope    { return engine.ClusterWide }
-func (c *podManifestCollector) DependsOn() []engine.CollectorID { return nil }
+var _ engine.ClusterWideCollector = (*podManifestCollector)(nil)
+
+// NewPodManifestCollector creates a new PodManifestCollector.
+func NewPodManifestCollector() engine.ClusterWideCollector {
+	return &podManifestCollector{
+		CollectorBase: engine.NewCollectorBase(PodManifestCollectorID, "Pod manifests (operator namespaces)", engine.ClusterWide, nil),
+	}
+}
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -65,7 +53,7 @@ func (c *podManifestCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *podManifestCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
+func (c *podManifestCollector) CollectClusterWide(ctx context.Context, params engine.ClusterWideCollectorParams) (*engine.CollectorResult, error) {
 	var artifacts []engine.Artifact
 	total := 0
 

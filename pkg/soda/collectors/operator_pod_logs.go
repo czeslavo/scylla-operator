@@ -23,19 +23,18 @@ type OperatorPodLogsResult struct {
 
 // operatorPodLogsCollector collects current and previous container logs from all pods
 // in operator-owned namespaces (scylla-operator, scylla-manager, scylla-operator-node-tuning).
-type operatorPodLogsCollector struct{}
-
-var _ engine.Collector = (*operatorPodLogsCollector)(nil)
-
-// NewOperatorPodLogsCollector creates a new OperatorPodLogsCollector.
-func NewOperatorPodLogsCollector() engine.Collector {
-	return &operatorPodLogsCollector{}
+type operatorPodLogsCollector struct {
+	engine.CollectorBase
 }
 
-func (c *operatorPodLogsCollector) ID() engine.CollectorID          { return OperatorPodLogsCollectorID }
-func (c *operatorPodLogsCollector) Name() string                    { return "Operator pod logs" }
-func (c *operatorPodLogsCollector) Scope() engine.CollectorScope    { return engine.ClusterWide }
-func (c *operatorPodLogsCollector) DependsOn() []engine.CollectorID { return nil }
+var _ engine.ClusterWideCollector = (*operatorPodLogsCollector)(nil)
+
+// NewOperatorPodLogsCollector creates a new OperatorPodLogsCollector.
+func NewOperatorPodLogsCollector() engine.ClusterWideCollector {
+	return &operatorPodLogsCollector{
+		CollectorBase: engine.NewCollectorBase(OperatorPodLogsCollectorID, "Operator pod logs", engine.ClusterWide, nil),
+	}
+}
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -56,7 +55,7 @@ func (c *operatorPodLogsCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *operatorPodLogsCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
+func (c *operatorPodLogsCollector) CollectClusterWide(ctx context.Context, params engine.ClusterWideCollectorParams) (*engine.CollectorResult, error) {
 	if params.PodLogFetcher == nil {
 		return &engine.CollectorResult{
 			Status:  engine.CollectorSkipped,

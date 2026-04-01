@@ -21,34 +21,22 @@ type NodeManifestResult struct {
 
 // GetNodeManifestResult is the typed accessor for NodeManifestCollector results.
 func GetNodeManifestResult(vitals *engine.Vitals, scopeKey engine.ScopeKey) (*NodeManifestResult, error) {
-	result, ok := vitals.Get(NodeManifestCollectorID, scopeKey)
-	if !ok {
-		return nil, fmt.Errorf("NodeManifestCollector result not found for %v", scopeKey)
-	}
-	if result.Status != engine.CollectorPassed {
-		return nil, fmt.Errorf("NodeManifestCollector did not pass for %v: %s", scopeKey, result.Message)
-	}
-	typed, ok := result.Data.(*NodeManifestResult)
-	if !ok {
-		return nil, fmt.Errorf("unexpected data type %T for NodeManifestCollector", result.Data)
-	}
-	return typed, nil
+	return engine.GetResult[NodeManifestResult](vitals, NodeManifestCollectorID, scopeKey)
 }
 
 // nodeManifestCollector collects Kubernetes Node manifests.
-type nodeManifestCollector struct{}
-
-var _ engine.Collector = (*nodeManifestCollector)(nil)
-
-// NewNodeManifestCollector creates a new NodeManifestCollector.
-func NewNodeManifestCollector() engine.Collector {
-	return &nodeManifestCollector{}
+type nodeManifestCollector struct {
+	engine.CollectorBase
 }
 
-func (c *nodeManifestCollector) ID() engine.CollectorID          { return NodeManifestCollectorID }
-func (c *nodeManifestCollector) Name() string                    { return "Node manifests" }
-func (c *nodeManifestCollector) Scope() engine.CollectorScope    { return engine.ClusterWide }
-func (c *nodeManifestCollector) DependsOn() []engine.CollectorID { return nil }
+var _ engine.ClusterWideCollector = (*nodeManifestCollector)(nil)
+
+// NewNodeManifestCollector creates a new NodeManifestCollector.
+func NewNodeManifestCollector() engine.ClusterWideCollector {
+	return &nodeManifestCollector{
+		CollectorBase: engine.NewCollectorBase(NodeManifestCollectorID, "Node manifests", engine.ClusterWide, nil),
+	}
+}
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -63,7 +51,7 @@ func (c *nodeManifestCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *nodeManifestCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
+func (c *nodeManifestCollector) CollectClusterWide(ctx context.Context, params engine.ClusterWideCollectorParams) (*engine.CollectorResult, error) {
 	nodes, err := params.ResourceLister.ListNodes(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("listing nodes: %w", err)

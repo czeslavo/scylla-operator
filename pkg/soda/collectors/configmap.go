@@ -23,34 +23,22 @@ type ConfigMapResult struct {
 
 // GetConfigMapResult is the typed accessor for ConfigMapCollector results.
 func GetConfigMapResult(vitals *engine.Vitals, scopeKey engine.ScopeKey) (*ConfigMapResult, error) {
-	result, ok := vitals.Get(ConfigMapCollectorID, scopeKey)
-	if !ok {
-		return nil, fmt.Errorf("ConfigMapCollector result not found for %v", scopeKey)
-	}
-	if result.Status != engine.CollectorPassed {
-		return nil, fmt.Errorf("ConfigMapCollector did not pass for %v: %s", scopeKey, result.Message)
-	}
-	typed, ok := result.Data.(*ConfigMapResult)
-	if !ok {
-		return nil, fmt.Errorf("unexpected data type %T for ConfigMapCollector", result.Data)
-	}
-	return typed, nil
+	return engine.GetResult[ConfigMapResult](vitals, ConfigMapCollectorID, scopeKey)
 }
 
 // configMapCollector collects ConfigMap manifests from operator namespaces.
-type configMapCollector struct{}
-
-var _ engine.Collector = (*configMapCollector)(nil)
-
-// NewConfigMapCollector creates a new ConfigMapCollector.
-func NewConfigMapCollector() engine.Collector {
-	return &configMapCollector{}
+type configMapCollector struct {
+	engine.CollectorBase
 }
 
-func (c *configMapCollector) ID() engine.CollectorID          { return ConfigMapCollectorID }
-func (c *configMapCollector) Name() string                    { return "ConfigMap manifests" }
-func (c *configMapCollector) Scope() engine.CollectorScope    { return engine.ClusterWide }
-func (c *configMapCollector) DependsOn() []engine.CollectorID { return nil }
+var _ engine.ClusterWideCollector = (*configMapCollector)(nil)
+
+// NewConfigMapCollector creates a new ConfigMapCollector.
+func NewConfigMapCollector() engine.ClusterWideCollector {
+	return &configMapCollector{
+		CollectorBase: engine.NewCollectorBase(ConfigMapCollectorID, "ConfigMap manifests", engine.ClusterWide, nil),
+	}
+}
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -65,7 +53,7 @@ func (c *configMapCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *configMapCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
+func (c *configMapCollector) CollectClusterWide(ctx context.Context, params engine.ClusterWideCollectorParams) (*engine.CollectorResult, error) {
 	var artifacts []engine.Artifact
 	total := 0
 

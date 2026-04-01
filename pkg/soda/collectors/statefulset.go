@@ -23,34 +23,22 @@ type StatefulSetResult struct {
 
 // GetStatefulSetResult is the typed accessor for StatefulSetCollector results.
 func GetStatefulSetResult(vitals *engine.Vitals, scopeKey engine.ScopeKey) (*StatefulSetResult, error) {
-	result, ok := vitals.Get(StatefulSetCollectorID, scopeKey)
-	if !ok {
-		return nil, fmt.Errorf("StatefulSetCollector result not found for %v", scopeKey)
-	}
-	if result.Status != engine.CollectorPassed {
-		return nil, fmt.Errorf("StatefulSetCollector did not pass for %v: %s", scopeKey, result.Message)
-	}
-	typed, ok := result.Data.(*StatefulSetResult)
-	if !ok {
-		return nil, fmt.Errorf("unexpected data type %T for StatefulSetCollector", result.Data)
-	}
-	return typed, nil
+	return engine.GetResult[StatefulSetResult](vitals, StatefulSetCollectorID, scopeKey)
 }
 
 // statefulSetCollector collects StatefulSet manifests from operator namespaces.
-type statefulSetCollector struct{}
-
-var _ engine.Collector = (*statefulSetCollector)(nil)
-
-// NewStatefulSetCollector creates a new StatefulSetCollector.
-func NewStatefulSetCollector() engine.Collector {
-	return &statefulSetCollector{}
+type statefulSetCollector struct {
+	engine.CollectorBase
 }
 
-func (c *statefulSetCollector) ID() engine.CollectorID          { return StatefulSetCollectorID }
-func (c *statefulSetCollector) Name() string                    { return "StatefulSet manifests" }
-func (c *statefulSetCollector) Scope() engine.CollectorScope    { return engine.ClusterWide }
-func (c *statefulSetCollector) DependsOn() []engine.CollectorID { return nil }
+var _ engine.ClusterWideCollector = (*statefulSetCollector)(nil)
+
+// NewStatefulSetCollector creates a new StatefulSetCollector.
+func NewStatefulSetCollector() engine.ClusterWideCollector {
+	return &statefulSetCollector{
+		CollectorBase: engine.NewCollectorBase(StatefulSetCollectorID, "StatefulSet manifests", engine.ClusterWide, nil),
+	}
+}
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -65,7 +53,7 @@ func (c *statefulSetCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *statefulSetCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
+func (c *statefulSetCollector) CollectClusterWide(ctx context.Context, params engine.ClusterWideCollectorParams) (*engine.CollectorResult, error) {
 	var artifacts []engine.Artifact
 	total := 0
 

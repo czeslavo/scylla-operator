@@ -22,34 +22,22 @@ type ScyllaDBDatacenterResult struct {
 
 // GetScyllaDBDatacenterResult is the typed accessor for ScyllaDBDatacenterCollector results.
 func GetScyllaDBDatacenterResult(vitals *engine.Vitals, scopeKey engine.ScopeKey) (*ScyllaDBDatacenterResult, error) {
-	result, ok := vitals.Get(ScyllaDBDatacenterCollectorID, scopeKey)
-	if !ok {
-		return nil, fmt.Errorf("ScyllaDBDatacenterCollector result not found for %v", scopeKey)
-	}
-	if result.Status != engine.CollectorPassed {
-		return nil, fmt.Errorf("ScyllaDBDatacenterCollector did not pass for %v: %s", scopeKey, result.Message)
-	}
-	typed, ok := result.Data.(*ScyllaDBDatacenterResult)
-	if !ok {
-		return nil, fmt.Errorf("unexpected data type %T for ScyllaDBDatacenterCollector", result.Data)
-	}
-	return typed, nil
+	return engine.GetResult[ScyllaDBDatacenterResult](vitals, ScyllaDBDatacenterCollectorID, scopeKey)
 }
 
 // scyllaDBDatacenterCollector collects ScyllaDBDatacenter manifests across all namespaces.
-type scyllaDBDatacenterCollector struct{}
-
-var _ engine.Collector = (*scyllaDBDatacenterCollector)(nil)
-
-// NewScyllaDBDatacenterCollector creates a new ScyllaDBDatacenterCollector.
-func NewScyllaDBDatacenterCollector() engine.Collector {
-	return &scyllaDBDatacenterCollector{}
+type scyllaDBDatacenterCollector struct {
+	engine.CollectorBase
 }
 
-func (c *scyllaDBDatacenterCollector) ID() engine.CollectorID          { return ScyllaDBDatacenterCollectorID }
-func (c *scyllaDBDatacenterCollector) Name() string                    { return "ScyllaDBDatacenter manifests" }
-func (c *scyllaDBDatacenterCollector) Scope() engine.CollectorScope    { return engine.ClusterWide }
-func (c *scyllaDBDatacenterCollector) DependsOn() []engine.CollectorID { return nil }
+var _ engine.ClusterWideCollector = (*scyllaDBDatacenterCollector)(nil)
+
+// NewScyllaDBDatacenterCollector creates a new ScyllaDBDatacenterCollector.
+func NewScyllaDBDatacenterCollector() engine.ClusterWideCollector {
+	return &scyllaDBDatacenterCollector{
+		CollectorBase: engine.NewCollectorBase(ScyllaDBDatacenterCollectorID, "ScyllaDBDatacenter manifests", engine.ClusterWide, nil),
+	}
+}
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -64,7 +52,7 @@ func (c *scyllaDBDatacenterCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *scyllaDBDatacenterCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
+func (c *scyllaDBDatacenterCollector) CollectClusterWide(ctx context.Context, params engine.ClusterWideCollectorParams) (*engine.CollectorResult, error) {
 	datacenters, err := params.ResourceLister.ListScyllaDBDatacenters(ctx, "")
 	if err != nil {
 		return nil, fmt.Errorf("listing scylladbdatacenters: %w", err)

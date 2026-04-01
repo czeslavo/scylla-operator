@@ -52,7 +52,7 @@ func TestNodeResourcesCollector_HappyPath(t *testing.T) {
 	fakeWriter := sodatesting.NewFakeArtifactWriter()
 
 	collector := NewNodeResourcesCollector()
-	result, err := collector.Collect(context.Background(), engine.CollectorParams{
+	result, err := collector.CollectClusterWide(context.Background(), engine.ClusterWideCollectorParams{
 		Vitals:         engine.NewVitals(),
 		ResourceLister: fakeResourceLister,
 		ArtifactWriter: fakeWriter,
@@ -110,7 +110,7 @@ func TestNodeResourcesCollector_Error(t *testing.T) {
 	}
 
 	collector := NewNodeResourcesCollector()
-	_, err := collector.Collect(context.Background(), engine.CollectorParams{
+	_, err := collector.CollectClusterWide(context.Background(), engine.ClusterWideCollectorParams{
 		Vitals:         engine.NewVitals(),
 		ResourceLister: fakeResourceLister,
 	})
@@ -124,7 +124,7 @@ func TestNodeResourcesCollector_EmptyNodes(t *testing.T) {
 	fakeResourceLister := &sodatesting.FakeResourceLister{Nodes: []corev1.Node{}}
 
 	collector := NewNodeResourcesCollector()
-	result, err := collector.Collect(context.Background(), engine.CollectorParams{
+	result, err := collector.CollectClusterWide(context.Background(), engine.ClusterWideCollectorParams{
 		Vitals:         engine.NewVitals(),
 		ResourceLister: fakeResourceLister,
 	})

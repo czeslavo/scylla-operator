@@ -23,34 +23,22 @@ type DaemonSetResult struct {
 
 // GetDaemonSetResult is the typed accessor for DaemonSetCollector results.
 func GetDaemonSetResult(vitals *engine.Vitals, scopeKey engine.ScopeKey) (*DaemonSetResult, error) {
-	result, ok := vitals.Get(DaemonSetCollectorID, scopeKey)
-	if !ok {
-		return nil, fmt.Errorf("DaemonSetCollector result not found for %v", scopeKey)
-	}
-	if result.Status != engine.CollectorPassed {
-		return nil, fmt.Errorf("DaemonSetCollector did not pass for %v: %s", scopeKey, result.Message)
-	}
-	typed, ok := result.Data.(*DaemonSetResult)
-	if !ok {
-		return nil, fmt.Errorf("unexpected data type %T for DaemonSetCollector", result.Data)
-	}
-	return typed, nil
+	return engine.GetResult[DaemonSetResult](vitals, DaemonSetCollectorID, scopeKey)
 }
 
 // daemonSetCollector collects DaemonSet manifests from operator namespaces.
-type daemonSetCollector struct{}
-
-var _ engine.Collector = (*daemonSetCollector)(nil)
-
-// NewDaemonSetCollector creates a new DaemonSetCollector.
-func NewDaemonSetCollector() engine.Collector {
-	return &daemonSetCollector{}
+type daemonSetCollector struct {
+	engine.CollectorBase
 }
 
-func (c *daemonSetCollector) ID() engine.CollectorID          { return DaemonSetCollectorID }
-func (c *daemonSetCollector) Name() string                    { return "DaemonSet manifests" }
-func (c *daemonSetCollector) Scope() engine.CollectorScope    { return engine.ClusterWide }
-func (c *daemonSetCollector) DependsOn() []engine.CollectorID { return nil }
+var _ engine.ClusterWideCollector = (*daemonSetCollector)(nil)
+
+// NewDaemonSetCollector creates a new DaemonSetCollector.
+func NewDaemonSetCollector() engine.ClusterWideCollector {
+	return &daemonSetCollector{
+		CollectorBase: engine.NewCollectorBase(DaemonSetCollectorID, "DaemonSet manifests", engine.ClusterWide, nil),
+	}
+}
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -65,7 +53,7 @@ func (c *daemonSetCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *daemonSetCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
+func (c *daemonSetCollector) CollectClusterWide(ctx context.Context, params engine.ClusterWideCollectorParams) (*engine.CollectorResult, error) {
 	var artifacts []engine.Artifact
 	total := 0
 

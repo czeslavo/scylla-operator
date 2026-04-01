@@ -21,34 +21,22 @@ type NodeConfigResult struct {
 
 // GetNodeConfigResult is the typed accessor for NodeConfigCollector results.
 func GetNodeConfigResult(vitals *engine.Vitals, scopeKey engine.ScopeKey) (*NodeConfigResult, error) {
-	result, ok := vitals.Get(NodeConfigCollectorID, scopeKey)
-	if !ok {
-		return nil, fmt.Errorf("NodeConfigCollector result not found for %v", scopeKey)
-	}
-	if result.Status != engine.CollectorPassed {
-		return nil, fmt.Errorf("NodeConfigCollector did not pass for %v: %s", scopeKey, result.Message)
-	}
-	typed, ok := result.Data.(*NodeConfigResult)
-	if !ok {
-		return nil, fmt.Errorf("unexpected data type %T for NodeConfigCollector", result.Data)
-	}
-	return typed, nil
+	return engine.GetResult[NodeConfigResult](vitals, NodeConfigCollectorID, scopeKey)
 }
 
 // nodeConfigCollector collects NodeConfig manifests.
-type nodeConfigCollector struct{}
-
-var _ engine.Collector = (*nodeConfigCollector)(nil)
-
-// NewNodeConfigCollector creates a new NodeConfigCollector.
-func NewNodeConfigCollector() engine.Collector {
-	return &nodeConfigCollector{}
+type nodeConfigCollector struct {
+	engine.CollectorBase
 }
 
-func (c *nodeConfigCollector) ID() engine.CollectorID          { return NodeConfigCollectorID }
-func (c *nodeConfigCollector) Name() string                    { return "NodeConfig manifests" }
-func (c *nodeConfigCollector) Scope() engine.CollectorScope    { return engine.ClusterWide }
-func (c *nodeConfigCollector) DependsOn() []engine.CollectorID { return nil }
+var _ engine.ClusterWideCollector = (*nodeConfigCollector)(nil)
+
+// NewNodeConfigCollector creates a new NodeConfigCollector.
+func NewNodeConfigCollector() engine.ClusterWideCollector {
+	return &nodeConfigCollector{
+		CollectorBase: engine.NewCollectorBase(NodeConfigCollectorID, "NodeConfig manifests", engine.ClusterWide, nil),
+	}
+}
 
 // RBAC implements engine.RBACProvider.
 // Required permissions:
@@ -63,7 +51,7 @@ func (c *nodeConfigCollector) RBAC() []rbacv1.PolicyRule {
 	}
 }
 
-func (c *nodeConfigCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
+func (c *nodeConfigCollector) CollectClusterWide(ctx context.Context, params engine.ClusterWideCollectorParams) (*engine.CollectorResult, error) {
 	nodeConfigs, err := params.ResourceLister.ListNodeConfigs(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("listing nodeconfigs: %w", err)
