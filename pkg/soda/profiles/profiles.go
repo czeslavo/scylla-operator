@@ -36,6 +36,7 @@ func AllProfiles() map[string]engine.Profile {
 				analyzers.ScyllaVersionSupportAnalyzerID,
 				analyzers.SchemaAgreementAnalyzerID,
 				analyzers.OSSupportAnalyzerID,
+				analyzers.GossipHealthAnalyzerID,
 			},
 		},
 	}

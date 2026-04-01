@@ -12,6 +12,7 @@ func AllAnalyzers() []engine.Analyzer {
 		NewScyllaVersionSupportAnalyzer(),
 		NewSchemaAgreementAnalyzer(),
 		NewOSSupportAnalyzer(),
+		NewGossipHealthAnalyzer(),
 	}
 }
 
