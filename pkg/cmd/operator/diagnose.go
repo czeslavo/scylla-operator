@@ -702,11 +702,10 @@ type fsArtifactWriter struct {
 }
 
 func (w *fsArtifactWriter) WriteArtifact(filename string, content []byte) (string, error) {
-	if err := os.MkdirAll(w.dir, 0o755); err != nil {
-		return "", fmt.Errorf("creating artifact directory %s: %w", w.dir, err)
-	}
-
 	path := filepath.Join(w.dir, filename)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return "", fmt.Errorf("creating artifact directory %s: %w", filepath.Dir(path), err)
+	}
 	if err := os.WriteFile(path, content, 0o644); err != nil {
 		return "", fmt.Errorf("writing artifact %s: %w", path, err)
 	}
