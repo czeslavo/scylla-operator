@@ -21,7 +21,19 @@ type recordingCollector struct {
 	callLog  *[]CollectorID // shared across collectors to record call order
 	result   *CollectorResult
 	err      error
-	callFunc func(ctx context.Context, params CollectorParams) (*CollectorResult, error)
+	callFunc func(ctx context.Context, params testCollectorParams) (*CollectorResult, error)
+}
+
+// testCollectorParams is a test-internal union of all scope-specific collector params
+// to allow shared callFunc logic in test helpers.
+type testCollectorParams struct {
+	Vitals         *Vitals
+	ScyllaCluster  *ScyllaClusterInfo
+	ScyllaNode     *ScyllaNodeInfo
+	PodExecutor    PodExecutor
+	PodLogFetcher  PodLogFetcher
+	ResourceLister ResourceLister
+	ArtifactWriter ArtifactWriter
 }
 
 func (r *recordingCollector) ID() CollectorID          { return r.id }
@@ -29,7 +41,37 @@ func (r *recordingCollector) Name() string             { return string(r.id) }
 func (r *recordingCollector) Scope() CollectorScope    { return r.scope }
 func (r *recordingCollector) DependsOn() []CollectorID { return r.deps }
 
-func (r *recordingCollector) Collect(ctx context.Context, params CollectorParams) (*CollectorResult, error) {
+func (r *recordingCollector) CollectClusterWide(ctx context.Context, params ClusterWideCollectorParams) (*CollectorResult, error) {
+	return r.doCollect(ctx, testCollectorParams{
+		Vitals:         params.Vitals,
+		ResourceLister: params.ResourceLister,
+		PodLogFetcher:  params.PodLogFetcher,
+		ArtifactWriter: params.ArtifactWriter,
+	})
+}
+
+func (r *recordingCollector) CollectPerScyllaCluster(ctx context.Context, params PerScyllaClusterCollectorParams) (*CollectorResult, error) {
+	return r.doCollect(ctx, testCollectorParams{
+		Vitals:         params.Vitals,
+		ScyllaCluster:  params.ScyllaCluster,
+		ResourceLister: params.ResourceLister,
+		ArtifactWriter: params.ArtifactWriter,
+	})
+}
+
+func (r *recordingCollector) CollectPerScyllaNode(ctx context.Context, params PerScyllaNodeCollectorParams) (*CollectorResult, error) {
+	return r.doCollect(ctx, testCollectorParams{
+		Vitals:         params.Vitals,
+		ScyllaCluster:  params.ScyllaCluster,
+		ScyllaNode:     params.ScyllaNode,
+		PodExecutor:    params.PodExecutor,
+		PodLogFetcher:  params.PodLogFetcher,
+		ResourceLister: params.ResourceLister,
+		ArtifactWriter: params.ArtifactWriter,
+	})
+}
+
+func (r *recordingCollector) doCollect(ctx context.Context, params testCollectorParams) (*CollectorResult, error) {
 	r.mu.Lock()
 	*r.callLog = append(*r.callLog, r.id)
 	r.mu.Unlock()
@@ -55,14 +97,14 @@ type simpleAnalyzer struct {
 	id     AnalyzerID
 	deps   []CollectorID
 	result *AnalyzerResult
-	fn     func(params AnalyzerParams) *AnalyzerResult
+	fn     func(params ClusterWideAnalyzerParams) *AnalyzerResult
 }
 
 func (a *simpleAnalyzer) ID() AnalyzerID           { return a.id }
 func (a *simpleAnalyzer) Name() string             { return string(a.id) }
 func (a *simpleAnalyzer) Scope() AnalyzerScope     { return AnalyzerClusterWide }
 func (a *simpleAnalyzer) DependsOn() []CollectorID { return a.deps }
-func (a *simpleAnalyzer) Analyze(params AnalyzerParams) *AnalyzerResult {
+func (a *simpleAnalyzer) AnalyzeClusterWide(params ClusterWideAnalyzerParams) *AnalyzerResult {
 	if a.fn != nil {
 		return a.fn(params)
 	}
@@ -320,7 +362,7 @@ func TestEngineCrossScopeDep(t *testing.T) {
 		"CW": &recordingCollector{id: "CW", scope: ClusterWide, callLog: &callLog},
 		"PP": &recordingCollector{
 			id: "PP", scope: PerScyllaNode, deps: []CollectorID{"CW"}, callLog: &callLog,
-			callFunc: func(_ context.Context, params CollectorParams) (*CollectorResult, error) {
+			callFunc: func(_ context.Context, params testCollectorParams) (*CollectorResult, error) {
 				// Verify we can access the ClusterWide result.
 				result, ok := params.Vitals.Get("CW", ScopeKey{})
 				if !ok {
@@ -506,7 +548,7 @@ func TestEngineArtifactWriterAssignment(t *testing.T) {
 	collectors := map[CollectorID]CollectorMeta{
 		"CW": &recordingCollector{
 			id: "CW", scope: ClusterWide, callLog: &callLog,
-			callFunc: func(_ context.Context, params CollectorParams) (*CollectorResult, error) {
+			callFunc: func(_ context.Context, params testCollectorParams) (*CollectorResult, error) {
 				if params.ArtifactWriter == nil {
 					return &CollectorResult{Status: CollectorFailed, Message: "no artifact writer"}, nil
 				}
@@ -525,7 +567,7 @@ func TestEngineArtifactWriterAssignment(t *testing.T) {
 		},
 		"PP": &recordingCollector{
 			id: "PP", scope: PerScyllaNode, callLog: &callLog,
-			callFunc: func(_ context.Context, params CollectorParams) (*CollectorResult, error) {
+			callFunc: func(_ context.Context, params testCollectorParams) (*CollectorResult, error) {
 				if params.ArtifactWriter == nil {
 					return &CollectorResult{Status: CollectorFailed, Message: "no artifact writer"}, nil
 				}
@@ -626,7 +668,7 @@ func TestEngineAnalyzerReceivesVitals(t *testing.T) {
 	collectors := map[CollectorID]CollectorMeta{
 		"PP": &recordingCollector{
 			id: "PP", scope: PerScyllaNode, callLog: &callLog,
-			callFunc: func(_ context.Context, params CollectorParams) (*CollectorResult, error) {
+			callFunc: func(_ context.Context, params testCollectorParams) (*CollectorResult, error) {
 				return &CollectorResult{
 					Status:  CollectorPassed,
 					Message: fmt.Sprintf("collected %s", params.ScyllaNode.Name),
@@ -640,7 +682,7 @@ func TestEngineAnalyzerReceivesVitals(t *testing.T) {
 	analyzers := map[AnalyzerID]AnalyzerMeta{
 		"A1": &simpleAnalyzer{
 			id: "A1", deps: []CollectorID{"PP"},
-			fn: func(params AnalyzerParams) *AnalyzerResult {
+			fn: func(params ClusterWideAnalyzerParams) *AnalyzerResult {
 				analyzerPodCount = len(params.Vitals.ScyllaNodeKeys())
 				return &AnalyzerResult{
 					Status:  AnalyzerPassed,
@@ -694,7 +736,7 @@ func TestEngineAnalyzerMixedCollectorResults(t *testing.T) {
 	collectors := map[CollectorID]CollectorMeta{
 		"PP": &recordingCollector{
 			id: "PP", scope: PerScyllaNode, callLog: &callLog,
-			callFunc: func(_ context.Context, params CollectorParams) (*CollectorResult, error) {
+			callFunc: func(_ context.Context, params testCollectorParams) (*CollectorResult, error) {
 				callCount++
 				if params.ScyllaNode.Name == "pod-1" {
 					return &CollectorResult{

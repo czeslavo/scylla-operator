@@ -216,31 +216,30 @@ func (f *FakeResourceLister) ListScyllaOperatorConfigs(_ context.Context) ([]*sc
 	return f.ScyllaOperatorConfigs, f.ScyllaOperatorConfigsErr
 }
 
-// FakeCollector is a configurable fake that implements engine.Collector.
+// FakeClusterWideCollector is a configurable fake that implements engine.ClusterWideCollector.
 // It records invocations and returns preconfigured results.
-type FakeCollector struct {
+type FakeClusterWideCollector struct {
 	IDValue        engine.CollectorID
 	NameValue      string
-	ScopeValue     engine.CollectorScope
 	DependsOnValue []engine.CollectorID
 
-	// Result is returned by Collect. If nil, a default PASSED result is returned.
+	// Result is returned by CollectClusterWide. If nil, a default PASSED result is returned.
 	Result *engine.CollectorResult
-	// Err is returned by Collect as the error value.
+	// Err is returned as the error value.
 	Err error
 
 	mu          sync.Mutex
 	CallCount   int
-	CallParams  []engine.CollectorParams
-	CollectFunc func(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error)
+	CallParams  []engine.ClusterWideCollectorParams
+	CollectFunc func(ctx context.Context, params engine.ClusterWideCollectorParams) (*engine.CollectorResult, error)
 }
 
-func (f *FakeCollector) ID() engine.CollectorID          { return f.IDValue }
-func (f *FakeCollector) Name() string                    { return f.NameValue }
-func (f *FakeCollector) Scope() engine.CollectorScope    { return f.ScopeValue }
-func (f *FakeCollector) DependsOn() []engine.CollectorID { return f.DependsOnValue }
+func (f *FakeClusterWideCollector) ID() engine.CollectorID          { return f.IDValue }
+func (f *FakeClusterWideCollector) Name() string                    { return f.NameValue }
+func (f *FakeClusterWideCollector) Scope() engine.CollectorScope    { return engine.ClusterWide }
+func (f *FakeClusterWideCollector) DependsOn() []engine.CollectorID { return f.DependsOnValue }
 
-func (f *FakeCollector) Collect(ctx context.Context, params engine.CollectorParams) (*engine.CollectorResult, error) {
+func (f *FakeClusterWideCollector) CollectClusterWide(ctx context.Context, params engine.ClusterWideCollectorParams) (*engine.CollectorResult, error) {
 	f.mu.Lock()
 	f.CallCount++
 	f.CallParams = append(f.CallParams, params)
@@ -249,7 +248,6 @@ func (f *FakeCollector) Collect(ctx context.Context, params engine.CollectorPara
 	if f.CollectFunc != nil {
 		return f.CollectFunc(ctx, params)
 	}
-
 	if f.Err != nil {
 		return nil, f.Err
 	}
@@ -262,29 +260,105 @@ func (f *FakeCollector) Collect(ctx context.Context, params engine.CollectorPara
 	}, nil
 }
 
-// FakeAnalyzer is a configurable fake that implements engine.Analyzer.
-// It records invocations and returns preconfigured results.
-type FakeAnalyzer struct {
-	IDValue        engine.AnalyzerID
+// FakePerScyllaClusterCollector is a configurable fake that implements engine.PerScyllaClusterCollector.
+type FakePerScyllaClusterCollector struct {
+	IDValue        engine.CollectorID
 	NameValue      string
-	ScopeValue     engine.AnalyzerScope
 	DependsOnValue []engine.CollectorID
 
-	// Result is returned by Analyze. If nil, a default PASSED result is returned.
-	Result *engine.AnalyzerResult
-
+	Result      *engine.CollectorResult
+	Err         error
 	mu          sync.Mutex
 	CallCount   int
-	CallParams  []engine.AnalyzerParams
-	AnalyzeFunc func(params engine.AnalyzerParams) *engine.AnalyzerResult
+	CallParams  []engine.PerScyllaClusterCollectorParams
+	CollectFunc func(ctx context.Context, params engine.PerScyllaClusterCollectorParams) (*engine.CollectorResult, error)
 }
 
-func (f *FakeAnalyzer) ID() engine.AnalyzerID           { return f.IDValue }
-func (f *FakeAnalyzer) Name() string                    { return f.NameValue }
-func (f *FakeAnalyzer) Scope() engine.AnalyzerScope     { return f.ScopeValue }
-func (f *FakeAnalyzer) DependsOn() []engine.CollectorID { return f.DependsOnValue }
+func (f *FakePerScyllaClusterCollector) ID() engine.CollectorID          { return f.IDValue }
+func (f *FakePerScyllaClusterCollector) Name() string                    { return f.NameValue }
+func (f *FakePerScyllaClusterCollector) Scope() engine.CollectorScope    { return engine.PerScyllaCluster }
+func (f *FakePerScyllaClusterCollector) DependsOn() []engine.CollectorID { return f.DependsOnValue }
 
-func (f *FakeAnalyzer) Analyze(params engine.AnalyzerParams) *engine.AnalyzerResult {
+func (f *FakePerScyllaClusterCollector) CollectPerScyllaCluster(ctx context.Context, params engine.PerScyllaClusterCollectorParams) (*engine.CollectorResult, error) {
+	f.mu.Lock()
+	f.CallCount++
+	f.CallParams = append(f.CallParams, params)
+	f.mu.Unlock()
+
+	if f.CollectFunc != nil {
+		return f.CollectFunc(ctx, params)
+	}
+	if f.Err != nil {
+		return nil, f.Err
+	}
+	if f.Result != nil {
+		return f.Result, nil
+	}
+	return &engine.CollectorResult{
+		Status:  engine.CollectorPassed,
+		Message: fmt.Sprintf("fake %s passed", f.IDValue),
+	}, nil
+}
+
+// FakePerScyllaNodeCollector is a configurable fake that implements engine.PerScyllaNodeCollector.
+type FakePerScyllaNodeCollector struct {
+	IDValue        engine.CollectorID
+	NameValue      string
+	DependsOnValue []engine.CollectorID
+
+	Result      *engine.CollectorResult
+	Err         error
+	mu          sync.Mutex
+	CallCount   int
+	CallParams  []engine.PerScyllaNodeCollectorParams
+	CollectFunc func(ctx context.Context, params engine.PerScyllaNodeCollectorParams) (*engine.CollectorResult, error)
+}
+
+func (f *FakePerScyllaNodeCollector) ID() engine.CollectorID          { return f.IDValue }
+func (f *FakePerScyllaNodeCollector) Name() string                    { return f.NameValue }
+func (f *FakePerScyllaNodeCollector) Scope() engine.CollectorScope    { return engine.PerScyllaNode }
+func (f *FakePerScyllaNodeCollector) DependsOn() []engine.CollectorID { return f.DependsOnValue }
+
+func (f *FakePerScyllaNodeCollector) CollectPerScyllaNode(ctx context.Context, params engine.PerScyllaNodeCollectorParams) (*engine.CollectorResult, error) {
+	f.mu.Lock()
+	f.CallCount++
+	f.CallParams = append(f.CallParams, params)
+	f.mu.Unlock()
+
+	if f.CollectFunc != nil {
+		return f.CollectFunc(ctx, params)
+	}
+	if f.Err != nil {
+		return nil, f.Err
+	}
+	if f.Result != nil {
+		return f.Result, nil
+	}
+	return &engine.CollectorResult{
+		Status:  engine.CollectorPassed,
+		Message: fmt.Sprintf("fake %s passed", f.IDValue),
+	}, nil
+}
+
+// FakeClusterWideAnalyzer is a configurable fake that implements engine.ClusterWideAnalyzer.
+type FakeClusterWideAnalyzer struct {
+	IDValue        engine.AnalyzerID
+	NameValue      string
+	DependsOnValue []engine.CollectorID
+
+	Result      *engine.AnalyzerResult
+	mu          sync.Mutex
+	CallCount   int
+	CallParams  []engine.ClusterWideAnalyzerParams
+	AnalyzeFunc func(params engine.ClusterWideAnalyzerParams) *engine.AnalyzerResult
+}
+
+func (f *FakeClusterWideAnalyzer) ID() engine.AnalyzerID           { return f.IDValue }
+func (f *FakeClusterWideAnalyzer) Name() string                    { return f.NameValue }
+func (f *FakeClusterWideAnalyzer) Scope() engine.AnalyzerScope     { return engine.AnalyzerClusterWide }
+func (f *FakeClusterWideAnalyzer) DependsOn() []engine.CollectorID { return f.DependsOnValue }
+
+func (f *FakeClusterWideAnalyzer) AnalyzeClusterWide(params engine.ClusterWideAnalyzerParams) *engine.AnalyzerResult {
 	f.mu.Lock()
 	f.CallCount++
 	f.CallParams = append(f.CallParams, params)
@@ -293,7 +367,44 @@ func (f *FakeAnalyzer) Analyze(params engine.AnalyzerParams) *engine.AnalyzerRes
 	if f.AnalyzeFunc != nil {
 		return f.AnalyzeFunc(params)
 	}
+	if f.Result != nil {
+		return f.Result
+	}
+	return &engine.AnalyzerResult{
+		Status:  engine.AnalyzerPassed,
+		Message: fmt.Sprintf("fake %s passed", f.IDValue),
+	}
+}
 
+// FakePerScyllaClusterAnalyzer is a configurable fake that implements engine.PerScyllaClusterAnalyzer.
+type FakePerScyllaClusterAnalyzer struct {
+	IDValue        engine.AnalyzerID
+	NameValue      string
+	DependsOnValue []engine.CollectorID
+
+	Result      *engine.AnalyzerResult
+	mu          sync.Mutex
+	CallCount   int
+	CallParams  []engine.PerScyllaClusterAnalyzerParams
+	AnalyzeFunc func(params engine.PerScyllaClusterAnalyzerParams) *engine.AnalyzerResult
+}
+
+func (f *FakePerScyllaClusterAnalyzer) ID() engine.AnalyzerID { return f.IDValue }
+func (f *FakePerScyllaClusterAnalyzer) Name() string          { return f.NameValue }
+func (f *FakePerScyllaClusterAnalyzer) Scope() engine.AnalyzerScope {
+	return engine.AnalyzerPerScyllaCluster
+}
+func (f *FakePerScyllaClusterAnalyzer) DependsOn() []engine.CollectorID { return f.DependsOnValue }
+
+func (f *FakePerScyllaClusterAnalyzer) AnalyzePerScyllaCluster(params engine.PerScyllaClusterAnalyzerParams) *engine.AnalyzerResult {
+	f.mu.Lock()
+	f.CallCount++
+	f.CallParams = append(f.CallParams, params)
+	f.mu.Unlock()
+
+	if f.AnalyzeFunc != nil {
+		return f.AnalyzeFunc(params)
+	}
 	if f.Result != nil {
 		return f.Result
 	}

@@ -332,27 +332,6 @@ func (b AnalyzerBase) Name() string             { return b.name }
 func (b AnalyzerBase) Scope() AnalyzerScope     { return b.scope }
 func (b AnalyzerBase) DependsOn() []CollectorID { return b.dependsOn }
 
-// Collector is the interface that all diagnostic data collectors must implement.
-// Deprecated: implement ClusterWideCollector, PerScyllaClusterCollector, or
-// PerScyllaNodeCollector instead.
-type Collector interface {
-	ID() CollectorID
-	Name() string // Human-readable description
-	Scope() CollectorScope
-	DependsOn() []CollectorID // Other collectors this one needs (can be empty)
-	Collect(ctx context.Context, params CollectorParams) (*CollectorResult, error)
-}
-
-// Analyzer is the interface that all diagnostic analyzers must implement.
-// Deprecated: implement ClusterWideAnalyzer or PerScyllaClusterAnalyzer instead.
-type Analyzer interface {
-	ID() AnalyzerID
-	Name() string             // Human-readable description
-	Scope() AnalyzerScope     // Whether this analyzer runs once or per ScyllaCluster
-	DependsOn() []CollectorID // Collector IDs whose results this analyzer reads
-	Analyze(params AnalyzerParams) *AnalyzerResult
-}
-
 // RBACProvider is an optional interface that collectors can implement to declare
 // the Kubernetes RBAC rules they require. Use a type assertion to check whether
 // a given collector implements this interface:
@@ -439,29 +418,6 @@ type ScyllaNodeInfo struct {
 	ClusterName    string // from label scylla/cluster
 	DatacenterName string // from label scylla/datacenter
 	RackName       string // from label scylla/rack
-}
-
-// CollectorParams holds everything a collector needs during execution.
-type CollectorParams struct {
-	// Always available:
-	Vitals *Vitals // Results from upstream collectors
-
-	// Available based on scope:
-	ScyllaCluster *ScyllaClusterInfo // Non-nil for PerScyllaCluster and PerScyllaNode
-	ScyllaNode    *ScyllaNodeInfo    // Non-nil for PerScyllaNode
-
-	// Dependency-injected capabilities:
-	PodExecutor    PodExecutor
-	PodLogFetcher  PodLogFetcher
-	ResourceLister ResourceLister
-	ArtifactWriter ArtifactWriter // Write raw artifact files
-}
-
-// AnalyzerParams holds everything an analyzer needs during execution.
-type AnalyzerParams struct {
-	Vitals         *Vitals            // Vitals store (full for ClusterWide, filtered for PerScyllaCluster)
-	ScyllaCluster  *ScyllaClusterInfo // Non-nil for AnalyzerPerScyllaCluster
-	ArtifactReader ArtifactReader     // Read raw artifact files from collectors
 }
 
 // Vitals is the central data store. It holds collector results keyed by scope.

@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// stubCollector is a minimal Collector for resolve tests.
+// stubCollector is a minimal CollectorMeta for resolve tests.
 type stubCollector struct {
 	id    CollectorID
 	scope CollectorScope
@@ -17,11 +17,11 @@ func (s *stubCollector) ID() CollectorID          { return s.id }
 func (s *stubCollector) Name() string             { return string(s.id) }
 func (s *stubCollector) Scope() CollectorScope    { return s.scope }
 func (s *stubCollector) DependsOn() []CollectorID { return s.deps }
-func (s *stubCollector) Collect(_ context.Context, _ CollectorParams) (*CollectorResult, error) {
+func (s *stubCollector) CollectClusterWide(_ context.Context, _ ClusterWideCollectorParams) (*CollectorResult, error) {
 	return nil, nil
 }
 
-// stubAnalyzer is a minimal Analyzer for resolve tests.
+// stubAnalyzer is a minimal AnalyzerMeta for resolve tests.
 type stubAnalyzer struct {
 	id   AnalyzerID
 	deps []CollectorID
@@ -31,7 +31,7 @@ func (s *stubAnalyzer) ID() AnalyzerID           { return s.id }
 func (s *stubAnalyzer) Name() string             { return string(s.id) }
 func (s *stubAnalyzer) Scope() AnalyzerScope     { return AnalyzerClusterWide }
 func (s *stubAnalyzer) DependsOn() []CollectorID { return s.deps }
-func (s *stubAnalyzer) Analyze(_ AnalyzerParams) *AnalyzerResult {
+func (s *stubAnalyzer) AnalyzeClusterWide(_ ClusterWideAnalyzerParams) *AnalyzerResult {
 	return nil
 }
 

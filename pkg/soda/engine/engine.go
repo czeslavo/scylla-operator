@@ -201,14 +201,6 @@ func (e *Engine) executeClusterWideCollector(ctx context.Context, collector Coll
 			PodLogFetcher:  e.config.PodLogFetcher,
 			ArtifactWriter: artifactWriter,
 		})
-	case Collector:
-		result, err = c.Collect(ctx, CollectorParams{
-			Vitals:         vitals,
-			PodExecutor:    e.config.PodExecutor,
-			PodLogFetcher:  e.config.PodLogFetcher,
-			ResourceLister: e.config.ResourceLister,
-			ArtifactWriter: artifactWriter,
-		})
 	default:
 		err = fmt.Errorf("collector %s does not implement ClusterWideCollector", collector.ID())
 	}
@@ -253,15 +245,6 @@ func (e *Engine) executePerScyllaClusterCollector(ctx context.Context, collector
 			PodLogFetcher:  e.config.PodLogFetcher,
 			ArtifactWriter: artifactWriter,
 		})
-	case Collector:
-		result, err = c.Collect(ctx, CollectorParams{
-			Vitals:         vitals,
-			ScyllaCluster:  cluster,
-			PodExecutor:    e.config.PodExecutor,
-			PodLogFetcher:  e.config.PodLogFetcher,
-			ResourceLister: e.config.ResourceLister,
-			ArtifactWriter: artifactWriter,
-		})
 	default:
 		err = fmt.Errorf("collector %s does not implement PerScyllaClusterCollector", collector.ID())
 	}
@@ -300,16 +283,6 @@ func (e *Engine) executePerScyllaNodeCollector(ctx context.Context, collector Co
 	switch c := collector.(type) {
 	case PerScyllaNodeCollector:
 		result, err = c.CollectPerScyllaNode(ctx, PerScyllaNodeCollectorParams{
-			Vitals:         vitals,
-			ScyllaCluster:  cluster,
-			ScyllaNode:     node,
-			PodExecutor:    e.config.PodExecutor,
-			PodLogFetcher:  e.config.PodLogFetcher,
-			ResourceLister: e.config.ResourceLister,
-			ArtifactWriter: artifactWriter,
-		})
-	case Collector:
-		result, err = c.Collect(ctx, CollectorParams{
 			Vitals:         vitals,
 			ScyllaCluster:  cluster,
 			ScyllaNode:     node,
@@ -443,12 +416,6 @@ func (e *Engine) executeAnalyzers(analyzerIDs []AnalyzerID, vitals *Vitals, arti
 						ScyllaCluster:  &clusterCopy,
 						ArtifactReader: artifactReader,
 					})
-				case Analyzer:
-					result = a.Analyze(AnalyzerParams{
-						Vitals:         scopedVitals,
-						ScyllaCluster:  &clusterCopy,
-						ArtifactReader: artifactReader,
-					})
 				default:
 					result = &AnalyzerResult{
 						Status:  AnalyzerFailed,
@@ -476,11 +443,6 @@ func (e *Engine) executeAnalyzers(analyzerIDs []AnalyzerID, vitals *Vitals, arti
 			switch a := analyzer.(type) {
 			case ClusterWideAnalyzer:
 				result = a.AnalyzeClusterWide(ClusterWideAnalyzerParams{
-					Vitals:         vitals,
-					ArtifactReader: artifactReader,
-				})
-			case Analyzer:
-				result = a.Analyze(AnalyzerParams{
 					Vitals:         vitals,
 					ArtifactReader: artifactReader,
 				})
