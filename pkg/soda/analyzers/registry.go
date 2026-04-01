@@ -7,8 +7,8 @@ import (
 )
 
 // AllAnalyzers returns the complete list of PoC analyzers.
-func AllAnalyzers() []engine.Analyzer {
-	return []engine.Analyzer{
+func AllAnalyzers() []engine.AnalyzerMeta {
+	return []engine.AnalyzerMeta{
 		NewScyllaVersionSupportAnalyzer(),
 		NewSchemaAgreementAnalyzer(),
 		NewOSSupportAnalyzer(),
@@ -19,8 +19,8 @@ func AllAnalyzers() []engine.Analyzer {
 
 // AllAnalyzersMap returns a map of all analyzers keyed by ID.
 // It panics if two analyzers share the same ID, which is a programming error.
-func AllAnalyzersMap() map[engine.AnalyzerID]engine.Analyzer {
-	m := make(map[engine.AnalyzerID]engine.Analyzer)
+func AllAnalyzersMap() map[engine.AnalyzerID]engine.AnalyzerMeta {
+	m := make(map[engine.AnalyzerID]engine.AnalyzerMeta)
 	for _, a := range AllAnalyzers() {
 		if _, exists := m[a.ID()]; exists {
 			panic(fmt.Sprintf("duplicate analyzer ID %q: each analyzer must have a unique ID", a.ID()))

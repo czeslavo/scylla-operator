@@ -123,12 +123,12 @@ func TestEngineTopoOrder(t *testing.T) {
 	// C1 has no deps, C2 depends on C1, C3 depends on C2.
 	// Expected order: C1, C2, C3.
 	var callLog []CollectorID
-	collectors := map[CollectorID]Collector{
+	collectors := map[CollectorID]CollectorMeta{
 		"C1": &recordingCollector{id: "C1", scope: ClusterWide, callLog: &callLog},
 		"C2": &recordingCollector{id: "C2", scope: ClusterWide, deps: []CollectorID{"C1"}, callLog: &callLog},
 		"C3": &recordingCollector{id: "C3", scope: ClusterWide, deps: []CollectorID{"C2"}, callLog: &callLog},
 	}
-	analyzers := map[AnalyzerID]Analyzer{
+	analyzers := map[AnalyzerID]AnalyzerMeta{
 		"A1": &simpleAnalyzer{id: "A1", deps: []CollectorID{"C3"}},
 	}
 	profiles := map[string]Profile{
@@ -161,7 +161,7 @@ func TestEngineTopoOrder(t *testing.T) {
 func TestEngineCascadeSkip(t *testing.T) {
 	// C1 returns SKIPPED → C2 (depends on C1) should be SKIPPED.
 	var callLog []CollectorID
-	collectors := map[CollectorID]Collector{
+	collectors := map[CollectorID]CollectorMeta{
 		"C1": &recordingCollector{
 			id: "C1", scope: ClusterWide, callLog: &callLog,
 			result: &CollectorResult{Status: CollectorSkipped, Message: "skipped"},
@@ -170,7 +170,7 @@ func TestEngineCascadeSkip(t *testing.T) {
 			id: "C2", scope: ClusterWide, deps: []CollectorID{"C1"}, callLog: &callLog,
 		},
 	}
-	analyzers := map[AnalyzerID]Analyzer{
+	analyzers := map[AnalyzerID]AnalyzerMeta{
 		"A1": &simpleAnalyzer{id: "A1", deps: []CollectorID{"C2"}},
 	}
 	profiles := map[string]Profile{
@@ -212,7 +212,7 @@ func TestEngineCascadeSkip(t *testing.T) {
 func TestEngineCascadeFail(t *testing.T) {
 	// C1 returns FAILED → C2 (depends on C1) should be FAILED.
 	var callLog []CollectorID
-	collectors := map[CollectorID]Collector{
+	collectors := map[CollectorID]CollectorMeta{
 		"C1": &recordingCollector{
 			id: "C1", scope: ClusterWide, callLog: &callLog,
 			result: &CollectorResult{Status: CollectorFailed, Message: "C1 failed hard"},
@@ -221,7 +221,7 @@ func TestEngineCascadeFail(t *testing.T) {
 			id: "C2", scope: ClusterWide, deps: []CollectorID{"C1"}, callLog: &callLog,
 		},
 	}
-	analyzers := map[AnalyzerID]Analyzer{
+	analyzers := map[AnalyzerID]AnalyzerMeta{
 		"A1": &simpleAnalyzer{id: "A1", deps: []CollectorID{"C2"}},
 	}
 	profiles := map[string]Profile{
@@ -261,12 +261,12 @@ func TestEngineCascadeFail(t *testing.T) {
 func TestEngineScopeIteration(t *testing.T) {
 	// ClusterWide should run once, PerScyllaCluster twice, PerScyllaNode four times.
 	var cwLog, pcLog, ppLog []CollectorID
-	collectors := map[CollectorID]Collector{
+	collectors := map[CollectorID]CollectorMeta{
 		"CW": &recordingCollector{id: "CW", scope: ClusterWide, callLog: &cwLog},
 		"PC": &recordingCollector{id: "PC", scope: PerScyllaCluster, callLog: &pcLog},
 		"PP": &recordingCollector{id: "PP", scope: PerScyllaNode, callLog: &ppLog},
 	}
-	analyzers := map[AnalyzerID]Analyzer{
+	analyzers := map[AnalyzerID]AnalyzerMeta{
 		"A1": &simpleAnalyzer{id: "A1", deps: []CollectorID{"CW", "PC", "PP"}},
 	}
 	profiles := map[string]Profile{
@@ -294,7 +294,7 @@ func TestEngineScopeIteration(t *testing.T) {
 		AllProfiles:    profiles,
 		ProfileName:    "test",
 		ScyllaClusters: clusters,
-		ScyllaNodes: pods,
+		ScyllaNodes:    pods,
 	})
 
 	_, err := eng.Run(context.Background())
@@ -316,7 +316,7 @@ func TestEngineScopeIteration(t *testing.T) {
 func TestEngineCrossScopeDep(t *testing.T) {
 	// PerScyllaNode collector depends on ClusterWide collector.
 	var callLog []CollectorID
-	collectors := map[CollectorID]Collector{
+	collectors := map[CollectorID]CollectorMeta{
 		"CW": &recordingCollector{id: "CW", scope: ClusterWide, callLog: &callLog},
 		"PP": &recordingCollector{
 			id: "PP", scope: PerScyllaNode, deps: []CollectorID{"CW"}, callLog: &callLog,
@@ -333,7 +333,7 @@ func TestEngineCrossScopeDep(t *testing.T) {
 			},
 		},
 	}
-	analyzers := map[AnalyzerID]Analyzer{
+	analyzers := map[AnalyzerID]AnalyzerMeta{
 		"A1": &simpleAnalyzer{id: "A1", deps: []CollectorID{"PP"}},
 	}
 	profiles := map[string]Profile{
@@ -353,7 +353,7 @@ func TestEngineCrossScopeDep(t *testing.T) {
 		AllProfiles:    profiles,
 		ProfileName:    "test",
 		ScyllaClusters: clusters,
-		ScyllaNodes: pods,
+		ScyllaNodes:    pods,
 	})
 
 	result, err := eng.Run(context.Background())
@@ -379,13 +379,13 @@ func TestEngineCrossScopeDep(t *testing.T) {
 func TestEngineCollectorError(t *testing.T) {
 	// Collector returns an error → should be recorded as FAILED.
 	var callLog []CollectorID
-	collectors := map[CollectorID]Collector{
+	collectors := map[CollectorID]CollectorMeta{
 		"C1": &recordingCollector{
 			id: "C1", scope: ClusterWide, callLog: &callLog,
 			err: fmt.Errorf("network timeout"),
 		},
 	}
-	analyzers := map[AnalyzerID]Analyzer{
+	analyzers := map[AnalyzerID]AnalyzerMeta{
 		"A1": &simpleAnalyzer{id: "A1", deps: []CollectorID{"C1"}},
 	}
 	profiles := map[string]Profile{
@@ -427,8 +427,8 @@ func TestEngineEmptyRegistry(t *testing.T) {
 	}
 
 	eng := NewEngine(EngineConfig{
-		AllCollectors: map[CollectorID]Collector{},
-		AllAnalyzers:  map[AnalyzerID]Analyzer{},
+		AllCollectors: map[CollectorID]CollectorMeta{},
+		AllAnalyzers:  map[AnalyzerID]AnalyzerMeta{},
 		AllProfiles:   profiles,
 		ProfileName:   "empty",
 	})
@@ -445,13 +445,13 @@ func TestEngineEmptyRegistry(t *testing.T) {
 
 func TestEngineAllCollectorsFail(t *testing.T) {
 	var callLog []CollectorID
-	collectors := map[CollectorID]Collector{
+	collectors := map[CollectorID]CollectorMeta{
 		"C1": &recordingCollector{
 			id: "C1", scope: PerScyllaNode, callLog: &callLog,
 			result: &CollectorResult{Status: CollectorFailed, Message: "C1 failed"},
 		},
 	}
-	analyzers := map[AnalyzerID]Analyzer{
+	analyzers := map[AnalyzerID]AnalyzerMeta{
 		"A1": &simpleAnalyzer{id: "A1", deps: []CollectorID{"C1"}},
 	}
 	profiles := map[string]Profile{
@@ -472,7 +472,7 @@ func TestEngineAllCollectorsFail(t *testing.T) {
 		AllProfiles:    profiles,
 		ProfileName:    "test",
 		ScyllaClusters: clusters,
-		ScyllaNodes: pods,
+		ScyllaNodes:    pods,
 	})
 
 	result, err := eng.Run(context.Background())
@@ -503,7 +503,7 @@ func TestEngineArtifactWriterAssignment(t *testing.T) {
 	var callLog []CollectorID
 	factory := newFakeArtifactWriterFactory()
 
-	collectors := map[CollectorID]Collector{
+	collectors := map[CollectorID]CollectorMeta{
 		"CW": &recordingCollector{
 			id: "CW", scope: ClusterWide, callLog: &callLog,
 			callFunc: func(_ context.Context, params CollectorParams) (*CollectorResult, error) {
@@ -543,7 +543,7 @@ func TestEngineArtifactWriterAssignment(t *testing.T) {
 			},
 		},
 	}
-	analyzers := map[AnalyzerID]Analyzer{
+	analyzers := map[AnalyzerID]AnalyzerMeta{
 		"A1": &simpleAnalyzer{id: "A1", deps: []CollectorID{"CW", "PP"}},
 	}
 	profiles := map[string]Profile{
@@ -563,7 +563,7 @@ func TestEngineArtifactWriterAssignment(t *testing.T) {
 		AllProfiles:           profiles,
 		ProfileName:           "test",
 		ScyllaClusters:        clusters,
-		ScyllaNodes: pods,
+		ScyllaNodes:           pods,
 		ArtifactWriterFactory: factory,
 	})
 
@@ -623,7 +623,7 @@ func factoryKeys(f *fakeArtifactWriterFactory) []string {
 func TestEngineAnalyzerReceivesVitals(t *testing.T) {
 	// Verify analyzers receive the full Vitals store and can iterate pod keys.
 	var callLog []CollectorID
-	collectors := map[CollectorID]Collector{
+	collectors := map[CollectorID]CollectorMeta{
 		"PP": &recordingCollector{
 			id: "PP", scope: PerScyllaNode, callLog: &callLog,
 			callFunc: func(_ context.Context, params CollectorParams) (*CollectorResult, error) {
@@ -637,7 +637,7 @@ func TestEngineAnalyzerReceivesVitals(t *testing.T) {
 	}
 
 	var analyzerPodCount int
-	analyzers := map[AnalyzerID]Analyzer{
+	analyzers := map[AnalyzerID]AnalyzerMeta{
 		"A1": &simpleAnalyzer{
 			id: "A1", deps: []CollectorID{"PP"},
 			fn: func(params AnalyzerParams) *AnalyzerResult {
@@ -668,7 +668,7 @@ func TestEngineAnalyzerReceivesVitals(t *testing.T) {
 		AllProfiles:    profiles,
 		ProfileName:    "test",
 		ScyllaClusters: clusters,
-		ScyllaNodes: pods,
+		ScyllaNodes:    pods,
 	})
 
 	result, err := eng.Run(context.Background())
@@ -691,7 +691,7 @@ func TestEngineAnalyzerMixedCollectorResults(t *testing.T) {
 	// The analyzer should still run since at least one result passed.
 	var callLog []CollectorID
 	callCount := 0
-	collectors := map[CollectorID]Collector{
+	collectors := map[CollectorID]CollectorMeta{
 		"PP": &recordingCollector{
 			id: "PP", scope: PerScyllaNode, callLog: &callLog,
 			callFunc: func(_ context.Context, params CollectorParams) (*CollectorResult, error) {
@@ -709,7 +709,7 @@ func TestEngineAnalyzerMixedCollectorResults(t *testing.T) {
 			},
 		},
 	}
-	analyzers := map[AnalyzerID]Analyzer{
+	analyzers := map[AnalyzerID]AnalyzerMeta{
 		"A1": &simpleAnalyzer{id: "A1", deps: []CollectorID{"PP"}},
 	}
 	profiles := map[string]Profile{
@@ -731,7 +731,7 @@ func TestEngineAnalyzerMixedCollectorResults(t *testing.T) {
 		AllProfiles:    profiles,
 		ProfileName:    "test",
 		ScyllaClusters: clusters,
-		ScyllaNodes: pods,
+		ScyllaNodes:    pods,
 	})
 
 	result, err := eng.Run(context.Background())
@@ -791,7 +791,7 @@ func TestTopoSortCollectors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			collectors := make(map[CollectorID]Collector)
+			collectors := make(map[CollectorID]CollectorMeta)
 			for _, id := range tt.ids {
 				collectors[id] = &stubCollector{id: id, deps: tt.deps[id]}
 			}

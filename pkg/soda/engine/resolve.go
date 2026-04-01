@@ -24,8 +24,8 @@ func ResolveProfile(
 	allProfiles map[string]Profile,
 	enable []AnalyzerID,
 	disable []AnalyzerID,
-	allAnalyzers map[AnalyzerID]Analyzer,
-	allCollectors map[CollectorID]Collector,
+	allAnalyzers map[AnalyzerID]AnalyzerMeta,
+	allCollectors map[CollectorID]CollectorMeta,
 ) (resolvedCollectors []CollectorID, resolvedAnalyzers []AnalyzerID, err error) {
 	// Step 1+2: Flatten profile includes and merge analyzers + explicit collectors.
 	analyzerSet, explicitCollectorSet, err := flattenProfile(profileName, allProfiles, make(map[string]bool))
@@ -125,7 +125,7 @@ func flattenProfile(name string, allProfiles map[string]Profile, visiting map[st
 
 // resolveCollectorDeps walks a collector's dependency tree, adding all
 // transitively required collectors to the set. Detects cycles via visiting.
-func resolveCollectorDeps(id CollectorID, allCollectors map[CollectorID]Collector, collected map[CollectorID]bool, visiting map[CollectorID]bool) error {
+func resolveCollectorDeps(id CollectorID, allCollectors map[CollectorID]CollectorMeta, collected map[CollectorID]bool, visiting map[CollectorID]bool) error {
 	if collected[id] {
 		return nil // Already resolved.
 	}
@@ -155,7 +155,7 @@ func resolveCollectorDeps(id CollectorID, allCollectors map[CollectorID]Collecto
 // validateCrossScopeDeps ensures cross-scope dependency constraints are met:
 // - ClusterWide collectors cannot depend on PerScyllaCluster or PerScyllaNode collectors
 // - PerScyllaCluster collectors cannot depend on PerScyllaNode collectors
-func validateCrossScopeDeps(collectorSet map[CollectorID]bool, allCollectors map[CollectorID]Collector) error {
+func validateCrossScopeDeps(collectorSet map[CollectorID]bool, allCollectors map[CollectorID]CollectorMeta) error {
 	for id := range collectorSet {
 		collector := allCollectors[id]
 		for _, depID := range collector.DependsOn() {

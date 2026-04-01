@@ -180,7 +180,158 @@ type AnalyzerResult struct {
 	Message string         `json:"message"`
 }
 
+// CollectorMeta is the metadata-only subset of a collector. The engine uses
+// this interface for dependency resolution, topological sorting, and cascade
+// checks — all of which only need identity and graph information, not the
+// actual Collect method.
+type CollectorMeta interface {
+	ID() CollectorID
+	Name() string
+	Scope() CollectorScope
+	DependsOn() []CollectorID
+}
+
+// AnalyzerMeta is the metadata-only subset of an analyzer used by the engine
+// for dependency checking and dispatch.
+type AnalyzerMeta interface {
+	ID() AnalyzerID
+	Name() string
+	Scope() AnalyzerScope
+	DependsOn() []CollectorID
+}
+
+// ClusterWideCollectorParams holds everything a ClusterWide collector needs.
+type ClusterWideCollectorParams struct {
+	Vitals         *Vitals
+	ResourceLister ResourceLister
+	ArtifactWriter ArtifactWriter // May be nil if no factory is configured.
+}
+
+// PerScyllaClusterCollectorParams holds everything a PerScyllaCluster collector needs.
+type PerScyllaClusterCollectorParams struct {
+	Vitals         *Vitals
+	ScyllaCluster  *ScyllaClusterInfo // Always non-nil.
+	ResourceLister ResourceLister
+	ArtifactWriter ArtifactWriter
+}
+
+// PerScyllaNodeCollectorParams holds everything a PerScyllaNode collector needs.
+type PerScyllaNodeCollectorParams struct {
+	Vitals         *Vitals
+	ScyllaCluster  *ScyllaClusterInfo // Always non-nil.
+	ScyllaNode     *ScyllaNodeInfo    // Always non-nil.
+	PodExecutor    PodExecutor
+	PodLogFetcher  PodLogFetcher
+	ArtifactWriter ArtifactWriter
+}
+
+// ClusterWideAnalyzerParams holds everything a ClusterWide analyzer needs.
+type ClusterWideAnalyzerParams struct {
+	Vitals         *Vitals
+	ArtifactReader ArtifactReader // May be nil in live mode.
+}
+
+// PerScyllaClusterAnalyzerParams holds everything a PerScyllaCluster analyzer needs.
+type PerScyllaClusterAnalyzerParams struct {
+	Vitals         *Vitals            // Scoped to this cluster.
+	ScyllaCluster  *ScyllaClusterInfo // Always non-nil.
+	ArtifactReader ArtifactReader
+}
+
+// ClusterWideCollector is the interface for collectors that run once per diagnostic run.
+type ClusterWideCollector interface {
+	CollectorMeta
+	CollectClusterWide(ctx context.Context, params ClusterWideCollectorParams) (*CollectorResult, error)
+}
+
+// PerScyllaClusterCollector is the interface for collectors that run once per ScyllaCluster.
+type PerScyllaClusterCollector interface {
+	CollectorMeta
+	CollectPerScyllaCluster(ctx context.Context, params PerScyllaClusterCollectorParams) (*CollectorResult, error)
+}
+
+// PerScyllaNodeCollector is the interface for collectors that run once per Scylla pod.
+type PerScyllaNodeCollector interface {
+	CollectorMeta
+	CollectPerScyllaNode(ctx context.Context, params PerScyllaNodeCollectorParams) (*CollectorResult, error)
+}
+
+// ClusterWideAnalyzer is the interface for analyzers that run once across the entire cluster.
+type ClusterWideAnalyzer interface {
+	AnalyzerMeta
+	AnalyzeClusterWide(params ClusterWideAnalyzerParams) *AnalyzerResult
+}
+
+// PerScyllaClusterAnalyzer is the interface for analyzers that run once per ScyllaCluster.
+type PerScyllaClusterAnalyzer interface {
+	AnalyzerMeta
+	AnalyzePerScyllaCluster(params PerScyllaClusterAnalyzerParams) *AnalyzerResult
+}
+
+// GetResult is a generic typed accessor that extracts the Data field from a
+// CollectorResult stored in Vitals, returning a typed pointer or an error.
+// T must be the concrete result struct (not a pointer).
+//
+// Example:
+//
+//	result, err := engine.GetResult[collectors.OSInfoResult](vitals, collectors.OSInfoCollectorID, podKey)
+func GetResult[T any](vitals *Vitals, id CollectorID, scopeKey ScopeKey) (*T, error) {
+	result, ok := vitals.Get(id, scopeKey)
+	if !ok {
+		return nil, fmt.Errorf("%s result not found for %v", id, scopeKey)
+	}
+	if result.Status != CollectorPassed {
+		return nil, fmt.Errorf("%s did not pass for %v: %s", id, scopeKey, result.Message)
+	}
+	typed, ok := result.Data.(*T)
+	if !ok {
+		return nil, fmt.Errorf("unexpected data type %T for %s", result.Data, id)
+	}
+	return typed, nil
+}
+
+// CollectorBase provides the common metadata fields shared by all collector
+// implementations. Embed it in a collector struct and call NewCollectorBase to
+// avoid implementing ID/Name/Scope/DependsOn by hand in every collector.
+type CollectorBase struct {
+	id        CollectorID
+	name      string
+	scope     CollectorScope
+	dependsOn []CollectorID
+}
+
+// NewCollectorBase constructs a CollectorBase with the given metadata.
+func NewCollectorBase(id CollectorID, name string, scope CollectorScope, dependsOn []CollectorID) CollectorBase {
+	return CollectorBase{id: id, name: name, scope: scope, dependsOn: dependsOn}
+}
+
+func (b CollectorBase) ID() CollectorID          { return b.id }
+func (b CollectorBase) Name() string             { return b.name }
+func (b CollectorBase) Scope() CollectorScope    { return b.scope }
+func (b CollectorBase) DependsOn() []CollectorID { return b.dependsOn }
+
+// AnalyzerBase provides the common metadata fields shared by all analyzer
+// implementations. Embed it and call NewAnalyzerBase to avoid boilerplate.
+type AnalyzerBase struct {
+	id        AnalyzerID
+	name      string
+	scope     AnalyzerScope
+	dependsOn []CollectorID
+}
+
+// NewAnalyzerBase constructs an AnalyzerBase with the given metadata.
+func NewAnalyzerBase(id AnalyzerID, name string, scope AnalyzerScope, dependsOn []CollectorID) AnalyzerBase {
+	return AnalyzerBase{id: id, name: name, scope: scope, dependsOn: dependsOn}
+}
+
+func (b AnalyzerBase) ID() AnalyzerID           { return b.id }
+func (b AnalyzerBase) Name() string             { return b.name }
+func (b AnalyzerBase) Scope() AnalyzerScope     { return b.scope }
+func (b AnalyzerBase) DependsOn() []CollectorID { return b.dependsOn }
+
 // Collector is the interface that all diagnostic data collectors must implement.
+// Deprecated: implement ClusterWideCollector, PerScyllaClusterCollector, or
+// PerScyllaNodeCollector instead.
 type Collector interface {
 	ID() CollectorID
 	Name() string // Human-readable description
@@ -190,6 +341,7 @@ type Collector interface {
 }
 
 // Analyzer is the interface that all diagnostic analyzers must implement.
+// Deprecated: implement ClusterWideAnalyzer or PerScyllaClusterAnalyzer instead.
 type Analyzer interface {
 	ID() AnalyzerID
 	Name() string             // Human-readable description

@@ -36,11 +36,11 @@ func (s *stubAnalyzer) Analyze(_ AnalyzerParams) *AnalyzerResult {
 }
 
 func TestResolveProfileBasic(t *testing.T) {
-	collectors := map[CollectorID]Collector{
+	collectors := map[CollectorID]CollectorMeta{
 		"C1": &stubCollector{id: "C1", scope: PerScyllaNode},
 		"C2": &stubCollector{id: "C2", scope: ClusterWide},
 	}
-	analyzers := map[AnalyzerID]Analyzer{
+	analyzers := map[AnalyzerID]AnalyzerMeta{
 		"A1": &stubAnalyzer{id: "A1", deps: []CollectorID{"C1"}},
 		"A2": &stubAnalyzer{id: "A2", deps: []CollectorID{"C2"}},
 	}
@@ -67,12 +67,12 @@ func TestResolveProfileBasic(t *testing.T) {
 func TestResolveProfileTransitiveDeps(t *testing.T) {
 	// C3 depends on C2, C2 depends on C1, A1 depends on C3.
 	// Resolution should include C1, C2, C3.
-	collectors := map[CollectorID]Collector{
+	collectors := map[CollectorID]CollectorMeta{
 		"C1": &stubCollector{id: "C1", scope: ClusterWide},
 		"C2": &stubCollector{id: "C2", scope: ClusterWide, deps: []CollectorID{"C1"}},
 		"C3": &stubCollector{id: "C3", scope: PerScyllaCluster, deps: []CollectorID{"C2"}},
 	}
-	analyzers := map[AnalyzerID]Analyzer{
+	analyzers := map[AnalyzerID]AnalyzerMeta{
 		"A1": &stubAnalyzer{id: "A1", deps: []CollectorID{"C3"}},
 	}
 	profiles := map[string]Profile{
@@ -91,12 +91,12 @@ func TestResolveProfileTransitiveDeps(t *testing.T) {
 }
 
 func TestResolveProfileComposition(t *testing.T) {
-	collectors := map[CollectorID]Collector{
+	collectors := map[CollectorID]CollectorMeta{
 		"C1": &stubCollector{id: "C1", scope: PerScyllaNode},
 		"C2": &stubCollector{id: "C2", scope: PerScyllaNode},
 		"C3": &stubCollector{id: "C3", scope: ClusterWide},
 	}
-	analyzers := map[AnalyzerID]Analyzer{
+	analyzers := map[AnalyzerID]AnalyzerMeta{
 		"A1": &stubAnalyzer{id: "A1", deps: []CollectorID{"C1"}},
 		"A2": &stubAnalyzer{id: "A2", deps: []CollectorID{"C2"}},
 		"A3": &stubAnalyzer{id: "A3", deps: []CollectorID{"C3"}},
@@ -125,11 +125,11 @@ func TestResolveProfileComposition(t *testing.T) {
 
 func TestResolveProfileDeepComposition(t *testing.T) {
 	// Profile chain: full → mid → base.
-	collectors := map[CollectorID]Collector{
+	collectors := map[CollectorID]CollectorMeta{
 		"C1": &stubCollector{id: "C1", scope: PerScyllaNode},
 		"C2": &stubCollector{id: "C2", scope: PerScyllaNode},
 	}
-	analyzers := map[AnalyzerID]Analyzer{
+	analyzers := map[AnalyzerID]AnalyzerMeta{
 		"A1": &stubAnalyzer{id: "A1", deps: []CollectorID{"C1"}},
 		"A2": &stubAnalyzer{id: "A2", deps: []CollectorID{"C2"}},
 	}
@@ -151,11 +151,11 @@ func TestResolveProfileDeepComposition(t *testing.T) {
 }
 
 func TestResolveProfileEnableOverride(t *testing.T) {
-	collectors := map[CollectorID]Collector{
+	collectors := map[CollectorID]CollectorMeta{
 		"C1": &stubCollector{id: "C1", scope: PerScyllaNode},
 		"C2": &stubCollector{id: "C2", scope: PerScyllaNode},
 	}
-	analyzers := map[AnalyzerID]Analyzer{
+	analyzers := map[AnalyzerID]AnalyzerMeta{
 		"A1": &stubAnalyzer{id: "A1", deps: []CollectorID{"C1"}},
 		"A2": &stubAnalyzer{id: "A2", deps: []CollectorID{"C2"}},
 	}
@@ -176,11 +176,11 @@ func TestResolveProfileEnableOverride(t *testing.T) {
 }
 
 func TestResolveProfileDisableOverride(t *testing.T) {
-	collectors := map[CollectorID]Collector{
+	collectors := map[CollectorID]CollectorMeta{
 		"C1": &stubCollector{id: "C1", scope: PerScyllaNode},
 		"C2": &stubCollector{id: "C2", scope: PerScyllaNode},
 	}
-	analyzers := map[AnalyzerID]Analyzer{
+	analyzers := map[AnalyzerID]AnalyzerMeta{
 		"A1": &stubAnalyzer{id: "A1", deps: []CollectorID{"C1"}},
 		"A2": &stubAnalyzer{id: "A2", deps: []CollectorID{"C2"}},
 	}
@@ -219,11 +219,11 @@ func TestResolveProfileCycleInProfiles(t *testing.T) {
 }
 
 func TestResolveProfileCycleInCollectors(t *testing.T) {
-	collectors := map[CollectorID]Collector{
+	collectors := map[CollectorID]CollectorMeta{
 		"C1": &stubCollector{id: "C1", scope: PerScyllaNode, deps: []CollectorID{"C2"}},
 		"C2": &stubCollector{id: "C2", scope: PerScyllaNode, deps: []CollectorID{"C1"}},
 	}
-	analyzers := map[AnalyzerID]Analyzer{
+	analyzers := map[AnalyzerID]AnalyzerMeta{
 		"A1": &stubAnalyzer{id: "A1", deps: []CollectorID{"C1"}},
 	}
 	profiles := map[string]Profile{
@@ -248,32 +248,32 @@ func TestResolveProfileUnknownAnalyzer(t *testing.T) {
 		"test": {Name: "test", Analyzers: []AnalyzerID{"NonexistentAnalyzer"}},
 	}
 
-	_, _, err := ResolveProfile("test", profiles, nil, nil, map[AnalyzerID]Analyzer{}, nil)
+	_, _, err := ResolveProfile("test", profiles, nil, nil, map[AnalyzerID]AnalyzerMeta{}, nil)
 	if err == nil {
 		t.Fatal("expected error for unknown analyzer ID")
 	}
 }
 
 func TestResolveProfileUnknownCollector(t *testing.T) {
-	analyzers := map[AnalyzerID]Analyzer{
+	analyzers := map[AnalyzerID]AnalyzerMeta{
 		"A1": &stubAnalyzer{id: "A1", deps: []CollectorID{"NonexistentCollector"}},
 	}
 	profiles := map[string]Profile{
 		"test": {Name: "test", Analyzers: []AnalyzerID{"A1"}},
 	}
 
-	_, _, err := ResolveProfile("test", profiles, nil, nil, analyzers, map[CollectorID]Collector{})
+	_, _, err := ResolveProfile("test", profiles, nil, nil, analyzers, map[CollectorID]CollectorMeta{})
 	if err == nil {
 		t.Fatal("expected error for unknown collector ID")
 	}
 }
 
 func TestResolveProfileCrossScopeViolation_ClusterWideDependsOnPerPod(t *testing.T) {
-	collectors := map[CollectorID]Collector{
+	collectors := map[CollectorID]CollectorMeta{
 		"CW": &stubCollector{id: "CW", scope: ClusterWide, deps: []CollectorID{"PP"}},
 		"PP": &stubCollector{id: "PP", scope: PerScyllaNode},
 	}
-	analyzers := map[AnalyzerID]Analyzer{
+	analyzers := map[AnalyzerID]AnalyzerMeta{
 		"A1": &stubAnalyzer{id: "A1", deps: []CollectorID{"CW"}},
 	}
 	profiles := map[string]Profile{
@@ -287,11 +287,11 @@ func TestResolveProfileCrossScopeViolation_ClusterWideDependsOnPerPod(t *testing
 }
 
 func TestResolveProfileCrossScopeViolation_ClusterWideDependsOnPerCluster(t *testing.T) {
-	collectors := map[CollectorID]Collector{
+	collectors := map[CollectorID]CollectorMeta{
 		"CW": &stubCollector{id: "CW", scope: ClusterWide, deps: []CollectorID{"PC"}},
 		"PC": &stubCollector{id: "PC", scope: PerScyllaCluster},
 	}
-	analyzers := map[AnalyzerID]Analyzer{
+	analyzers := map[AnalyzerID]AnalyzerMeta{
 		"A1": &stubAnalyzer{id: "A1", deps: []CollectorID{"CW"}},
 	}
 	profiles := map[string]Profile{
@@ -305,11 +305,11 @@ func TestResolveProfileCrossScopeViolation_ClusterWideDependsOnPerCluster(t *tes
 }
 
 func TestResolveProfileCrossScopeViolation_PerClusterDependsOnPerPod(t *testing.T) {
-	collectors := map[CollectorID]Collector{
+	collectors := map[CollectorID]CollectorMeta{
 		"PC": &stubCollector{id: "PC", scope: PerScyllaCluster, deps: []CollectorID{"PP"}},
 		"PP": &stubCollector{id: "PP", scope: PerScyllaNode},
 	}
-	analyzers := map[AnalyzerID]Analyzer{
+	analyzers := map[AnalyzerID]AnalyzerMeta{
 		"A1": &stubAnalyzer{id: "A1", deps: []CollectorID{"PC"}},
 	}
 	profiles := map[string]Profile{
@@ -323,11 +323,11 @@ func TestResolveProfileCrossScopeViolation_PerClusterDependsOnPerPod(t *testing.
 }
 
 func TestResolveProfileValidCrossScope_PerPodDependsOnClusterWide(t *testing.T) {
-	collectors := map[CollectorID]Collector{
+	collectors := map[CollectorID]CollectorMeta{
 		"CW": &stubCollector{id: "CW", scope: ClusterWide},
 		"PP": &stubCollector{id: "PP", scope: PerScyllaNode, deps: []CollectorID{"CW"}},
 	}
-	analyzers := map[AnalyzerID]Analyzer{
+	analyzers := map[AnalyzerID]AnalyzerMeta{
 		"A1": &stubAnalyzer{id: "A1", deps: []CollectorID{"PP"}},
 	}
 	profiles := map[string]Profile{
@@ -346,11 +346,11 @@ func TestResolveProfileValidCrossScope_PerPodDependsOnClusterWide(t *testing.T) 
 }
 
 func TestResolveProfileValidCrossScope_PerClusterDependsOnClusterWide(t *testing.T) {
-	collectors := map[CollectorID]Collector{
+	collectors := map[CollectorID]CollectorMeta{
 		"CW": &stubCollector{id: "CW", scope: ClusterWide},
 		"PC": &stubCollector{id: "PC", scope: PerScyllaCluster, deps: []CollectorID{"CW"}},
 	}
-	analyzers := map[AnalyzerID]Analyzer{
+	analyzers := map[AnalyzerID]AnalyzerMeta{
 		"A1": &stubAnalyzer{id: "A1", deps: []CollectorID{"PC"}},
 	}
 	profiles := map[string]Profile{
@@ -373,7 +373,7 @@ func TestResolveProfileEmptyProfile(t *testing.T) {
 		"empty": {Name: "empty"},
 	}
 
-	gotC, gotA, err := ResolveProfile("empty", profiles, nil, nil, map[AnalyzerID]Analyzer{}, map[CollectorID]Collector{})
+	gotC, gotA, err := ResolveProfile("empty", profiles, nil, nil, map[AnalyzerID]AnalyzerMeta{}, map[CollectorID]CollectorMeta{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -388,10 +388,10 @@ func TestResolveProfileEmptyProfile(t *testing.T) {
 
 func TestResolveProfileDeduplication(t *testing.T) {
 	// Two analyzers depend on the same collector.
-	collectors := map[CollectorID]Collector{
+	collectors := map[CollectorID]CollectorMeta{
 		"C1": &stubCollector{id: "C1", scope: PerScyllaNode},
 	}
-	analyzers := map[AnalyzerID]Analyzer{
+	analyzers := map[AnalyzerID]AnalyzerMeta{
 		"A1": &stubAnalyzer{id: "A1", deps: []CollectorID{"C1"}},
 		"A2": &stubAnalyzer{id: "A2", deps: []CollectorID{"C1"}},
 	}
@@ -416,7 +416,7 @@ func TestResolveProfileEnableUnknownAnalyzer(t *testing.T) {
 		"test": {Name: "test"},
 	}
 
-	_, _, err := ResolveProfile("test", profiles, []AnalyzerID{"NonexistentAnalyzer"}, nil, map[AnalyzerID]Analyzer{}, nil)
+	_, _, err := ResolveProfile("test", profiles, []AnalyzerID{"NonexistentAnalyzer"}, nil, map[AnalyzerID]AnalyzerMeta{}, nil)
 	if err == nil {
 		t.Fatal("expected error for unknown enabled analyzer ID")
 	}
@@ -427,7 +427,7 @@ func TestResolveProfileEnableUnknownAnalyzer(t *testing.T) {
 func TestResolveProfileExplicitCollectors(t *testing.T) {
 	// Profile lists collectors explicitly with no analyzers.
 	// All listed collectors (and their transitive deps) should be resolved.
-	collectors := map[CollectorID]Collector{
+	collectors := map[CollectorID]CollectorMeta{
 		"C1": &stubCollector{id: "C1", scope: ClusterWide},
 		"C2": &stubCollector{id: "C2", scope: PerScyllaCluster},
 		"C3": &stubCollector{id: "C3", scope: PerScyllaNode},
@@ -439,7 +439,7 @@ func TestResolveProfileExplicitCollectors(t *testing.T) {
 		},
 	}
 
-	gotC, gotA, err := ResolveProfile("data-only", profiles, nil, nil, map[AnalyzerID]Analyzer{}, collectors)
+	gotC, gotA, err := ResolveProfile("data-only", profiles, nil, nil, map[AnalyzerID]AnalyzerMeta{}, collectors)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -456,7 +456,7 @@ func TestResolveProfileExplicitCollectors(t *testing.T) {
 func TestResolveProfileExplicitCollectorsWithTransitiveDeps(t *testing.T) {
 	// Explicit collector C3 depends on C2, which depends on C1.
 	// All three should be in the resolved set.
-	collectors := map[CollectorID]Collector{
+	collectors := map[CollectorID]CollectorMeta{
 		"C1": &stubCollector{id: "C1", scope: ClusterWide},
 		"C2": &stubCollector{id: "C2", scope: ClusterWide, deps: []CollectorID{"C1"}},
 		"C3": &stubCollector{id: "C3", scope: ClusterWide, deps: []CollectorID{"C2"}},
@@ -465,7 +465,7 @@ func TestResolveProfileExplicitCollectorsWithTransitiveDeps(t *testing.T) {
 		"test": {Name: "test", Collectors: []CollectorID{"C3"}},
 	}
 
-	gotC, _, err := ResolveProfile("test", profiles, nil, nil, map[AnalyzerID]Analyzer{}, collectors)
+	gotC, _, err := ResolveProfile("test", profiles, nil, nil, map[AnalyzerID]AnalyzerMeta{}, collectors)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -482,7 +482,7 @@ func TestResolveProfileExplicitCollectorsUnknown(t *testing.T) {
 		"test": {Name: "test", Collectors: []CollectorID{"NonexistentCollector"}},
 	}
 
-	_, _, err := ResolveProfile("test", profiles, nil, nil, map[AnalyzerID]Analyzer{}, map[CollectorID]Collector{})
+	_, _, err := ResolveProfile("test", profiles, nil, nil, map[AnalyzerID]AnalyzerMeta{}, map[CollectorID]CollectorMeta{})
 	if err == nil {
 		t.Fatal("expected error for unknown collector ID in profile")
 	}
@@ -492,11 +492,11 @@ func TestResolveProfileExplicitCollectorsAndAnalyzers(t *testing.T) {
 	// Both Collectors and Analyzers are listed; the resolved collector set is
 	// the union of explicit collectors and the analyzer transitive closure.
 	// C1 is only reachable via explicit listing; C2 only via the analyzer.
-	collectors := map[CollectorID]Collector{
+	collectors := map[CollectorID]CollectorMeta{
 		"C1": &stubCollector{id: "C1", scope: ClusterWide},
 		"C2": &stubCollector{id: "C2", scope: PerScyllaNode},
 	}
-	analyzers := map[AnalyzerID]Analyzer{
+	analyzers := map[AnalyzerID]AnalyzerMeta{
 		"A1": &stubAnalyzer{id: "A1", deps: []CollectorID{"C2"}},
 	}
 	profiles := map[string]Profile{
@@ -526,10 +526,10 @@ func TestResolveProfileExplicitCollectorsAndAnalyzers(t *testing.T) {
 func TestResolveProfileExplicitCollectorsDeduplication(t *testing.T) {
 	// A collector listed explicitly AND depended on by an analyzer
 	// should appear only once in the resolved set.
-	collectors := map[CollectorID]Collector{
+	collectors := map[CollectorID]CollectorMeta{
 		"C1": &stubCollector{id: "C1", scope: PerScyllaNode},
 	}
-	analyzers := map[AnalyzerID]Analyzer{
+	analyzers := map[AnalyzerID]AnalyzerMeta{
 		"A1": &stubAnalyzer{id: "A1", deps: []CollectorID{"C1"}},
 	}
 	profiles := map[string]Profile{
@@ -554,7 +554,7 @@ func TestResolveProfileExplicitCollectorsDeduplication(t *testing.T) {
 
 func TestResolveProfileExplicitCollectorsInheritedViaIncludes(t *testing.T) {
 	// Explicit collectors are inherited through profile composition (Includes).
-	collectors := map[CollectorID]Collector{
+	collectors := map[CollectorID]CollectorMeta{
 		"C1": &stubCollector{id: "C1", scope: ClusterWide},
 		"C2": &stubCollector{id: "C2", scope: PerScyllaNode},
 	}
@@ -563,7 +563,7 @@ func TestResolveProfileExplicitCollectorsInheritedViaIncludes(t *testing.T) {
 		"full": {Name: "full", Includes: []string{"base"}, Collectors: []CollectorID{"C2"}},
 	}
 
-	gotC, _, err := ResolveProfile("full", profiles, nil, nil, map[AnalyzerID]Analyzer{}, collectors)
+	gotC, _, err := ResolveProfile("full", profiles, nil, nil, map[AnalyzerID]AnalyzerMeta{}, collectors)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

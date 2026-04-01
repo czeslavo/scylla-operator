@@ -33,8 +33,8 @@ type CollectorEvent struct {
 // EngineConfig holds all inputs needed to construct and run the diagnostic engine.
 type EngineConfig struct {
 	// Registry
-	AllCollectors map[CollectorID]Collector
-	AllAnalyzers  map[AnalyzerID]Analyzer
+	AllCollectors map[CollectorID]CollectorMeta
+	AllAnalyzers  map[AnalyzerID]AnalyzerMeta
 	AllProfiles   map[string]Profile
 
 	// Selection
@@ -171,7 +171,7 @@ func (e *Engine) emitEvent(event CollectorEvent) {
 	}
 }
 
-func (e *Engine) executeClusterWideCollector(ctx context.Context, collector Collector, vitals *Vitals) {
+func (e *Engine) executeClusterWideCollector(ctx context.Context, collector CollectorMeta, vitals *Vitals) {
 	scopeKey := ScopeKey{} // Empty for ClusterWide.
 
 	// Check cascade: if any dependency failed/skipped, cascade.
@@ -187,17 +187,31 @@ func (e *Engine) executeClusterWideCollector(ctx context.Context, collector Coll
 		artifactWriter = e.config.ArtifactWriterFactory.NewWriter(collector.ID(), ClusterWide, scopeKey)
 	}
 
-	params := CollectorParams{
-		Vitals:         vitals,
-		PodExecutor:    e.config.PodExecutor,
-		PodLogFetcher:  e.config.PodLogFetcher,
-		ResourceLister: e.config.ResourceLister,
-		ArtifactWriter: artifactWriter,
-	}
-
 	e.emitEvent(CollectorEvent{Kind: CollectorEventStarted, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: ClusterWide, ScopeKey: scopeKey})
 	start := time.Now()
-	result, err := collector.Collect(ctx, params)
+
+	var result *CollectorResult
+	var err error
+
+	switch c := collector.(type) {
+	case ClusterWideCollector:
+		result, err = c.CollectClusterWide(ctx, ClusterWideCollectorParams{
+			Vitals:         vitals,
+			ResourceLister: e.config.ResourceLister,
+			ArtifactWriter: artifactWriter,
+		})
+	case Collector:
+		result, err = c.Collect(ctx, CollectorParams{
+			Vitals:         vitals,
+			PodExecutor:    e.config.PodExecutor,
+			PodLogFetcher:  e.config.PodLogFetcher,
+			ResourceLister: e.config.ResourceLister,
+			ArtifactWriter: artifactWriter,
+		})
+	default:
+		err = fmt.Errorf("collector %s does not implement ClusterWideCollector", collector.ID())
+	}
+
 	if err != nil {
 		result = &CollectorResult{
 			Status:  CollectorFailed,
@@ -210,7 +224,7 @@ func (e *Engine) executeClusterWideCollector(ctx context.Context, collector Coll
 	vitals.Store(collector.ID(), ClusterWide, scopeKey, result)
 }
 
-func (e *Engine) executePerScyllaClusterCollector(ctx context.Context, collector Collector, cluster *ScyllaClusterInfo, clusterKey ScopeKey, vitals *Vitals) {
+func (e *Engine) executePerScyllaClusterCollector(ctx context.Context, collector CollectorMeta, cluster *ScyllaClusterInfo, clusterKey ScopeKey, vitals *Vitals) {
 	if result := e.checkCascade(collector, vitals, clusterKey); result != nil {
 		e.emitEvent(CollectorEvent{Kind: CollectorEventStarted, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerScyllaCluster, ScopeKey: clusterKey})
 		e.emitEvent(CollectorEvent{Kind: CollectorEventFinished, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerScyllaCluster, ScopeKey: clusterKey, Result: result})
@@ -223,18 +237,33 @@ func (e *Engine) executePerScyllaClusterCollector(ctx context.Context, collector
 		artifactWriter = e.config.ArtifactWriterFactory.NewWriter(collector.ID(), PerScyllaCluster, clusterKey)
 	}
 
-	params := CollectorParams{
-		Vitals:         vitals,
-		ScyllaCluster:  cluster,
-		PodExecutor:    e.config.PodExecutor,
-		PodLogFetcher:  e.config.PodLogFetcher,
-		ResourceLister: e.config.ResourceLister,
-		ArtifactWriter: artifactWriter,
-	}
-
 	e.emitEvent(CollectorEvent{Kind: CollectorEventStarted, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerScyllaCluster, ScopeKey: clusterKey})
 	start := time.Now()
-	result, err := collector.Collect(ctx, params)
+
+	var result *CollectorResult
+	var err error
+
+	switch c := collector.(type) {
+	case PerScyllaClusterCollector:
+		result, err = c.CollectPerScyllaCluster(ctx, PerScyllaClusterCollectorParams{
+			Vitals:         vitals,
+			ScyllaCluster:  cluster,
+			ResourceLister: e.config.ResourceLister,
+			ArtifactWriter: artifactWriter,
+		})
+	case Collector:
+		result, err = c.Collect(ctx, CollectorParams{
+			Vitals:         vitals,
+			ScyllaCluster:  cluster,
+			PodExecutor:    e.config.PodExecutor,
+			PodLogFetcher:  e.config.PodLogFetcher,
+			ResourceLister: e.config.ResourceLister,
+			ArtifactWriter: artifactWriter,
+		})
+	default:
+		err = fmt.Errorf("collector %s does not implement PerScyllaClusterCollector", collector.ID())
+	}
+
 	if err != nil {
 		result = &CollectorResult{
 			Status:  CollectorFailed,
@@ -247,7 +276,7 @@ func (e *Engine) executePerScyllaClusterCollector(ctx context.Context, collector
 	vitals.Store(collector.ID(), PerScyllaCluster, clusterKey, result)
 }
 
-func (e *Engine) executePerScyllaNodeCollector(ctx context.Context, collector Collector, cluster *ScyllaClusterInfo, node *ScyllaNodeInfo, nodeKey ScopeKey, vitals *Vitals) {
+func (e *Engine) executePerScyllaNodeCollector(ctx context.Context, collector CollectorMeta, cluster *ScyllaClusterInfo, node *ScyllaNodeInfo, nodeKey ScopeKey, vitals *Vitals) {
 	if result := e.checkCascade(collector, vitals, nodeKey); result != nil {
 		e.emitEvent(CollectorEvent{Kind: CollectorEventStarted, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerScyllaNode, ScopeKey: nodeKey})
 		e.emitEvent(CollectorEvent{Kind: CollectorEventFinished, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerScyllaNode, ScopeKey: nodeKey, Result: result})
@@ -260,19 +289,36 @@ func (e *Engine) executePerScyllaNodeCollector(ctx context.Context, collector Co
 		artifactWriter = e.config.ArtifactWriterFactory.NewWriter(collector.ID(), PerScyllaNode, nodeKey)
 	}
 
-	params := CollectorParams{
-		Vitals:         vitals,
-		ScyllaCluster:  cluster,
-		ScyllaNode:     node,
-		PodExecutor:    e.config.PodExecutor,
-		PodLogFetcher:  e.config.PodLogFetcher,
-		ResourceLister: e.config.ResourceLister,
-		ArtifactWriter: artifactWriter,
-	}
-
 	e.emitEvent(CollectorEvent{Kind: CollectorEventStarted, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerScyllaNode, ScopeKey: nodeKey})
 	start := time.Now()
-	result, err := collector.Collect(ctx, params)
+
+	var result *CollectorResult
+	var err error
+
+	switch c := collector.(type) {
+	case PerScyllaNodeCollector:
+		result, err = c.CollectPerScyllaNode(ctx, PerScyllaNodeCollectorParams{
+			Vitals:         vitals,
+			ScyllaCluster:  cluster,
+			ScyllaNode:     node,
+			PodExecutor:    e.config.PodExecutor,
+			PodLogFetcher:  e.config.PodLogFetcher,
+			ArtifactWriter: artifactWriter,
+		})
+	case Collector:
+		result, err = c.Collect(ctx, CollectorParams{
+			Vitals:         vitals,
+			ScyllaCluster:  cluster,
+			ScyllaNode:     node,
+			PodExecutor:    e.config.PodExecutor,
+			PodLogFetcher:  e.config.PodLogFetcher,
+			ResourceLister: e.config.ResourceLister,
+			ArtifactWriter: artifactWriter,
+		})
+	default:
+		err = fmt.Errorf("collector %s does not implement PerScyllaNodeCollector", collector.ID())
+	}
+
 	if err != nil {
 		result = &CollectorResult{
 			Status:  CollectorFailed,
@@ -288,7 +334,7 @@ func (e *Engine) executePerScyllaNodeCollector(ctx context.Context, collector Co
 // checkCascade checks if any of the collector's dependencies have failed or
 // been skipped, and returns an appropriate cascade result. Returns nil if all
 // dependencies passed (i.e., the collector should proceed normally).
-func (e *Engine) checkCascade(collector Collector, vitals *Vitals, scopeKey ScopeKey) *CollectorResult {
+func (e *Engine) checkCascade(collector CollectorMeta, vitals *Vitals, scopeKey ScopeKey) *CollectorResult {
 	for _, depID := range collector.DependsOn() {
 		depCollector := e.config.AllCollectors[depID]
 
@@ -386,12 +432,27 @@ func (e *Engine) executeAnalyzers(analyzerIDs []AnalyzerID, vitals *Vitals, arti
 				}
 
 				clusterCopy := cluster
-				params := AnalyzerParams{
-					Vitals:         scopedVitals,
-					ScyllaCluster:  &clusterCopy,
-					ArtifactReader: artifactReader,
+				var result *AnalyzerResult
+				switch a := analyzer.(type) {
+				case PerScyllaClusterAnalyzer:
+					result = a.AnalyzePerScyllaCluster(PerScyllaClusterAnalyzerParams{
+						Vitals:         scopedVitals,
+						ScyllaCluster:  &clusterCopy,
+						ArtifactReader: artifactReader,
+					})
+				case Analyzer:
+					result = a.Analyze(AnalyzerParams{
+						Vitals:         scopedVitals,
+						ScyllaCluster:  &clusterCopy,
+						ArtifactReader: artifactReader,
+					})
+				default:
+					result = &AnalyzerResult{
+						Status:  AnalyzerFailed,
+						Message: fmt.Sprintf("analyzer %s does not implement PerScyllaClusterAnalyzer", analyzer.ID()),
+					}
 				}
-				inner[clusterKey] = analyzer.Analyze(params)
+				inner[clusterKey] = result
 			}
 			// If no ScyllaClusters configured, produce a single skipped result.
 			if len(e.config.ScyllaClusters) == 0 {
@@ -408,11 +469,25 @@ func (e *Engine) executeAnalyzers(analyzerIDs []AnalyzerID, vitals *Vitals, arti
 				continue
 			}
 
-			params := AnalyzerParams{
-				Vitals:         vitals,
-				ArtifactReader: artifactReader,
+			var result *AnalyzerResult
+			switch a := analyzer.(type) {
+			case ClusterWideAnalyzer:
+				result = a.AnalyzeClusterWide(ClusterWideAnalyzerParams{
+					Vitals:         vitals,
+					ArtifactReader: artifactReader,
+				})
+			case Analyzer:
+				result = a.Analyze(AnalyzerParams{
+					Vitals:         vitals,
+					ArtifactReader: artifactReader,
+				})
+			default:
+				result = &AnalyzerResult{
+					Status:  AnalyzerFailed,
+					Message: fmt.Sprintf("analyzer %s does not implement ClusterWideAnalyzer", analyzer.ID()),
+				}
 			}
-			results[analyzerID] = map[ScopeKey]*AnalyzerResult{ScopeKey{}: analyzer.Analyze(params)}
+			results[analyzerID] = map[ScopeKey]*AnalyzerResult{ScopeKey{}: result}
 		}
 	}
 
@@ -422,7 +497,7 @@ func (e *Engine) executeAnalyzers(analyzerIDs []AnalyzerID, vitals *Vitals, arti
 // checkAnalyzerDeps checks whether an analyzer's collector dependencies have
 // at least one passed result. Returns a skip/fail result if not, or nil if
 // the analyzer should proceed.
-func (e *Engine) checkAnalyzerDeps(analyzer Analyzer, vitals *Vitals) *AnalyzerResult {
+func (e *Engine) checkAnalyzerDeps(analyzer AnalyzerMeta, vitals *Vitals) *AnalyzerResult {
 	for _, depID := range analyzer.DependsOn() {
 		depCollector, ok := e.config.AllCollectors[depID]
 		if !ok {
@@ -500,7 +575,7 @@ func (e *Engine) checkAnalyzerDeps(analyzer Analyzer, vitals *Vitals) *AnalyzerR
 
 // topoSortCollectors performs a topological sort on the given collector IDs
 // based on their dependency relationships. Returns an error if a cycle is detected.
-func topoSortCollectors(ids []CollectorID, allCollectors map[CollectorID]Collector) ([]CollectorID, error) {
+func topoSortCollectors(ids []CollectorID, allCollectors map[CollectorID]CollectorMeta) ([]CollectorID, error) {
 	// Build adjacency list and in-degree map only for the resolved set.
 	idSet := make(map[CollectorID]bool, len(ids))
 	for _, id := range ids {
