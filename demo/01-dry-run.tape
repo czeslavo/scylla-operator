@@ -17,8 +17,11 @@ Show
 Type "soda --dry-run 2>/dev/null | less"
 Enter
 Sleep 4s
-# Scroll to the second page to reveal analyzers.
+# Scroll to the second page to reveal analyzers and RBAC.
 Type " "
+Sleep 4s
+# Jump to the end to show the RBAC table.
+Type "G"
 Sleep 4s
 # Exit the pager.
 Type "q"

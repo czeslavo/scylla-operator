@@ -19,7 +19,7 @@ Show
 # Collect and archive in one step.
 Type "soda -n production --cluster-name=bubbles-database --profile=health --archive --output-dir=/tmp/soda-demo-archive"
 Enter
-Sleep 40s
+Sleep 10s
 
 # Show the archive file.
 Type "ls -lh soda-demo-archive.tar.gz"

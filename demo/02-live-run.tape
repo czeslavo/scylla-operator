@@ -15,8 +15,8 @@ Show
 # Run a health-check against the production ScyllaCluster.
 Type "soda -n production --cluster-name=bubbles-database --profile=health"
 Enter
-# Wait for collection to finish (~30s) and the report to render.
-Sleep 35s
+# Wait for concurrent collection to finish (~5s) and the report to render.
+Sleep 10s
 
 # Let the viewer read the analysis summary.
 Sleep 5s
