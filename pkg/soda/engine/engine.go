@@ -3,8 +3,11 @@ package engine
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"sort"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 )
 
 // CollectorEventKind distinguishes the two progress events emitted per collector invocation.
@@ -136,19 +139,31 @@ func (e *Engine) Run(ctx context.Context) (*EngineResult, error) {
 	}, nil
 }
 
-// executeCollectors runs all collectors in topological order, grouped by scope.
+// executeCollectors runs all collectors concurrently with bounded parallelism.
+// The concurrency limit is set to runtime.GOMAXPROCS(0) (typically matching the
+// number of available CPUs). Each (collector, scope-key) pair is an independent
+// work item dispatched to the shared worker pool.
 func (e *Engine) executeCollectors(ctx context.Context, sortedCollectors []CollectorID, vitals *Vitals) {
+	var g errgroup.Group
+	g.SetLimit(runtime.GOMAXPROCS(0))
+
 	for _, collectorID := range sortedCollectors {
 		collector := e.config.AllCollectors[collectorID]
 
 		switch collector.Scope() {
 		case ClusterWide:
-			e.executeClusterWideCollector(ctx, collector, vitals)
+			g.Go(func() error {
+				e.executeClusterWideCollector(ctx, collector, vitals)
+				return nil // errors are recorded in Vitals, never propagated
+			})
 
 		case PerScyllaCluster:
 			for _, cluster := range e.config.ScyllaClusters {
 				clusterKey := ScopeKey{Namespace: cluster.Namespace, Name: cluster.Name}
-				e.executePerScyllaClusterCollector(ctx, collector, &cluster, clusterKey, vitals)
+				g.Go(func() error {
+					e.executePerScyllaClusterCollector(ctx, collector, &cluster, clusterKey, vitals)
+					return nil
+				})
 			}
 
 		case PerScyllaNode:
@@ -157,11 +172,16 @@ func (e *Engine) executeCollectors(ctx context.Context, sortedCollectors []Colle
 				nodes := e.config.ScyllaNodes[clusterKey]
 				for _, node := range nodes {
 					nodeKey := ScopeKey{Namespace: node.Namespace, Name: node.Name}
-					e.executePerScyllaNodeCollector(ctx, collector, &cluster, &node, nodeKey, vitals)
+					g.Go(func() error {
+						e.executePerScyllaNodeCollector(ctx, collector, &cluster, &node, nodeKey, vitals)
+						return nil
+					})
 				}
 			}
 		}
 	}
+
+	g.Wait()
 }
 
 // emitEvent calls OnCollectorEvent if one is configured.
@@ -211,10 +231,13 @@ func (e *Engine) executeClusterWideCollector(ctx context.Context, collector Coll
 			Message: fmt.Sprintf("collector error: %v", err),
 		}
 	}
-	result.Duration = time.Since(start)
-	e.emitEvent(CollectorEvent{Kind: CollectorEventFinished, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: ClusterWide, ScopeKey: scopeKey, Result: result})
+	// Defensive copy: the collector may return a shared pointer across
+	// invocations, so we must not mutate the original.
+	copied := *result
+	copied.Duration = time.Since(start)
+	e.emitEvent(CollectorEvent{Kind: CollectorEventFinished, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: ClusterWide, ScopeKey: scopeKey, Result: &copied})
 
-	vitals.Store(collector.ID(), ClusterWide, scopeKey, result)
+	vitals.Store(collector.ID(), ClusterWide, scopeKey, &copied)
 }
 
 func (e *Engine) executePerScyllaClusterCollector(ctx context.Context, collector CollectorMeta, cluster *ScyllaClusterInfo, clusterKey ScopeKey, vitals *Vitals) {
@@ -255,10 +278,13 @@ func (e *Engine) executePerScyllaClusterCollector(ctx context.Context, collector
 			Message: fmt.Sprintf("collector error: %v", err),
 		}
 	}
-	result.Duration = time.Since(start)
-	e.emitEvent(CollectorEvent{Kind: CollectorEventFinished, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerScyllaCluster, ScopeKey: clusterKey, Result: result})
+	// Defensive copy: the collector may return a shared pointer across
+	// invocations, so we must not mutate the original.
+	copied := *result
+	copied.Duration = time.Since(start)
+	e.emitEvent(CollectorEvent{Kind: CollectorEventFinished, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerScyllaCluster, ScopeKey: clusterKey, Result: &copied})
 
-	vitals.Store(collector.ID(), PerScyllaCluster, clusterKey, result)
+	vitals.Store(collector.ID(), PerScyllaCluster, clusterKey, &copied)
 }
 
 func (e *Engine) executePerScyllaNodeCollector(ctx context.Context, collector CollectorMeta, cluster *ScyllaClusterInfo, node *ScyllaNodeInfo, nodeKey ScopeKey, vitals *Vitals) {
@@ -301,10 +327,13 @@ func (e *Engine) executePerScyllaNodeCollector(ctx context.Context, collector Co
 			Message: fmt.Sprintf("collector error: %v", err),
 		}
 	}
-	result.Duration = time.Since(start)
-	e.emitEvent(CollectorEvent{Kind: CollectorEventFinished, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerScyllaNode, ScopeKey: nodeKey, Result: result})
+	// Defensive copy: the collector may return a shared pointer across
+	// invocations, so we must not mutate the original.
+	copied := *result
+	copied.Duration = time.Since(start)
+	e.emitEvent(CollectorEvent{Kind: CollectorEventFinished, CollectorID: collector.ID(), CollectorName: collector.Name(), Scope: PerScyllaNode, ScopeKey: nodeKey, Result: &copied})
 
-	vitals.Store(collector.ID(), PerScyllaNode, nodeKey, result)
+	vitals.Store(collector.ID(), PerScyllaNode, nodeKey, &copied)
 }
 
 // checkCascade checks if any of the collector's dependencies have failed or

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	scyllaversionedclient "github.com/scylladb/scylla-operator/pkg/client/scylla/clientset/versioned"
 	"github.com/scylladb/scylla-operator/pkg/genericclioptions"
@@ -560,6 +561,7 @@ func (o *DiagnoseOptions) discoverPods(ctx context.Context, lister engine.Resour
 //	collecting: OS information (pod scylla/scylla-0) ...
 //	collected:  OS information (pod scylla/scylla-0) FAILED: collector error: ...
 func makeProgressPrinter(w io.Writer) func(engine.CollectorEvent) {
+	var mu sync.Mutex
 	return func(ev engine.CollectorEvent) {
 		var scopeLabel string
 		switch ev.Scope {
@@ -570,6 +572,9 @@ func makeProgressPrinter(w io.Writer) func(engine.CollectorEvent) {
 		case engine.PerScyllaNode:
 			scopeLabel = fmt.Sprintf("scylla-node %s", ev.ScopeKey)
 		}
+
+		mu.Lock()
+		defer mu.Unlock()
 
 		switch ev.Kind {
 		case engine.CollectorEventStarted:

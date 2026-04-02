@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	scyllav1alpha1 "github.com/scylladb/scylla-operator/pkg/api/scylla/v1alpha1"
@@ -421,7 +422,9 @@ type ScyllaNodeInfo struct {
 }
 
 // Vitals is the central data store. It holds collector results keyed by scope.
+// All exported methods are safe for concurrent use.
 type Vitals struct {
+	mu               sync.RWMutex
 	ClusterWide      map[CollectorID]*CollectorResult              `json:"cluster_wide"`
 	PerScyllaCluster map[ScopeKey]map[CollectorID]*CollectorResult `json:"per_scylla_cluster"`
 	PerScyllaNode    map[ScopeKey]map[CollectorID]*CollectorResult `json:"per_scylla_node"`
@@ -438,6 +441,9 @@ func NewVitals() *Vitals {
 
 // Store stores a collector result in the appropriate scope map.
 func (v *Vitals) Store(id CollectorID, scope CollectorScope, scopeKey ScopeKey, result *CollectorResult) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+
 	switch scope {
 	case ClusterWide:
 		v.ClusterWide[id] = result
@@ -457,6 +463,9 @@ func (v *Vitals) Store(id CollectorID, scope CollectorScope, scopeKey ScopeKey, 
 // Get retrieves a collector result. For ClusterWide results, scopeKey is ignored.
 // For PerScyllaCluster/PerScyllaNode results, it searches in the scope-appropriate map.
 func (v *Vitals) Get(id CollectorID, scopeKey ScopeKey) (*CollectorResult, bool) {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+
 	// Check ClusterWide first (scopeKey is irrelevant for this scope).
 	if result, ok := v.ClusterWide[id]; ok {
 		return result, true
@@ -481,6 +490,9 @@ func (v *Vitals) Get(id CollectorID, scopeKey ScopeKey) (*CollectorResult, bool)
 
 // ScyllaNodeKeys returns all Scylla-node scope keys in the store, sorted for deterministic output.
 func (v *Vitals) ScyllaNodeKeys() []ScopeKey {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+
 	keys := make([]ScopeKey, 0, len(v.PerScyllaNode))
 	for k := range v.PerScyllaNode {
 		keys = append(keys, k)
@@ -496,6 +508,9 @@ func (v *Vitals) ScyllaNodeKeys() []ScopeKey {
 
 // ScyllaClusterKeys returns all ScyllaCluster-scope keys in the store, sorted for deterministic output.
 func (v *Vitals) ScyllaClusterKeys() []ScopeKey {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+
 	keys := make([]ScopeKey, 0, len(v.PerScyllaCluster))
 	for k := range v.PerScyllaCluster {
 		keys = append(keys, k)
@@ -513,7 +528,14 @@ func (v *Vitals) ScyllaClusterKeys() []ScopeKey {
 // contains the full ClusterWide map (shared, unfiltered), the single
 // PerScyllaCluster entry for clusterKey, and only the PerScyllaNode entries for the
 // Scylla nodes belonging to that cluster (as supplied by scyllaNodeKeys).
+//
+// The returned Vitals shares the underlying map references with the parent.
+// This is safe because ForScyllaCluster is only called during the analyzer
+// phase, after all collectors have finished and no further writes occur.
 func (v *Vitals) ForScyllaCluster(clusterKey ScopeKey, scyllaNodeKeys []ScopeKey) *Vitals {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+
 	scoped := &Vitals{
 		ClusterWide:      v.ClusterWide, // shared reference — read-only during analysis
 		PerScyllaCluster: make(map[ScopeKey]map[CollectorID]*CollectorResult, 1),
