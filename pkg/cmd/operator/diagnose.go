@@ -468,6 +468,24 @@ func (o *DiagnoseOptions) printDryRunSummary(w io.Writer) error {
 		fmt.Fprintf(w, "  %s\n", a.Name())
 	}
 
+	rules := engine.AggregateRBAC(resolvedCollectors, allCollectorMap)
+	if len(rules) == 0 {
+		fmt.Fprintf(w, "\nRequired RBAC PolicyRules (0): none\n")
+	} else {
+		fmt.Fprintf(w, "\nRequired RBAC PolicyRules (%d):\n", len(rules))
+		fmt.Fprintf(w, "  %-30s %-30s %s\n", "API Group", "Resource", "Verbs")
+		fmt.Fprintf(w, "  %-30s %-30s %s\n", "─────────", "────────", "─────")
+		for _, rule := range rules {
+			apiGroup := strings.Join(rule.APIGroups, ", ")
+			if apiGroup == "" {
+				apiGroup = "corev1"
+			}
+			resource := strings.Join(rule.Resources, ", ")
+			verbs := strings.Join(rule.Verbs, ", ")
+			fmt.Fprintf(w, "  %-30s %-30s %s\n", apiGroup, resource, verbs)
+		}
+	}
+
 	return nil
 }
 
