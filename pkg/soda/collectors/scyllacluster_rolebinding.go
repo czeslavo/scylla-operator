@@ -1,0 +1,77 @@
+package collectors
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/scylladb/scylla-operator/pkg/naming"
+	"github.com/scylladb/scylla-operator/pkg/soda/engine"
+	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/labels"
+)
+
+const (
+	// ScyllaClusterRoleBindingCollectorID is the unique identifier for the ScyllaClusterRoleBindingCollector.
+	ScyllaClusterRoleBindingCollectorID engine.CollectorID = "ScyllaClusterRoleBindingCollector"
+)
+
+// ScyllaClusterRoleBindingResult holds metadata about collected RoleBinding manifests for a ScyllaCluster.
+type ScyllaClusterRoleBindingResult struct {
+	Count int `json:"count"`
+}
+
+// GetScyllaClusterRoleBindingResult is the typed accessor for ScyllaClusterRoleBindingCollector results.
+func GetScyllaClusterRoleBindingResult(vitals *engine.Vitals, scopeKey engine.ScopeKey) (*ScyllaClusterRoleBindingResult, error) {
+	return engine.GetResult[ScyllaClusterRoleBindingResult](vitals, ScyllaClusterRoleBindingCollectorID, scopeKey)
+}
+
+// scyllaClusterRoleBindingCollector collects RoleBinding manifests owned by a ScyllaCluster.
+type scyllaClusterRoleBindingCollector struct {
+	engine.CollectorBase
+}
+
+var _ engine.PerScyllaClusterCollector = (*scyllaClusterRoleBindingCollector)(nil)
+
+// NewScyllaClusterRoleBindingCollector creates a new ScyllaClusterRoleBindingCollector.
+func NewScyllaClusterRoleBindingCollector() engine.PerScyllaClusterCollector {
+	return &scyllaClusterRoleBindingCollector{
+		CollectorBase: engine.NewCollectorBase(ScyllaClusterRoleBindingCollectorID, "ScyllaCluster RoleBinding manifests", engine.PerScyllaCluster, nil),
+	}
+}
+
+// RBAC implements engine.RBACProvider.
+// Required permissions:
+//   - rbac.authorization.k8s.io/v1: rolebindings — get, list
+func (c *scyllaClusterRoleBindingCollector) RBAC() []rbacv1.PolicyRule {
+	return []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{"rbac.authorization.k8s.io"},
+			Resources: []string{"rolebindings"},
+			Verbs:     []string{"get", "list"},
+		},
+	}
+}
+
+func (c *scyllaClusterRoleBindingCollector) CollectPerScyllaCluster(ctx context.Context, params engine.PerScyllaClusterCollectorParams) (*engine.CollectorResult, error) {
+	sc := params.ScyllaCluster
+	selector := labels.SelectorFromSet(labels.Set{naming.ClusterNameLabel: sc.Name})
+
+	roleBindings, err := params.ResourceLister.ListRoleBindings(ctx, sc.Namespace, selector)
+	if err != nil {
+		return nil, fmt.Errorf("listing rolebindings in namespace %s: %w", sc.Namespace, err)
+	}
+
+	artifacts := collectAndWriteManifests(params.ArtifactWriter, roleBindings,
+		func(rb *rbacv1.RoleBinding) string { return rb.Name + ".yaml" },
+		func(rb *rbacv1.RoleBinding) string {
+			return fmt.Sprintf("RoleBinding %s/%s manifest", rb.Namespace, rb.Name)
+		},
+	)
+
+	return &engine.CollectorResult{
+		Status:    engine.CollectorPassed,
+		Message:   fmt.Sprintf("Collected %d RoleBinding(s) for ScyllaCluster %s/%s", len(roleBindings), sc.Namespace, sc.Name),
+		Data:      &ScyllaClusterRoleBindingResult{Count: len(roleBindings)},
+		Artifacts: artifacts,
+	}, nil
+}

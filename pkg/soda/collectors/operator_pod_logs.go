@@ -1,0 +1,102 @@
+package collectors
+
+import (
+	"context"
+	"fmt"
+	"path"
+
+	"github.com/scylladb/scylla-operator/pkg/soda/engine"
+	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/labels"
+)
+
+const (
+	// OperatorPodLogsCollectorID is the unique identifier for the OperatorPodLogsCollector.
+	OperatorPodLogsCollectorID engine.CollectorID = "OperatorPodLogsCollector"
+)
+
+// OperatorPodLogsResult holds metadata about collected container logs from operator namespaces.
+type OperatorPodLogsResult struct {
+	PodCount      int `json:"pod_count"`
+	ArtifactCount int `json:"artifact_count"`
+}
+
+// operatorPodLogsCollector collects current and previous container logs from all pods
+// in operator-owned namespaces (scylla-operator, scylla-manager, scylla-operator-node-tuning).
+type operatorPodLogsCollector struct {
+	engine.CollectorBase
+}
+
+var _ engine.ClusterWideCollector = (*operatorPodLogsCollector)(nil)
+
+// NewOperatorPodLogsCollector creates a new OperatorPodLogsCollector.
+func NewOperatorPodLogsCollector() engine.ClusterWideCollector {
+	return &operatorPodLogsCollector{
+		CollectorBase: engine.NewCollectorBase(OperatorPodLogsCollectorID, "Operator pod logs", engine.ClusterWide, nil),
+	}
+}
+
+// RBAC implements engine.RBACProvider.
+// Required permissions:
+//   - core/v1: pods — get, list (in operator namespaces)
+//   - core/v1: pods/log — get (in operator namespaces)
+func (c *operatorPodLogsCollector) RBAC() []rbacv1.PolicyRule {
+	return []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{""},
+			Resources: []string{"pods"},
+			Verbs:     []string{"get", "list"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"pods/log"},
+			Verbs:     []string{"get"},
+		},
+	}
+}
+
+func (c *operatorPodLogsCollector) CollectClusterWide(ctx context.Context, params engine.ClusterWideCollectorParams) (*engine.CollectorResult, error) {
+	if params.PodLogFetcher == nil {
+		return &engine.CollectorResult{
+			Status:  engine.CollectorSkipped,
+			Message: "PodLogFetcher not available (offline mode)",
+		}, nil
+	}
+
+	var artifacts []engine.Artifact
+	totalPods := 0
+
+	for _, ns := range operatorNamespaces {
+		pods, err := params.ResourceLister.ListPods(ctx, ns, labels.Everything())
+		if err != nil {
+			return nil, fmt.Errorf("listing pods in namespace %s: %w", ns, err)
+		}
+
+		for i := range pods {
+			pod := &pods[i]
+			totalPods++
+
+			// Collect all init container names followed by regular container names.
+			var containerNames []string
+			for _, ic := range pod.Spec.InitContainers {
+				containerNames = append(containerNames, ic.Name)
+			}
+			for _, c := range pod.Spec.Containers {
+				containerNames = append(containerNames, c.Name)
+			}
+
+			artifacts = append(artifacts, collectContainerLogs(ctx, params.PodLogFetcher, params.ArtifactWriter,
+				ns, pod.Name, containerNames, path.Join(ns, pod.Name))...)
+		}
+	}
+
+	return &engine.CollectorResult{
+		Status:  engine.CollectorPassed,
+		Message: fmt.Sprintf("Collected logs from %d pod(s) across operator namespaces", totalPods),
+		Data: &OperatorPodLogsResult{
+			PodCount:      totalPods,
+			ArtifactCount: len(artifacts),
+		},
+		Artifacts: artifacts,
+	}, nil
+}
