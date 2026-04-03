@@ -125,6 +125,10 @@ func NewDiagnoseCmd(streams genericclioptions.IOStreams) *cobra.Command {
 	}
 
 	o.AddFlags(cmd.Flags())
+
+	// Register subcommands.
+	cmd.AddCommand(NewServeReportCmd(streams))
+
 	return cmd
 }
 
