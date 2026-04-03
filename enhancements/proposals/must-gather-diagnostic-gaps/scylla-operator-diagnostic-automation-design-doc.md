@@ -1147,7 +1147,7 @@ The PoC includes 22 collectors that are purely Kubernetes-native:
 The following are examples of analyzers that would leverage Kubernetes-native data that Scylla Doctor has no access to. This list is not intended to be exhaustive — new Kubernetes-specific analyzers can be added as diagnostic needs are identified:
 
 | Analyzer | Scope | Description |
-|----------|-------|-------------|
+|----------|-------|-------------|GO_TEST_KIND_E2E_ARGS
 | **Node tuning validation** | PerScyllaCluster | Verify that NodeConfig has been applied correctly to all nodes running Scylla pods. Check that sysctl values match expected tuning profile. |
 | **Resource requests/limits** | PerScyllaCluster | Check that Scylla pods have appropriate CPU and memory requests/limits set. Flag under-provisioned or unset resources. |
 | **PVC health** | PerScyllaCluster | Verify all PVCs are Bound, using the correct storage class, and have sufficient capacity. Flag PVCs in Pending or Lost state. |
