@@ -1,3 +1,16 @@
+# v1.20.38 (2026-04-17)
+
+* **Dependency Update**: Bump smithy-go to 1.25.0 to support endpointBdd trait
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.20.37 (2026-03-26)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.20.36 (2026-03-20)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
 # v1.20.35 (2026-03-13)
 
 * **Bug Fix**: Fix documentation typo.
