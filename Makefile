@@ -754,6 +754,10 @@ verify-renovate-config:
 	$(diff) "$(tmp_dir)/renovate.json" $(RENOVATE_CONFIG) || (echo 'Renovate config is not up-to date. Please run `make update-renovate-config` to update it.' && false)
 .PHONY: verify-renovate-config
 
+verify-suite-partition:
+	./hack/verify-suite-partition.sh
+.PHONY: verify-suite-partition
+
 update-in-tree-prometheus-operator-exports:
 	./hack/third-party/generate-in-tree-prometheus-operator-exports.sh ./pkg/thirdparty/github.com/prometheus-operator/prometheus-operator
 .PHONY: update-in-tree-prometheus-operator-exports
@@ -780,7 +784,7 @@ verify-config:
 	$(diff) "$(tmp_dir)/config.yaml" ./assets/config/config.yaml || (echo 'Config is not up to date. Please run `make update-config` to update it.' && false)
 .PHONY: verify-config
 
-verify: verify-codegen verify-crds verify-helm-schemas verify-helm-charts verify-deploy verify-lint verify-helm-lint verify-links verify-examples verify-docs-api verify-monitoring verify-bundle verify-renovate-config verify-in-tree-prometheus-operator-exports verify-config
+verify: verify-codegen verify-crds verify-helm-schemas verify-helm-charts verify-deploy verify-lint verify-helm-lint verify-links verify-examples verify-docs-api verify-monitoring verify-bundle verify-renovate-config verify-in-tree-prometheus-operator-exports verify-config verify-suite-partition
 .PHONY: verify
 
 update: update-codegen update-crds update-helm-schemas update-helm-charts update-deploy update-examples update-docs-api update-monitoring update-bundle update-go-mod-replace update-renovate-config update-in-tree-prometheus-operator-exports update-config
