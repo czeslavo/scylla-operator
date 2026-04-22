@@ -59,7 +59,7 @@ When you define `SO_IMAGE` explicitly, please note that the image must be access
  - If you're using a locally built image, you should tag it with `localhost:5001/your-image-name:tag` and push it to the local registry: `podman push --tls-verify=false localhost:5001/your-image-name:tag`.
 If you don't define `SO_IMAGE`, the image built from local code will be automatically loaded into the Kind cluster, so you don't need to worry about pushing it.
 
-You can then run the E2E tests (`kind-fast` suite) with:
+You can then run the E2E tests (`scylla-operator/conformance/parallel-kind-fast` suite) with:
 
 ```bash
 make test-e2e-kind
@@ -71,6 +71,12 @@ To run specific test cases, use the `SO_FOCUS` environment variable (it accepts 
 
 ```bash
 SO_FOCUS=".*TestCaseName.*" make test-e2e-kind
+```
+
+If you'd like to run a wider set of tests, you can set the `SO_SUITE` environment variable to `scylla-operator/conformance/parallel-kind` to run _all_ tests that are compatible with kind.
+
+```bash
+SO_SUITE=scylla-operator/conformance/parallel-kind make test-e2e-kind
 ```
 
 If you ever need to start from a clean state, you can delete the Kind cluster with:
