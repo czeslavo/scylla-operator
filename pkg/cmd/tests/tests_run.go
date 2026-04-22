@@ -152,7 +152,7 @@ func (o *RunOptions) AddFlags(cmd *cobra.Command) {
 func (o *RunOptions) Validate(args []string) error {
 	var errs []error
 
-	err := o.TestFrameworkOptions.Validate(args)
+	err := o.TestFrameworkOptions.Validate(args, o.DryRun)
 	if err != nil {
 		errs = append(errs, err)
 	}
@@ -201,7 +201,7 @@ func (o *RunOptions) Validate(args []string) error {
 func (o *RunOptions) Complete(args []string) error {
 	var errs []error
 
-	err := o.TestFrameworkOptions.Complete(args)
+	err := o.TestFrameworkOptions.Complete(args, o.DryRun)
 	if err != nil {
 		errs = append(errs, err)
 	}
