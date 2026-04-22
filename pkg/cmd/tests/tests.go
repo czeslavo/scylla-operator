@@ -89,7 +89,7 @@ var Suites = ginkgotest.TestSuites{
 		DefaultParallelism: 10,
 	},
 	{
-		Name: "kind-fast",
+		Name: "scylla-operator/conformance/parallel-kind-fast",
 		Description: templates.LongDesc(`
 		Relatively fast tests that can be run on kind clusters.
 		`),
@@ -104,6 +104,43 @@ var Suites = ginkgotest.TestSuites{
 			framework.IPv6LabelName,
 		),
 		DefaultParallelism: 60,
+	},
+	{
+		Name: "scylla-operator/conformance/parallel-kind",
+		Description: templates.LongDesc(`
+		Tests that can be run in parallel on a kind cluster, including long-running ones.
+		`),
+		LabelFilter: fmt.Sprintf(
+			"!%s && !%s && !%s && !%s && !%s && !%s",
+			framework.NotSupportedOnKindLabelName,
+			framework.RequiresObjectStorageLabelName,
+			framework.MultiDatacenterLabelName,
+			framework.SerialLabelName,
+			framework.SupportedOnlyOnOpenShiftLabelName,
+			framework.IPv6LabelName,
+		),
+		DefaultParallelism: 60,
+	},
+	{
+		Name: "scylla-operator/conformance/parallel-non-kind",
+		Description: templates.LongDesc(`
+		Parallel tests that cannot be run on a kind cluster. Together with the
+		"scylla-operator/conformance/parallel-kind" suite, this partitions the
+		"scylla-operator/conformance/parallel" suite.
+		This suite exists so we can run "scylla-operator/conformance/parallel-kind" and
+		"scylla-operator/conformance/parallel-non-kind" in CI, having effectively the whole
+		"scylla-operator/conformance/parallel" coverage.
+		`),
+		LabelFilter: fmt.Sprintf(
+			"!%s && !%s && !%s && !%s && (%s || %s)",
+			framework.SerialLabelName,
+			framework.MultiDatacenterLabelName,
+			framework.SupportedOnlyOnOpenShiftLabelName,
+			framework.IPv6LabelName,
+			framework.NotSupportedOnKindLabelName,
+			framework.RequiresObjectStorageLabelName,
+		),
+		DefaultParallelism: 70,
 	},
 }
 
