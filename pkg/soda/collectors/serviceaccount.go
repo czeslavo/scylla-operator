@@ -36,7 +36,7 @@ var _ engine.ClusterWideCollector = (*serviceAccountCollector)(nil)
 // NewServiceAccountCollector creates a new ServiceAccountCollector.
 func NewServiceAccountCollector() engine.ClusterWideCollector {
 	return &serviceAccountCollector{
-		CollectorBase: engine.NewCollectorBase(ServiceAccountCollectorID, "ServiceAccount manifests", engine.ClusterWide, nil),
+		CollectorBase: engine.NewCollectorBase(ServiceAccountCollectorID, "ServiceAccount manifests", "Collects ServiceAccount manifests from ScyllaDB operator namespaces.", engine.ClusterWide, nil),
 	}
 }
 

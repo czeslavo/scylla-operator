@@ -38,7 +38,7 @@ var _ engine.PerScyllaNodeCollector = (*diskUsageCollector)(nil)
 
 // NewDiskUsageCollector creates a new DiskUsageCollector.
 func NewDiskUsageCollector() engine.PerScyllaNodeCollector {
-	return &diskUsageCollector{CollectorBase: engine.NewCollectorBase(DiskUsageCollectorID, "Disk usage", engine.PerScyllaNode, nil)}
+	return &diskUsageCollector{CollectorBase: engine.NewCollectorBase(DiskUsageCollectorID, "Disk usage", "Runs 'df -h' inside each Scylla pod to capture filesystem disk usage.", engine.PerScyllaNode, nil)}
 }
 
 // RBAC implements engine.RBACProvider.

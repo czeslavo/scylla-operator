@@ -33,7 +33,7 @@ var _ engine.ClusterWideCollector = (*nodeConfigCollector)(nil)
 // NewNodeConfigCollector creates a new NodeConfigCollector.
 func NewNodeConfigCollector() engine.ClusterWideCollector {
 	return &nodeConfigCollector{
-		CollectorBase: engine.NewCollectorBase(NodeConfigCollectorID, "NodeConfig manifests", engine.ClusterWide, nil),
+		CollectorBase: engine.NewCollectorBase(NodeConfigCollectorID, "NodeConfig manifests", "Collects ScyllaDB NodeConfig custom resource manifests.", engine.ClusterWide, nil),
 	}
 }
 

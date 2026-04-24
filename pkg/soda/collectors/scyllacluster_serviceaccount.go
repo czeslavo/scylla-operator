@@ -36,7 +36,7 @@ var _ engine.PerScyllaClusterCollector = (*scyllaClusterServiceAccountCollector)
 // NewScyllaClusterServiceAccountCollector creates a new ScyllaClusterServiceAccountCollector.
 func NewScyllaClusterServiceAccountCollector() engine.PerScyllaClusterCollector {
 	return &scyllaClusterServiceAccountCollector{
-		CollectorBase: engine.NewCollectorBase(ScyllaClusterServiceAccountCollectorID, "ScyllaCluster ServiceAccount manifests", engine.PerScyllaCluster, nil),
+		CollectorBase: engine.NewCollectorBase(ScyllaClusterServiceAccountCollectorID, "ScyllaCluster ServiceAccount manifests", "Collects ServiceAccount manifests owned by a ScyllaCluster.", engine.PerScyllaCluster, nil),
 	}
 }
 

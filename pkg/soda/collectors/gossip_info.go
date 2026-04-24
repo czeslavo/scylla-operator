@@ -56,7 +56,7 @@ var _ engine.PerScyllaNodeCollector = (*gossipInfoCollector)(nil)
 
 // NewGossipInfoCollector creates a new GossipInfoCollector.
 func NewGossipInfoCollector() engine.PerScyllaNodeCollector {
-	return &gossipInfoCollector{CollectorBase: engine.NewCollectorBase(GossipInfoCollectorID, "Gossip info", engine.PerScyllaNode, nil)}
+	return &gossipInfoCollector{CollectorBase: engine.NewCollectorBase(GossipInfoCollectorID, "Gossip info", "Queries the Scylla REST API for gossip endpoint state including liveness, generation, and application state.", engine.PerScyllaNode, nil)}
 }
 
 // RBAC implements engine.RBACProvider.

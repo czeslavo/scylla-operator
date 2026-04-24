@@ -64,7 +64,7 @@ var _ engine.PerScyllaNodeCollector = (*systemPeersLocalCollector)(nil)
 
 // NewSystemPeersLocalCollector creates a new SystemPeersLocalCollector.
 func NewSystemPeersLocalCollector() engine.PerScyllaNodeCollector {
-	return &systemPeersLocalCollector{CollectorBase: engine.NewCollectorBase(SystemPeersLocalCollectorID, "System local and peers", engine.PerScyllaNode, nil)}
+	return &systemPeersLocalCollector{CollectorBase: engine.NewCollectorBase(SystemPeersLocalCollectorID, "System local and peers", "Queries system.local and system.peers CQL tables via cqlsh to capture cluster membership and topology from each node's perspective.", engine.PerScyllaNode, nil)}
 }
 
 // RBAC implements engine.RBACProvider.

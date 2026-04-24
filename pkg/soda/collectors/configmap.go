@@ -36,7 +36,7 @@ var _ engine.ClusterWideCollector = (*configMapCollector)(nil)
 // NewConfigMapCollector creates a new ConfigMapCollector.
 func NewConfigMapCollector() engine.ClusterWideCollector {
 	return &configMapCollector{
-		CollectorBase: engine.NewCollectorBase(ConfigMapCollectorID, "ConfigMap manifests", engine.ClusterWide, nil),
+		CollectorBase: engine.NewCollectorBase(ConfigMapCollectorID, "ConfigMap manifests", "Collects ConfigMap manifests from ScyllaDB operator namespaces for configuration analysis.", engine.ClusterWide, nil),
 	}
 }
 

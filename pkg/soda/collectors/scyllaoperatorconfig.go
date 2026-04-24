@@ -33,7 +33,7 @@ var _ engine.ClusterWideCollector = (*scyllaOperatorConfigCollector)(nil)
 // NewScyllaOperatorConfigCollector creates a new ScyllaOperatorConfigCollector.
 func NewScyllaOperatorConfigCollector() engine.ClusterWideCollector {
 	return &scyllaOperatorConfigCollector{
-		CollectorBase: engine.NewCollectorBase(ScyllaOperatorConfigCollectorID, "ScyllaOperatorConfig manifests", engine.ClusterWide, nil),
+		CollectorBase: engine.NewCollectorBase(ScyllaOperatorConfigCollectorID, "ScyllaOperatorConfig manifests", "Collects ScyllaOperatorConfig custom resource manifests.", engine.ClusterWide, nil),
 	}
 }
 

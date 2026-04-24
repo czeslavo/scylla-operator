@@ -29,7 +29,7 @@ var _ engine.PerScyllaNodeCollector = (*scyllaNodeLogsCollector)(nil)
 
 // NewScyllaNodeLogsCollector creates a new ScyllaNodeLogsCollector.
 func NewScyllaNodeLogsCollector() engine.PerScyllaNodeCollector {
-	return &scyllaNodeLogsCollector{CollectorBase: engine.NewCollectorBase(ScyllaNodeLogsCollectorID, "Scylla node container logs", engine.PerScyllaNode, nil)}
+	return &scyllaNodeLogsCollector{CollectorBase: engine.NewCollectorBase(ScyllaNodeLogsCollectorID, "Scylla node container logs", "Collects current and previous container logs from each Scylla node pod.", engine.PerScyllaNode, nil)}
 }
 
 // RBAC implements engine.RBACProvider.

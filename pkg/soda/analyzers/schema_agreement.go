@@ -27,6 +27,7 @@ func NewSchemaAgreementAnalyzer() engine.PerScyllaClusterAnalyzer {
 		AnalyzerBase: engine.NewAnalyzerBase(
 			SchemaAgreementAnalyzerID,
 			"Schema agreement check",
+			"Verifies all nodes in the cluster report the same schema version; flags schema disagreement that may indicate a stuck migration.",
 			engine.AnalyzerPerScyllaCluster,
 			[]engine.CollectorID{collectors.SchemaVersionsCollectorID},
 		),

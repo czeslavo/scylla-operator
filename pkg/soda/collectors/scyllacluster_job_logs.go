@@ -32,7 +32,7 @@ var _ engine.PerScyllaClusterCollector = (*scyllaClusterJobLogsCollector)(nil)
 // NewScyllaClusterJobLogsCollector creates a new ScyllaClusterJobLogsCollector.
 func NewScyllaClusterJobLogsCollector() engine.PerScyllaClusterCollector {
 	return &scyllaClusterJobLogsCollector{
-		CollectorBase: engine.NewCollectorBase(ScyllaClusterJobLogsCollectorID, "ScyllaCluster cleanup job pod logs", engine.PerScyllaCluster, nil),
+		CollectorBase: engine.NewCollectorBase(ScyllaClusterJobLogsCollectorID, "ScyllaCluster cleanup job pod logs", "Collects current and previous container logs from cleanup job pods belonging to a ScyllaCluster.", engine.PerScyllaCluster, nil),
 	}
 }
 

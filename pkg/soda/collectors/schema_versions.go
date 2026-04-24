@@ -45,7 +45,7 @@ var _ engine.PerScyllaNodeCollector = (*schemaVersionsCollector)(nil)
 
 // NewSchemaVersionsCollector creates a new SchemaVersionsCollector.
 func NewSchemaVersionsCollector() engine.PerScyllaNodeCollector {
-	return &schemaVersionsCollector{CollectorBase: engine.NewCollectorBase(SchemaVersionsCollectorID, "Schema versions", engine.PerScyllaNode, nil)}
+	return &schemaVersionsCollector{CollectorBase: engine.NewCollectorBase(SchemaVersionsCollectorID, "Schema versions", "Queries the Scylla REST API for the schema version reported by each node, used for schema agreement analysis.", engine.PerScyllaNode, nil)}
 }
 
 // RBAC implements engine.RBACProvider.

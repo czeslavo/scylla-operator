@@ -54,7 +54,7 @@ var _ engine.ClusterWideCollector = (*nodeResourcesCollector)(nil)
 // NewNodeResourcesCollector creates a new NodeResourcesCollector.
 func NewNodeResourcesCollector() engine.ClusterWideCollector {
 	return &nodeResourcesCollector{
-		CollectorBase: engine.NewCollectorBase(NodeResourcesCollectorID, "Kubernetes Node resources", engine.ClusterWide, nil),
+		CollectorBase: engine.NewCollectorBase(NodeResourcesCollectorID, "Kubernetes Node resources", "Collects Kubernetes Node resources including capacity, allocatable resources, labels, and conditions.", engine.ClusterWide, nil),
 	}
 }
 

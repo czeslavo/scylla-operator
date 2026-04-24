@@ -36,7 +36,7 @@ var _ engine.ClusterWideCollector = (*podManifestCollector)(nil)
 // NewPodManifestCollector creates a new PodManifestCollector.
 func NewPodManifestCollector() engine.ClusterWideCollector {
 	return &podManifestCollector{
-		CollectorBase: engine.NewCollectorBase(PodManifestCollectorID, "Pod manifests (operator namespaces)", engine.ClusterWide, nil),
+		CollectorBase: engine.NewCollectorBase(PodManifestCollectorID, "Pod manifests (operator namespaces)", "Collects Pod manifests from ScyllaDB operator namespaces.", engine.ClusterWide, nil),
 	}
 }
 

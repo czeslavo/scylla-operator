@@ -28,6 +28,7 @@ func NewTopologyHealthAnalyzer() engine.PerScyllaClusterAnalyzer {
 		AnalyzerBase: engine.NewAnalyzerBase(
 			TopologyHealthAnalyzerID,
 			"Topology health check",
+			"Checks the system.topology table to verify all nodes are in 'normal' state with upgrade_state 'done'; flags nodes that are joining, leaving, or mid-upgrade.",
 			engine.AnalyzerPerScyllaCluster,
 			[]engine.CollectorID{collectors.SystemTopologyCollectorID},
 		),

@@ -35,7 +35,7 @@ var _ engine.PerScyllaClusterCollector = (*scyllaClusterRoleBindingCollector)(ni
 // NewScyllaClusterRoleBindingCollector creates a new ScyllaClusterRoleBindingCollector.
 func NewScyllaClusterRoleBindingCollector() engine.PerScyllaClusterCollector {
 	return &scyllaClusterRoleBindingCollector{
-		CollectorBase: engine.NewCollectorBase(ScyllaClusterRoleBindingCollectorID, "ScyllaCluster RoleBinding manifests", engine.PerScyllaCluster, nil),
+		CollectorBase: engine.NewCollectorBase(ScyllaClusterRoleBindingCollectorID, "ScyllaCluster RoleBinding manifests", "Collects RoleBinding manifests owned by a ScyllaCluster.", engine.PerScyllaCluster, nil),
 	}
 }
 

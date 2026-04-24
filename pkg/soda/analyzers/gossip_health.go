@@ -27,6 +27,7 @@ func NewGossipHealthAnalyzer() engine.PerScyllaClusterAnalyzer {
 		AnalyzerBase: engine.NewAnalyzerBase(
 			GossipHealthAnalyzerID,
 			"Gossip health check",
+			"Verifies all gossip endpoints report is_alive == true; flags any dead nodes detected by the gossip protocol.",
 			engine.AnalyzerPerScyllaCluster,
 			[]engine.CollectorID{collectors.GossipInfoCollectorID},
 		),

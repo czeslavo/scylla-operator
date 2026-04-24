@@ -36,7 +36,7 @@ var _ engine.ClusterWideCollector = (*serviceCollector)(nil)
 // NewServiceCollector creates a new ServiceCollector.
 func NewServiceCollector() engine.ClusterWideCollector {
 	return &serviceCollector{
-		CollectorBase: engine.NewCollectorBase(ServiceCollectorID, "Service manifests", engine.ClusterWide, nil),
+		CollectorBase: engine.NewCollectorBase(ServiceCollectorID, "Service manifests", "Collects Service manifests from ScyllaDB operator namespaces.", engine.ClusterWide, nil),
 	}
 }
 

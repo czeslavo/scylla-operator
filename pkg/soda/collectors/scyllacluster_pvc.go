@@ -36,7 +36,7 @@ var _ engine.PerScyllaClusterCollector = (*scyllaClusterPVCCollector)(nil)
 // NewScyllaClusterPVCCollector creates a new ScyllaClusterPVCCollector.
 func NewScyllaClusterPVCCollector() engine.PerScyllaClusterCollector {
 	return &scyllaClusterPVCCollector{
-		CollectorBase: engine.NewCollectorBase(ScyllaClusterPVCCollectorID, "ScyllaCluster PersistentVolumeClaim manifests", engine.PerScyllaCluster, nil),
+		CollectorBase: engine.NewCollectorBase(ScyllaClusterPVCCollectorID, "ScyllaCluster PersistentVolumeClaim manifests", "Collects PersistentVolumeClaim manifests owned by a ScyllaCluster.", engine.PerScyllaCluster, nil),
 	}
 }
 

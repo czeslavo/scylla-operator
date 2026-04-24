@@ -49,7 +49,7 @@ var _ engine.PerScyllaNodeCollector = (*systemTopologyCollector)(nil)
 
 // NewSystemTopologyCollector creates a new SystemTopologyCollector.
 func NewSystemTopologyCollector() engine.PerScyllaNodeCollector {
-	return &systemTopologyCollector{CollectorBase: engine.NewCollectorBase(SystemTopologyCollectorID, "System topology", engine.PerScyllaNode, nil)}
+	return &systemTopologyCollector{CollectorBase: engine.NewCollectorBase(SystemTopologyCollectorID, "System topology", "Queries the system.topology CQL table via cqlsh to capture node state, shard count, and upgrade status.", engine.PerScyllaNode, nil)}
 }
 
 // RBAC implements engine.RBACProvider.

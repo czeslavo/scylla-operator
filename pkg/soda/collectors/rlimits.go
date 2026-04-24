@@ -39,7 +39,7 @@ var _ engine.PerScyllaNodeCollector = (*rlimitsCollector)(nil)
 
 // NewRlimitsCollector creates a new RlimitsCollector.
 func NewRlimitsCollector() engine.PerScyllaNodeCollector {
-	return &rlimitsCollector{CollectorBase: engine.NewCollectorBase(RlimitsCollectorID, "Scylla process resource limits", engine.PerScyllaNode, nil)}
+	return &rlimitsCollector{CollectorBase: engine.NewCollectorBase(RlimitsCollectorID, "Scylla process resource limits", "Reads /proc/<pid>/limits inside each Scylla pod to capture process resource limits (open files, memory, etc.).", engine.PerScyllaNode, nil)}
 }
 
 // RBAC implements engine.RBACProvider.

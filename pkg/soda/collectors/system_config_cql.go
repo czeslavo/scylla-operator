@@ -46,7 +46,7 @@ var _ engine.PerScyllaNodeCollector = (*systemConfigCollector)(nil)
 
 // NewSystemConfigCollector creates a new SystemConfigCollector.
 func NewSystemConfigCollector() engine.PerScyllaNodeCollector {
-	return &systemConfigCollector{CollectorBase: engine.NewCollectorBase(SystemConfigCollectorID, "System config", engine.PerScyllaNode, nil)}
+	return &systemConfigCollector{CollectorBase: engine.NewCollectorBase(SystemConfigCollectorID, "System config", "Queries the system.config CQL table via cqlsh to capture runtime configuration parameters and their sources.", engine.PerScyllaNode, nil)}
 }
 
 // RBAC implements engine.RBACProvider.

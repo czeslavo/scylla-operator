@@ -36,7 +36,7 @@ var _ engine.ClusterWideCollector = (*statefulSetCollector)(nil)
 // NewStatefulSetCollector creates a new StatefulSetCollector.
 func NewStatefulSetCollector() engine.ClusterWideCollector {
 	return &statefulSetCollector{
-		CollectorBase: engine.NewCollectorBase(StatefulSetCollectorID, "StatefulSet manifests", engine.ClusterWide, nil),
+		CollectorBase: engine.NewCollectorBase(StatefulSetCollectorID, "StatefulSet manifests", "Collects StatefulSet manifests from ScyllaDB operator namespaces.", engine.ClusterWide, nil),
 	}
 }
 

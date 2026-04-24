@@ -15,6 +15,7 @@ type stubCollector struct {
 
 func (s *stubCollector) ID() CollectorID          { return s.id }
 func (s *stubCollector) Name() string             { return string(s.id) }
+func (s *stubCollector) Description() string      { return "" }
 func (s *stubCollector) Scope() CollectorScope    { return s.scope }
 func (s *stubCollector) DependsOn() []CollectorID { return s.deps }
 func (s *stubCollector) CollectClusterWide(_ context.Context, _ ClusterWideCollectorParams) (*CollectorResult, error) {
@@ -29,6 +30,7 @@ type stubAnalyzer struct {
 
 func (s *stubAnalyzer) ID() AnalyzerID           { return s.id }
 func (s *stubAnalyzer) Name() string             { return string(s.id) }
+func (s *stubAnalyzer) Description() string      { return "" }
 func (s *stubAnalyzer) Scope() AnalyzerScope     { return AnalyzerClusterWide }
 func (s *stubAnalyzer) DependsOn() []CollectorID { return s.deps }
 func (s *stubAnalyzer) AnalyzeClusterWide(_ ClusterWideAnalyzerParams) *AnalyzerResult {
