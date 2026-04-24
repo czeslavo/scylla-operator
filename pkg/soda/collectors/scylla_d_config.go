@@ -34,7 +34,7 @@ var _ engine.PerScyllaNodeCollector = (*scyllaDConfigCollector)(nil)
 
 // NewScyllaDConfigCollector creates a new ScyllaDConfigCollector.
 func NewScyllaDConfigCollector() engine.PerScyllaNodeCollector {
-	return &scyllaDConfigCollector{CollectorBase: engine.NewCollectorBase(ScyllaDConfigCollectorID, "Scylla drop-in config directory", engine.PerScyllaNode, nil)}
+	return &scyllaDConfigCollector{CollectorBase: engine.NewCollectorBase(ScyllaDConfigCollectorID, "Scylla drop-in config directory", "Lists and reads all files under /etc/scylla.d/ to capture drop-in configuration overrides.", engine.PerScyllaNode, nil)}
 }
 
 // RBAC implements engine.RBACProvider.

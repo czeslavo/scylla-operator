@@ -36,7 +36,7 @@ var _ engine.PerScyllaClusterCollector = (*scyllaClusterPodCollector)(nil)
 // NewScyllaClusterPodCollector creates a new ScyllaClusterPodCollector.
 func NewScyllaClusterPodCollector() engine.PerScyllaClusterCollector {
 	return &scyllaClusterPodCollector{
-		CollectorBase: engine.NewCollectorBase(ScyllaClusterPodCollectorID, "ScyllaCluster Pod manifests", engine.PerScyllaCluster, nil),
+		CollectorBase: engine.NewCollectorBase(ScyllaClusterPodCollectorID, "ScyllaCluster Pod manifests", "Collects Pod manifests owned by a ScyllaCluster.", engine.PerScyllaCluster, nil),
 	}
 }
 

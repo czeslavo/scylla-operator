@@ -66,6 +66,7 @@ type testCollectorParams struct {
 
 func (r *recordingCollector) ID() CollectorID          { return r.id }
 func (r *recordingCollector) Name() string             { return string(r.id) }
+func (r *recordingCollector) Description() string      { return "" }
 func (r *recordingCollector) Scope() CollectorScope    { return r.scope }
 func (r *recordingCollector) DependsOn() []CollectorID { return r.deps }
 
@@ -128,6 +129,7 @@ type simpleAnalyzer struct {
 
 func (a *simpleAnalyzer) ID() AnalyzerID           { return a.id }
 func (a *simpleAnalyzer) Name() string             { return string(a.id) }
+func (a *simpleAnalyzer) Description() string      { return "" }
 func (a *simpleAnalyzer) Scope() AnalyzerScope     { return AnalyzerClusterWide }
 func (a *simpleAnalyzer) DependsOn() []CollectorID { return a.deps }
 func (a *simpleAnalyzer) AnalyzeClusterWide(params ClusterWideAnalyzerParams) *AnalyzerResult {

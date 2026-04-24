@@ -36,7 +36,7 @@ var _ engine.ClusterWideCollector = (*daemonSetCollector)(nil)
 // NewDaemonSetCollector creates a new DaemonSetCollector.
 func NewDaemonSetCollector() engine.ClusterWideCollector {
 	return &daemonSetCollector{
-		CollectorBase: engine.NewCollectorBase(DaemonSetCollectorID, "DaemonSet manifests", engine.ClusterWide, nil),
+		CollectorBase: engine.NewCollectorBase(DaemonSetCollectorID, "DaemonSet manifests", "Collects DaemonSet manifests from ScyllaDB operator namespaces.", engine.ClusterWide, nil),
 	}
 }
 

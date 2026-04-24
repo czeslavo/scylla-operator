@@ -40,7 +40,7 @@ var _ engine.PerScyllaNodeCollector = (*scyllaVersionCollector)(nil)
 
 // NewScyllaVersionCollector creates a new ScyllaVersionCollector.
 func NewScyllaVersionCollector() engine.PerScyllaNodeCollector {
-	return &scyllaVersionCollector{CollectorBase: engine.NewCollectorBase(ScyllaVersionCollectorID, "Scylla version", engine.PerScyllaNode, nil)}
+	return &scyllaVersionCollector{CollectorBase: engine.NewCollectorBase(ScyllaVersionCollectorID, "Scylla version", "Runs 'scylla --version' inside each Scylla pod to capture the exact Scylla version and build.", engine.PerScyllaNode, nil)}
 }
 
 // RBAC implements engine.RBACProvider.

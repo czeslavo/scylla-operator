@@ -15,6 +15,7 @@ type plainCollector struct {
 
 func (s *plainCollector) ID() CollectorID          { return s.id }
 func (s *plainCollector) Name() string             { return string(s.id) }
+func (s *plainCollector) Description() string      { return "" }
 func (s *plainCollector) Scope() CollectorScope    { return s.scope }
 func (s *plainCollector) DependsOn() []CollectorID { return nil }
 

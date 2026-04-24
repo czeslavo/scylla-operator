@@ -36,7 +36,7 @@ var _ engine.PerScyllaClusterCollector = (*scyllaClusterStatefulSetCollector)(ni
 // NewScyllaClusterStatefulSetCollector creates a new ScyllaClusterStatefulSetCollector.
 func NewScyllaClusterStatefulSetCollector() engine.PerScyllaClusterCollector {
 	return &scyllaClusterStatefulSetCollector{
-		CollectorBase: engine.NewCollectorBase(ScyllaClusterStatefulSetCollectorID, "ScyllaCluster StatefulSet manifests", engine.PerScyllaCluster, nil),
+		CollectorBase: engine.NewCollectorBase(ScyllaClusterStatefulSetCollectorID, "ScyllaCluster StatefulSet manifests", "Collects StatefulSet manifests owned by a ScyllaCluster.", engine.PerScyllaCluster, nil),
 	}
 }
 

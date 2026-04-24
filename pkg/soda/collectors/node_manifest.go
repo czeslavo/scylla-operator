@@ -34,7 +34,7 @@ var _ engine.ClusterWideCollector = (*nodeManifestCollector)(nil)
 // NewNodeManifestCollector creates a new NodeManifestCollector.
 func NewNodeManifestCollector() engine.ClusterWideCollector {
 	return &nodeManifestCollector{
-		CollectorBase: engine.NewCollectorBase(NodeManifestCollectorID, "Node manifests", engine.ClusterWide, nil),
+		CollectorBase: engine.NewCollectorBase(NodeManifestCollectorID, "Node manifests", "Collects Kubernetes Node manifests including capacity, allocatable resources, and conditions.", engine.ClusterWide, nil),
 	}
 }
 

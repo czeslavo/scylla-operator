@@ -36,7 +36,7 @@ var _ engine.ClusterWideCollector = (*deploymentCollector)(nil)
 // NewDeploymentCollector creates a new DeploymentCollector.
 func NewDeploymentCollector() engine.ClusterWideCollector {
 	return &deploymentCollector{
-		CollectorBase: engine.NewCollectorBase(DeploymentCollectorID, "Deployment manifests", engine.ClusterWide, nil),
+		CollectorBase: engine.NewCollectorBase(DeploymentCollectorID, "Deployment manifests", "Collects Deployment manifests from ScyllaDB operator namespaces.", engine.ClusterWide, nil),
 	}
 }
 

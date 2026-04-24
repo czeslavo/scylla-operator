@@ -627,6 +627,18 @@ update-docs-api:
 	$(call run-update-docs,--output-dir='$(DOCS_API_REFERENCE_DIR)'/groups --overwrite)
 .PHONY: update-docs-api
 
+SODA_DOCS_OUTPUT := docs/source/support/soda-reference.md
+
+update-soda-docs:
+	go run ./cmd/gen-soda-docs/ > '$(SODA_DOCS_OUTPUT)'
+.PHONY: update-soda-docs
+
+verify-soda-docs: tmp_dir :=$(shell mktemp -d)
+verify-soda-docs:
+	go run ./cmd/gen-soda-docs/ > '$(tmp_dir)/soda-reference.md'
+	$(diff) '$(tmp_dir)/soda-reference.md' '$(SODA_DOCS_OUTPUT)' || (echo 'soda docs are not up-to date. Please run `make update-soda-docs` to update.' && false)
+.PHONY: verify-soda-docs
+
 verify-docs-api: tmp_dir :=$(shell mktemp -d)
 verify-docs-api:
 	$(call run-update-docs,--output-dir="$(tmp_dir)")

@@ -36,7 +36,7 @@ var _ engine.PerScyllaClusterCollector = (*scyllaClusterConfigMapCollector)(nil)
 // NewScyllaClusterConfigMapCollector creates a new ScyllaClusterConfigMapCollector.
 func NewScyllaClusterConfigMapCollector() engine.PerScyllaClusterCollector {
 	return &scyllaClusterConfigMapCollector{
-		CollectorBase: engine.NewCollectorBase(ScyllaClusterConfigMapCollectorID, "ScyllaCluster ConfigMap manifests", engine.PerScyllaCluster, nil),
+		CollectorBase: engine.NewCollectorBase(ScyllaClusterConfigMapCollectorID, "ScyllaCluster ConfigMap manifests", "Collects ConfigMap manifests owned by a ScyllaCluster.", engine.PerScyllaCluster, nil),
 	}
 }
 

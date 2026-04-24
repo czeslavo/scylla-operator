@@ -36,7 +36,7 @@ var _ engine.ClusterWideCollector = (*scyllaClusterCollector)(nil)
 // NewScyllaClusterCollector creates a new ScyllaClusterCollector.
 func NewScyllaClusterCollector() engine.ClusterWideCollector {
 	return &scyllaClusterCollector{
-		CollectorBase: engine.NewCollectorBase(ScyllaClusterCollectorID, "ScyllaCluster manifests", engine.ClusterWide, nil),
+		CollectorBase: engine.NewCollectorBase(ScyllaClusterCollectorID, "ScyllaCluster manifests", "Collects ScyllaCluster custom resource manifests from all namespaces.", engine.ClusterWide, nil),
 	}
 }
 

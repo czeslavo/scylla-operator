@@ -36,7 +36,7 @@ var _ engine.PerScyllaClusterCollector = (*scyllaClusterServiceCollector)(nil)
 // NewScyllaClusterServiceCollector creates a new ScyllaClusterServiceCollector.
 func NewScyllaClusterServiceCollector() engine.PerScyllaClusterCollector {
 	return &scyllaClusterServiceCollector{
-		CollectorBase: engine.NewCollectorBase(ScyllaClusterServiceCollectorID, "ScyllaCluster Service manifests", engine.PerScyllaCluster, nil),
+		CollectorBase: engine.NewCollectorBase(ScyllaClusterServiceCollectorID, "ScyllaCluster Service manifests", "Collects Service manifests owned by a ScyllaCluster.", engine.PerScyllaCluster, nil),
 	}
 }
 

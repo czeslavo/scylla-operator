@@ -41,6 +41,18 @@ const (
 	AnalyzerPerScyllaCluster
 )
 
+// String returns a human-readable representation of the analyzer scope.
+func (s AnalyzerScope) String() string {
+	switch s {
+	case AnalyzerClusterWide:
+		return "ClusterWide"
+	case AnalyzerPerScyllaCluster:
+		return "PerScyllaCluster"
+	default:
+		return fmt.Sprintf("AnalyzerScope(%d)", int(s))
+	}
+}
+
 // String returns a human-readable representation of the collector scope.
 func (s CollectorScope) String() string {
 	switch s {
@@ -188,6 +200,7 @@ type AnalyzerResult struct {
 type CollectorMeta interface {
 	ID() CollectorID
 	Name() string
+	Description() string
 	Scope() CollectorScope
 	DependsOn() []CollectorID
 }
@@ -197,6 +210,7 @@ type CollectorMeta interface {
 type AnalyzerMeta interface {
 	ID() AnalyzerID
 	Name() string
+	Description() string
 	Scope() AnalyzerScope
 	DependsOn() []CollectorID
 }
@@ -298,38 +312,42 @@ func GetResult[T any](vitals *Vitals, id CollectorID, scopeKey ScopeKey) (*T, er
 // implementations. Embed it in a collector struct and call NewCollectorBase to
 // avoid implementing ID/Name/Scope/DependsOn by hand in every collector.
 type CollectorBase struct {
-	id        CollectorID
-	name      string
-	scope     CollectorScope
-	dependsOn []CollectorID
+	id          CollectorID
+	name        string
+	description string
+	scope       CollectorScope
+	dependsOn   []CollectorID
 }
 
 // NewCollectorBase constructs a CollectorBase with the given metadata.
-func NewCollectorBase(id CollectorID, name string, scope CollectorScope, dependsOn []CollectorID) CollectorBase {
-	return CollectorBase{id: id, name: name, scope: scope, dependsOn: dependsOn}
+func NewCollectorBase(id CollectorID, name string, description string, scope CollectorScope, dependsOn []CollectorID) CollectorBase {
+	return CollectorBase{id: id, name: name, description: description, scope: scope, dependsOn: dependsOn}
 }
 
 func (b CollectorBase) ID() CollectorID          { return b.id }
 func (b CollectorBase) Name() string             { return b.name }
+func (b CollectorBase) Description() string      { return b.description }
 func (b CollectorBase) Scope() CollectorScope    { return b.scope }
 func (b CollectorBase) DependsOn() []CollectorID { return b.dependsOn }
 
 // AnalyzerBase provides the common metadata fields shared by all analyzer
 // implementations. Embed it and call NewAnalyzerBase to avoid boilerplate.
 type AnalyzerBase struct {
-	id        AnalyzerID
-	name      string
-	scope     AnalyzerScope
-	dependsOn []CollectorID
+	id          AnalyzerID
+	name        string
+	description string
+	scope       AnalyzerScope
+	dependsOn   []CollectorID
 }
 
 // NewAnalyzerBase constructs an AnalyzerBase with the given metadata.
-func NewAnalyzerBase(id AnalyzerID, name string, scope AnalyzerScope, dependsOn []CollectorID) AnalyzerBase {
-	return AnalyzerBase{id: id, name: name, scope: scope, dependsOn: dependsOn}
+func NewAnalyzerBase(id AnalyzerID, name string, description string, scope AnalyzerScope, dependsOn []CollectorID) AnalyzerBase {
+	return AnalyzerBase{id: id, name: name, description: description, scope: scope, dependsOn: dependsOn}
 }
 
 func (b AnalyzerBase) ID() AnalyzerID           { return b.id }
 func (b AnalyzerBase) Name() string             { return b.name }
+func (b AnalyzerBase) Description() string      { return b.description }
 func (b AnalyzerBase) Scope() AnalyzerScope     { return b.scope }
 func (b AnalyzerBase) DependsOn() []CollectorID { return b.dependsOn }
 

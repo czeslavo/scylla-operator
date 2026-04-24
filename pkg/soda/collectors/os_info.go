@@ -50,7 +50,7 @@ var _ engine.PerScyllaNodeCollector = (*osInfoCollector)(nil)
 
 // NewOSInfoCollector creates a new OSInfoCollector.
 func NewOSInfoCollector() engine.PerScyllaNodeCollector {
-	return &osInfoCollector{CollectorBase: engine.NewCollectorBase(OSInfoCollectorID, "OS information", engine.PerScyllaNode, nil)}
+	return &osInfoCollector{CollectorBase: engine.NewCollectorBase(OSInfoCollectorID, "OS information", "Reads /etc/os-release inside each Scylla pod to identify the OS distribution and version.", engine.PerScyllaNode, nil)}
 }
 
 // RBAC implements engine.RBACProvider.

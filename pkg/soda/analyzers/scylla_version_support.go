@@ -27,6 +27,7 @@ func NewScyllaVersionSupportAnalyzer() engine.PerScyllaClusterAnalyzer {
 		AnalyzerBase: engine.NewAnalyzerBase(
 			ScyllaVersionSupportAnalyzerID,
 			"Scylla version support check",
+			"Checks each node's Scylla version against known-supported release ranges and flags end-of-life or unrecognized versions.",
 			engine.AnalyzerPerScyllaCluster,
 			[]engine.CollectorID{collectors.ScyllaVersionCollectorID},
 		),

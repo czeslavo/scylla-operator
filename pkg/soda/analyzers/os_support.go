@@ -38,6 +38,7 @@ func NewOSSupportAnalyzer() engine.PerScyllaClusterAnalyzer {
 		AnalyzerBase: engine.NewAnalyzerBase(
 			OSSupportAnalyzerID,
 			"OS support check",
+			"Checks that the OS distribution running on each Scylla pod is on the list of supported platforms.",
 			engine.AnalyzerPerScyllaCluster,
 			[]engine.CollectorID{collectors.OSInfoCollectorID},
 		),

@@ -32,7 +32,7 @@ var _ engine.ClusterWideCollector = (*operatorPodLogsCollector)(nil)
 // NewOperatorPodLogsCollector creates a new OperatorPodLogsCollector.
 func NewOperatorPodLogsCollector() engine.ClusterWideCollector {
 	return &operatorPodLogsCollector{
-		CollectorBase: engine.NewCollectorBase(OperatorPodLogsCollectorID, "Operator pod logs", engine.ClusterWide, nil),
+		CollectorBase: engine.NewCollectorBase(OperatorPodLogsCollectorID, "Operator pod logs", "Collects current and previous container logs from ScyllaDB operator pods.", engine.ClusterWide, nil),
 	}
 }
 
