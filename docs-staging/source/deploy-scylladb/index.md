@@ -6,20 +6,14 @@ Deploy and configure ScyllaDB clusters on Kubernetes. Start with a quick single-
 
 **Already have the Operator installed?** Go straight to [Deploy your first cluster](deploy-your-first-cluster.md).
 
-**Starting from scratch on a specific platform?** Follow a reference deployment:
-
-- [Reference deployment: GKE](reference-deployment-gke.md) — end-to-end on Google Kubernetes Engine.
-- [Reference deployment: EKS](reference-deployment-eks.md) — end-to-end on Amazon EKS.
-- [Reference deployment: OpenShift](reference-deployment-openshift.md) — end-to-end on Red Hat OpenShift.
+**Starting from scratch on a specific platform?** Follow a [reference deployment](reference-deployments/index.md).
 
 :::{toctree}
-:maxdepth: 1
+:hidden:
 
 before-you-deploy/index
 deploy-your-first-cluster
-reference-deployment-gke
-reference-deployment-eks
-reference-deployment-openshift
+reference-deployments/index
 deploy-multi-dc-cluster
 set-up-networking/index
 set-up-monitoring
