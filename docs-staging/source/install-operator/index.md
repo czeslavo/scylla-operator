@@ -6,12 +6,12 @@ Install ScyllaDB Operator and its dependencies into your Kubernetes cluster. Cho
 - **[Helm](install-with-helm.md)** — install using Helm charts.
 - **[OpenShift](install-on-openshift.md)** — install via the Operator Lifecycle Manager (OLM) software catalog on Red Hat OpenShift.
 
-Before installing, review the [prerequisites](prerequisites.md) to ensure your environment meets all requirements.
+Before installing, review the [prerequisites](prerequisites/index.md) to ensure your environment meets all requirements.
 
 :::{toctree}
-:maxdepth: 1
+:hidden:
 
-prerequisites
+prerequisites/index
 install-with-gitops
 install-with-helm
 install-on-openshift
