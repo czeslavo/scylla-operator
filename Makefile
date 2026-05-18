@@ -787,8 +787,12 @@ verify-e2e-suite-coverage:
 verify: verify-codegen verify-crds verify-helm-schemas verify-helm-charts verify-deploy verify-lint verify-helm-lint verify-links verify-examples verify-docs-api verify-monitoring verify-bundle verify-renovate-config verify-in-tree-prometheus-operator-exports verify-config verify-e2e-suite-coverage
 .PHONY: verify
 
-update: update-codegen update-crds update-helm-schemas update-helm-charts update-deploy update-examples update-docs-api update-monitoring update-bundle update-go-mod-replace update-renovate-config update-in-tree-prometheus-operator-exports update-config
+update: update-codegen update-crds update-helm-schemas update-helm-charts update-deploy update-examples update-docs-api update-monitoring update-bundle update-go-mod-replace update-renovate-config update-in-tree-prometheus-operator-exports update-config update-knowledge-graph
 .PHONY: update
+
+update-knowledge-graph:
+	python3 hack/generate-knowledge-graph.py
+.PHONY: update-knowledge-graph
 
 test-unit:
 	$(GO) test $(GO_TEST_COUNT) $(GO_TEST_FLAGS) $(GO_TEST_EXTRA_FLAGS) $(GO_TEST_PACKAGES) $(if $(GO_TEST_ARGS)$(GO_TEST_EXTRA_ARGS),-args $(GO_TEST_ARGS) $(GO_TEST_EXTRA_ARGS))
