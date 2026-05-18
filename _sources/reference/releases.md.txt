@@ -149,11 +149,11 @@ The support matrix table shows the version requirements for ScyllaDB Operator. M
   - 2025.1, 2025.3 - 2026.1
 * - ScyllaDB Manager
   - 3.7 - 3.9
-* - ScyllaDB Monitoring
-  - {{scyllaDBMonitoringVersion}} [^scylladb-monitoring-version]
+* - ScyllaDB Monitoring [1]
+  - {{scyllaDBMonitoringVersion}}
 :::
 
-[^scylladb-monitoring-version]: ScyllaDB Operator embeds the specified version of ScyllaDB Monitoring, which includes a set of Grafana dashboards and Prometheus rules.
+_[1] ScyllaDB Operator embeds the specified version of ScyllaDB Monitoring, which includes a set of Grafana dashboards and Prometheus rules._
 
 ### Third-party dependencies
 

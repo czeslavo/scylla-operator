@@ -1,0 +1,2385 @@
+{
+  "nodes": [
+    {
+      "id": "connect-your-app--alternator",
+      "label": "Alternator (DynamoDB API)",
+      "section": "connect-your-app",
+      "color": "#4a90d9",
+      "page": "connect-your-app/alternator.md",
+      "type": "page",
+      "connections": 6
+    },
+    {
+      "id": "connect-your-app--configure-external-access",
+      "label": "Configure external access",
+      "section": "connect-your-app",
+      "color": "#4a90d9",
+      "page": "connect-your-app/configure-external-access.md",
+      "type": "page",
+      "connections": 6
+    },
+    {
+      "id": "connect-your-app--connect-via-cql",
+      "label": "Connect via CQL",
+      "section": "connect-your-app",
+      "color": "#4a90d9",
+      "page": "connect-your-app/connect-via-cql.md",
+      "type": "page",
+      "connections": 6
+    },
+    {
+      "id": "connect-your-app--discovery",
+      "label": "Discovery endpoint",
+      "section": "connect-your-app",
+      "color": "#4a90d9",
+      "page": "connect-your-app/discovery.md",
+      "type": "page",
+      "connections": 5
+    },
+    {
+      "id": "connect-your-app--index",
+      "label": "Connect Your App",
+      "section": "connect-your-app",
+      "color": "#4a90d9",
+      "page": "connect-your-app/index.md",
+      "type": "index",
+      "connections": 10
+    },
+    {
+      "id": "contributing--index",
+      "label": "Contributing",
+      "section": "contributing",
+      "color": "#27ae60",
+      "page": "contributing/index.md",
+      "type": "index",
+      "connections": 1
+    },
+    {
+      "id": "deploy-scylladb--before-you-deploy--configure-cpu-pinning",
+      "label": "Configure CPU pinning",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/before-you-deploy/configure-cpu-pinning.md",
+      "type": "page",
+      "connections": 9
+    },
+    {
+      "id": "deploy-scylladb--before-you-deploy--configure-nodes",
+      "label": "Configure nodes",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/before-you-deploy/configure-nodes.md",
+      "type": "page",
+      "connections": 15
+    },
+    {
+      "id": "deploy-scylladb--before-you-deploy--configure-operator",
+      "label": "Configure ScyllaDB Operator",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/before-you-deploy/configure-operator.md",
+      "type": "page",
+      "connections": 6
+    },
+    {
+      "id": "deploy-scylladb--before-you-deploy--index",
+      "label": "Before You Deploy",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/before-you-deploy/index.md",
+      "type": "index",
+      "connections": 6
+    },
+    {
+      "id": "deploy-scylladb--before-you-deploy--overview",
+      "label": "Overview",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/before-you-deploy/overview.md",
+      "type": "page",
+      "connections": 8
+    },
+    {
+      "id": "deploy-scylladb--before-you-deploy--set-up-dedicated-node-pools",
+      "label": "Set up dedicated node pools",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/before-you-deploy/set-up-dedicated-node-pools.md",
+      "type": "page",
+      "connections": 17
+    },
+    {
+      "id": "deploy-scylladb--deploy-multi-dc-cluster",
+      "label": "Deploy a multi-datacenter cluster",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/deploy-multi-dc-cluster.md",
+      "type": "page",
+      "connections": 10
+    },
+    {
+      "id": "deploy-scylladb--deploy-your-first-cluster",
+      "label": "Deploy your first cluster",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/deploy-your-first-cluster.md",
+      "type": "page",
+      "connections": 14
+    },
+    {
+      "id": "deploy-scylladb--index",
+      "label": "Deploy Scylladb",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/index.md",
+      "type": "index",
+      "connections": 23
+    },
+    {
+      "id": "deploy-scylladb--install-scylladb-manager",
+      "label": "Install ScyllaDB Manager",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/install-scylladb-manager.md",
+      "type": "page",
+      "connections": 7
+    },
+    {
+      "id": "deploy-scylladb--overview",
+      "label": "Overview",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/overview.md",
+      "type": "page",
+      "connections": 14
+    },
+    {
+      "id": "deploy-scylladb--production-checklist",
+      "label": "Production checklist",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/production-checklist.md",
+      "type": "page",
+      "connections": 15
+    },
+    {
+      "id": "deploy-scylladb--reference-deployments--index",
+      "label": "Reference Deployments",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/reference-deployments/index.md",
+      "type": "index",
+      "connections": 9
+    },
+    {
+      "id": "deploy-scylladb--reference-deployments--reference-deployment-eks",
+      "label": "Reference deployment: EKS",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/reference-deployments/reference-deployment-eks.md",
+      "type": "page",
+      "connections": 8
+    },
+    {
+      "id": "deploy-scylladb--reference-deployments--reference-deployment-gke",
+      "label": "Reference deployment: GKE",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/reference-deployments/reference-deployment-gke.md",
+      "type": "page",
+      "connections": 8
+    },
+    {
+      "id": "deploy-scylladb--reference-deployments--reference-deployment-oke",
+      "label": "Reference deployment: OKE",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/reference-deployments/reference-deployment-oke.md",
+      "type": "page",
+      "connections": 9
+    },
+    {
+      "id": "deploy-scylladb--reference-deployments--reference-deployment-openshift",
+      "label": "Reference deployment: OpenShift",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/reference-deployments/reference-deployment-openshift.md",
+      "type": "page",
+      "connections": 11
+    },
+    {
+      "id": "deploy-scylladb--set-up-monitoring--exposing-grafana",
+      "label": "Expose Grafana",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/set-up-monitoring/exposing-grafana.md",
+      "type": "page",
+      "connections": 6
+    },
+    {
+      "id": "deploy-scylladb--set-up-monitoring--external-prometheus-on-openshift",
+      "label": "Set up ScyllaDB Monitoring on OpenShift",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/set-up-monitoring/external-prometheus-on-openshift.md",
+      "type": "page",
+      "connections": 8
+    },
+    {
+      "id": "deploy-scylladb--set-up-monitoring--index",
+      "label": "Set Up Monitoring",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/set-up-monitoring/index.md",
+      "type": "index",
+      "connections": 5
+    },
+    {
+      "id": "deploy-scylladb--set-up-monitoring--overview",
+      "label": "Overview",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/set-up-monitoring/overview.md",
+      "type": "page",
+      "connections": 10
+    },
+    {
+      "id": "deploy-scylladb--set-up-monitoring--setup",
+      "label": "Set up ScyllaDB Monitoring",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/set-up-monitoring/setup.md",
+      "type": "page",
+      "connections": 7
+    },
+    {
+      "id": "deploy-scylladb--set-up-networking--expose-clusters",
+      "label": "Expose ScyllaDB clusters",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/set-up-networking/expose-clusters.md",
+      "type": "page",
+      "connections": 4
+    },
+    {
+      "id": "deploy-scylladb--set-up-networking--index",
+      "label": "Set Up Networking",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/set-up-networking/index.md",
+      "type": "index",
+      "connections": 11
+    },
+    {
+      "id": "deploy-scylladb--set-up-networking--ipv6--configure-dual-stack",
+      "label": "Configure dual-stack networking",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/set-up-networking/ipv6/configure-dual-stack.md",
+      "type": "page",
+      "connections": 8
+    },
+    {
+      "id": "deploy-scylladb--set-up-networking--ipv6--configure-single-stack",
+      "label": "Configure IPv6-only networking",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/set-up-networking/ipv6/configure-single-stack.md",
+      "type": "page",
+      "connections": 5
+    },
+    {
+      "id": "deploy-scylladb--set-up-networking--ipv6--get-started",
+      "label": "Getting started with IPv6 networking",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/set-up-networking/ipv6/get-started.md",
+      "type": "page",
+      "connections": 7
+    },
+    {
+      "id": "deploy-scylladb--set-up-networking--ipv6--index",
+      "label": "Ipv6",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/set-up-networking/ipv6/index.md",
+      "type": "index",
+      "connections": 9
+    },
+    {
+      "id": "deploy-scylladb--set-up-networking--ipv6--ipv6-concepts",
+      "label": "IPv6 networking concepts",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/set-up-networking/ipv6/ipv6-concepts.md",
+      "type": "page",
+      "connections": 7
+    },
+    {
+      "id": "deploy-scylladb--set-up-networking--ipv6--migration",
+      "label": "Migrate clusters to IPv6",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/set-up-networking/ipv6/migration.md",
+      "type": "page",
+      "connections": 8
+    },
+    {
+      "id": "deploy-scylladb--set-up-networking--ipv6--troubleshooting",
+      "label": "Troubleshoot IPv6 networking issues",
+      "section": "deploy-scylladb",
+      "color": "#e67e22",
+      "page": "deploy-scylladb/set-up-networking/ipv6/troubleshooting.md",
+      "type": "page",
+      "connections": 7
+    },
+    {
+      "id": "get-started--concepts-for-k8s-beginners",
+      "label": "ScyllaDB Concepts on Kubernetes",
+      "section": "get-started",
+      "color": "#8e44ad",
+      "page": "get-started/concepts-for-k8s-beginners.md",
+      "type": "page",
+      "connections": 3
+    },
+    {
+      "id": "get-started--index",
+      "label": "Get Started",
+      "section": "get-started",
+      "color": "#8e44ad",
+      "page": "get-started/index.md",
+      "type": "index",
+      "connections": 4
+    },
+    {
+      "id": "get-started--what-is-scylladb-operator",
+      "label": "What Is ScyllaDB Operator?",
+      "section": "get-started",
+      "color": "#8e44ad",
+      "page": "get-started/what-is-scylladb-operator.md",
+      "type": "page",
+      "connections": 8
+    },
+    {
+      "id": "index",
+      "label": "Source",
+      "section": "index.md",
+      "color": "#16a085",
+      "page": "index.md",
+      "type": "index",
+      "connections": 0
+    },
+    {
+      "id": "install-operator--index",
+      "label": "Install Operator",
+      "section": "install-operator",
+      "color": "#c0392b",
+      "page": "install-operator/index.md",
+      "type": "index",
+      "connections": 12
+    },
+    {
+      "id": "install-operator--install-on-openshift",
+      "label": "Install on OpenShift",
+      "section": "install-operator",
+      "color": "#c0392b",
+      "page": "install-operator/install-on-openshift.md",
+      "type": "page",
+      "connections": 10
+    },
+    {
+      "id": "install-operator--install-with-gitops",
+      "label": "Install with GitOps",
+      "section": "install-operator",
+      "color": "#c0392b",
+      "page": "install-operator/install-with-gitops.md",
+      "type": "page",
+      "connections": 12
+    },
+    {
+      "id": "install-operator--install-with-helm",
+      "label": "Install with Helm",
+      "section": "install-operator",
+      "color": "#c0392b",
+      "page": "install-operator/install-with-helm.md",
+      "type": "page",
+      "connections": 10
+    },
+    {
+      "id": "install-operator--overview",
+      "label": "Overview",
+      "section": "install-operator",
+      "color": "#c0392b",
+      "page": "install-operator/overview.md",
+      "type": "page",
+      "connections": 8
+    },
+    {
+      "id": "install-operator--provision-infrastructure--index",
+      "label": "Provision Infrastructure",
+      "section": "install-operator",
+      "color": "#c0392b",
+      "page": "install-operator/provision-infrastructure/index.md",
+      "type": "index",
+      "connections": 6
+    },
+    {
+      "id": "install-operator--provision-infrastructure--overview",
+      "label": "Overview",
+      "section": "install-operator",
+      "color": "#c0392b",
+      "page": "install-operator/provision-infrastructure/overview.md",
+      "type": "page",
+      "connections": 12
+    },
+    {
+      "id": "install-operator--provision-infrastructure--set-up-eks-cluster",
+      "label": "Set up an EKS cluster for ScyllaDB",
+      "section": "install-operator",
+      "color": "#c0392b",
+      "page": "install-operator/provision-infrastructure/set-up-eks-cluster.md",
+      "type": "page",
+      "connections": 6
+    },
+    {
+      "id": "install-operator--provision-infrastructure--set-up-gke-cluster",
+      "label": "Set up a GKE cluster for ScyllaDB",
+      "section": "install-operator",
+      "color": "#c0392b",
+      "page": "install-operator/provision-infrastructure/set-up-gke-cluster.md",
+      "type": "page",
+      "connections": 6
+    },
+    {
+      "id": "install-operator--provision-infrastructure--set-up-oke-cluster",
+      "label": "Set up an OKE cluster for ScyllaDB",
+      "section": "install-operator",
+      "color": "#c0392b",
+      "page": "install-operator/provision-infrastructure/set-up-oke-cluster.md",
+      "type": "page",
+      "connections": 6
+    },
+    {
+      "id": "install-operator--provision-infrastructure--set-up-openshift-cluster",
+      "label": "Set up an OpenShift cluster for ScyllaDB",
+      "section": "install-operator",
+      "color": "#c0392b",
+      "page": "install-operator/provision-infrastructure/set-up-openshift-cluster.md",
+      "type": "page",
+      "connections": 7
+    },
+    {
+      "id": "install-operator--set-up-multi-dc-infrastructure",
+      "label": "Set up multi-DC infrastructure",
+      "section": "install-operator",
+      "color": "#c0392b",
+      "page": "install-operator/set-up-multi-dc-infrastructure.md",
+      "type": "page",
+      "connections": 3
+    },
+    {
+      "id": "operate--back-up-and-restore",
+      "label": "Back up and restore",
+      "section": "operate",
+      "color": "#7f8c8d",
+      "page": "operate/back-up-and-restore.md",
+      "type": "page",
+      "connections": 5
+    },
+    {
+      "id": "operate--configure-io-properties",
+      "label": "Configure precomputed IO properties",
+      "section": "operate",
+      "color": "#7f8c8d",
+      "page": "operate/configure-io-properties.md",
+      "type": "page",
+      "connections": 3
+    },
+    {
+      "id": "operate--expand-storage-volumes",
+      "label": "Expand storage volumes",
+      "section": "operate",
+      "color": "#7f8c8d",
+      "page": "operate/expand-storage-volumes.md",
+      "type": "page",
+      "connections": 4
+    },
+    {
+      "id": "operate--index",
+      "label": "Operate",
+      "section": "operate",
+      "color": "#7f8c8d",
+      "page": "operate/index.md",
+      "type": "index",
+      "connections": 10
+    },
+    {
+      "id": "operate--migrate-rack-to-new-node-pool",
+      "label": "Migrate a rack to a new node pool",
+      "section": "operate",
+      "color": "#7f8c8d",
+      "page": "operate/migrate-rack-to-new-node-pool.md",
+      "type": "page",
+      "connections": 5
+    },
+    {
+      "id": "operate--pass-scylladb-arguments",
+      "label": "Pass additional ScyllaDB arguments",
+      "section": "operate",
+      "color": "#7f8c8d",
+      "page": "operate/pass-scylladb-arguments.md",
+      "type": "page",
+      "connections": 5
+    },
+    {
+      "id": "operate--perform-rolling-restart",
+      "label": "Perform a rolling restart",
+      "section": "operate",
+      "color": "#7f8c8d",
+      "page": "operate/perform-rolling-restart.md",
+      "type": "page",
+      "connections": 8
+    },
+    {
+      "id": "operate--replace-nodes",
+      "label": "Replace nodes",
+      "section": "operate",
+      "color": "#7f8c8d",
+      "page": "operate/replace-nodes.md",
+      "type": "page",
+      "connections": 7
+    },
+    {
+      "id": "operate--restore-from-backup",
+      "label": "Restore from backup",
+      "section": "operate",
+      "color": "#7f8c8d",
+      "page": "operate/restore-from-backup.md",
+      "type": "page",
+      "connections": 5
+    },
+    {
+      "id": "operate--scale-add-remove-racks",
+      "label": "Scale, add, remove racks",
+      "section": "operate",
+      "color": "#7f8c8d",
+      "page": "operate/scale-add-remove-racks.md",
+      "type": "page",
+      "connections": 8
+    },
+    {
+      "id": "operate--use-maintenance-mode",
+      "label": "Use maintenance mode",
+      "section": "operate",
+      "color": "#7f8c8d",
+      "page": "operate/use-maintenance-mode.md",
+      "type": "page",
+      "connections": 4
+    },
+    {
+      "id": "reference--api--index",
+      "label": "Api",
+      "section": "reference",
+      "color": "#f1c40f",
+      "page": "reference/api/index.md",
+      "type": "index",
+      "connections": 2
+    },
+    {
+      "id": "reference--benchmarking",
+      "label": "Benchmarking",
+      "section": "reference",
+      "color": "#f1c40f",
+      "page": "reference/benchmarking.md",
+      "type": "page",
+      "connections": 1
+    },
+    {
+      "id": "reference--conditions",
+      "label": "Conditions reference",
+      "section": "reference",
+      "color": "#f1c40f",
+      "page": "reference/conditions.md",
+      "type": "page",
+      "connections": 4
+    },
+    {
+      "id": "reference--feature-gates",
+      "label": "Feature gates",
+      "section": "reference",
+      "color": "#f1c40f",
+      "page": "reference/feature-gates.md",
+      "type": "page",
+      "connections": 4
+    },
+    {
+      "id": "reference--index",
+      "label": "Reference",
+      "section": "reference",
+      "color": "#f1c40f",
+      "page": "reference/index.md",
+      "type": "index",
+      "connections": 9
+    },
+    {
+      "id": "reference--ipv6-configuration",
+      "label": "IPv6 configuration reference",
+      "section": "reference",
+      "color": "#f1c40f",
+      "page": "reference/ipv6-configuration.md",
+      "type": "page",
+      "connections": 9
+    },
+    {
+      "id": "reference--known-issues",
+      "label": "Known issues",
+      "section": "reference",
+      "color": "#f1c40f",
+      "page": "reference/known-issues.md",
+      "type": "page",
+      "connections": 3
+    },
+    {
+      "id": "reference--nodetool-alternatives",
+      "label": "nodetool alternatives",
+      "section": "reference",
+      "color": "#f1c40f",
+      "page": "reference/nodetool-alternatives.md",
+      "type": "page",
+      "connections": 10
+    },
+    {
+      "id": "reference--releases",
+      "label": "Releases",
+      "section": "reference",
+      "color": "#f1c40f",
+      "page": "reference/releases.md",
+      "type": "page",
+      "connections": 8
+    },
+    {
+      "id": "reference--sizing-guide",
+      "label": "Sizing guide",
+      "section": "reference",
+      "color": "#f1c40f",
+      "page": "reference/sizing-guide.md",
+      "type": "page",
+      "connections": 1
+    },
+    {
+      "id": "troubleshoot--change-log-level",
+      "label": "Change log level on a live cluster",
+      "section": "troubleshoot",
+      "color": "#2980b9",
+      "page": "troubleshoot/change-log-level.md",
+      "type": "page",
+      "connections": 4
+    },
+    {
+      "id": "troubleshoot--check-cluster-health",
+      "label": "Check cluster health",
+      "section": "troubleshoot",
+      "color": "#2980b9",
+      "page": "troubleshoot/check-cluster-health.md",
+      "type": "page",
+      "connections": 4
+    },
+    {
+      "id": "troubleshoot--collect-debugging-information--index",
+      "label": "Collect Debugging Information",
+      "section": "troubleshoot",
+      "color": "#2980b9",
+      "page": "troubleshoot/collect-debugging-information/index.md",
+      "type": "index",
+      "connections": 6
+    },
+    {
+      "id": "troubleshoot--collect-debugging-information--must-gather-contents",
+      "label": "must-gather contents",
+      "section": "troubleshoot",
+      "color": "#2980b9",
+      "page": "troubleshoot/collect-debugging-information/must-gather-contents.md",
+      "type": "page",
+      "connections": 5
+    },
+    {
+      "id": "troubleshoot--collect-debugging-information--must-gather",
+      "label": "Collect data with must-gather",
+      "section": "troubleshoot",
+      "color": "#2980b9",
+      "page": "troubleshoot/collect-debugging-information/must-gather.md",
+      "type": "page",
+      "connections": 5
+    },
+    {
+      "id": "troubleshoot--collect-debugging-information--system-tables",
+      "label": "Query system tables for debugging",
+      "section": "troubleshoot",
+      "color": "#2980b9",
+      "page": "troubleshoot/collect-debugging-information/system-tables.md",
+      "type": "page",
+      "connections": 5
+    },
+    {
+      "id": "troubleshoot--common-errors",
+      "label": "Common errors",
+      "section": "troubleshoot",
+      "color": "#2980b9",
+      "page": "troubleshoot/common-errors.md",
+      "type": "page",
+      "connections": 1
+    },
+    {
+      "id": "troubleshoot--configure-coredumps",
+      "label": "Collect core dumps",
+      "section": "troubleshoot",
+      "color": "#2980b9",
+      "page": "troubleshoot/configure-coredumps.md",
+      "type": "page",
+      "connections": 2
+    },
+    {
+      "id": "troubleshoot--index",
+      "label": "Troubleshoot",
+      "section": "troubleshoot",
+      "color": "#2980b9",
+      "page": "troubleshoot/index.md",
+      "type": "index",
+      "connections": 15
+    },
+    {
+      "id": "troubleshoot--investigate-restarts",
+      "label": "Investigate pod restarts",
+      "section": "troubleshoot",
+      "color": "#2980b9",
+      "page": "troubleshoot/investigate-restarts.md",
+      "type": "page",
+      "connections": 6
+    },
+    {
+      "id": "troubleshoot--recover-from-failed-replace",
+      "label": "Recover from a failed node replace",
+      "section": "troubleshoot",
+      "color": "#2980b9",
+      "page": "troubleshoot/recover-from-failed-replace.md",
+      "type": "page",
+      "connections": 5
+    },
+    {
+      "id": "troubleshoot--troubleshoot-performance",
+      "label": "Troubleshoot performance",
+      "section": "troubleshoot",
+      "color": "#2980b9",
+      "page": "troubleshoot/troubleshoot-performance.md",
+      "type": "page",
+      "connections": 2
+    },
+    {
+      "id": "understand--automatic-data-cleanup",
+      "label": "Automatic data cleanup",
+      "section": "understand",
+      "color": "#95a5a6",
+      "page": "understand/automatic-data-cleanup.md",
+      "type": "page",
+      "connections": 5
+    },
+    {
+      "id": "understand--bootstrap-sync",
+      "label": "Bootstrap synchronisation",
+      "section": "understand",
+      "color": "#95a5a6",
+      "page": "understand/bootstrap-sync.md",
+      "type": "page",
+      "connections": 5
+    },
+    {
+      "id": "understand--ignition",
+      "label": "Ignition",
+      "section": "understand",
+      "color": "#95a5a6",
+      "page": "understand/ignition.md",
+      "type": "page",
+      "connections": 6
+    },
+    {
+      "id": "understand--index",
+      "label": "Understand",
+      "section": "understand",
+      "color": "#95a5a6",
+      "page": "understand/index.md",
+      "type": "index",
+      "connections": 14
+    },
+    {
+      "id": "understand--manager",
+      "label": "ScyllaDB Manager",
+      "section": "understand",
+      "color": "#95a5a6",
+      "page": "understand/manager.md",
+      "type": "page",
+      "connections": 10
+    },
+    {
+      "id": "understand--monitoring",
+      "label": "ScyllaDB Monitoring overview",
+      "section": "understand",
+      "color": "#95a5a6",
+      "page": "understand/monitoring.md",
+      "type": "page",
+      "connections": 5
+    },
+    {
+      "id": "understand--networking",
+      "label": "Networking",
+      "section": "understand",
+      "color": "#95a5a6",
+      "page": "understand/networking.md",
+      "type": "page",
+      "connections": 9
+    },
+    {
+      "id": "understand--pod-disruption-budgets",
+      "label": "Pod disruption budgets",
+      "section": "understand",
+      "color": "#95a5a6",
+      "page": "understand/pod-disruption-budgets.md",
+      "type": "page",
+      "connections": 4
+    },
+    {
+      "id": "understand--security",
+      "label": "Security",
+      "section": "understand",
+      "color": "#95a5a6",
+      "page": "understand/security.md",
+      "type": "page",
+      "connections": 12
+    },
+    {
+      "id": "understand--sidecar",
+      "label": "Sidecar and pod anatomy",
+      "section": "understand",
+      "color": "#95a5a6",
+      "page": "understand/sidecar.md",
+      "type": "page",
+      "connections": 8
+    },
+    {
+      "id": "understand--statefulsets-and-racks",
+      "label": "StatefulSets and racks",
+      "section": "understand",
+      "color": "#95a5a6",
+      "page": "understand/statefulsets-and-racks.md",
+      "type": "page",
+      "connections": 14
+    },
+    {
+      "id": "understand--storage",
+      "label": "Storage",
+      "section": "understand",
+      "color": "#95a5a6",
+      "page": "understand/storage.md",
+      "type": "page",
+      "connections": 2
+    },
+    {
+      "id": "understand--tuning",
+      "label": "Tuning",
+      "section": "understand",
+      "color": "#95a5a6",
+      "page": "understand/tuning.md",
+      "type": "page",
+      "connections": 6
+    },
+    {
+      "id": "upgrade--index",
+      "label": "Upgrade",
+      "section": "upgrade",
+      "color": "#d35400",
+      "page": "upgrade/index.md",
+      "type": "index",
+      "connections": 3
+    },
+    {
+      "id": "upgrade--upgrade-operator",
+      "label": "Upgrading ScyllaDB Operator",
+      "section": "upgrade",
+      "color": "#d35400",
+      "page": "upgrade/upgrade-operator.md",
+      "type": "page",
+      "connections": 4
+    },
+    {
+      "id": "upgrade--upgrade-scylladb",
+      "label": "Upgrading ScyllaDB clusters",
+      "section": "upgrade",
+      "color": "#d35400",
+      "page": "upgrade/upgrade-scylladb.md",
+      "type": "page",
+      "connections": 4
+    }
+  ],
+  "edges": [
+    {
+      "source": "connect-your-app--alternator",
+      "target": "connect-your-app--configure-external-access"
+    },
+    {
+      "source": "connect-your-app--alternator",
+      "target": "connect-your-app--connect-via-cql"
+    },
+    {
+      "source": "connect-your-app--alternator",
+      "target": "connect-your-app--discovery"
+    },
+    {
+      "source": "connect-your-app--alternator",
+      "target": "connect-your-app--index"
+    },
+    {
+      "source": "connect-your-app--alternator",
+      "target": "reference--known-issues"
+    },
+    {
+      "source": "connect-your-app--alternator",
+      "target": "understand--security"
+    },
+    {
+      "source": "connect-your-app--configure-external-access",
+      "target": "connect-your-app--connect-via-cql"
+    },
+    {
+      "source": "connect-your-app--configure-external-access",
+      "target": "connect-your-app--discovery"
+    },
+    {
+      "source": "connect-your-app--configure-external-access",
+      "target": "connect-your-app--index"
+    },
+    {
+      "source": "connect-your-app--configure-external-access",
+      "target": "understand--networking"
+    },
+    {
+      "source": "connect-your-app--configure-external-access",
+      "target": "understand--security"
+    },
+    {
+      "source": "connect-your-app--connect-via-cql",
+      "target": "connect-your-app--discovery"
+    },
+    {
+      "source": "connect-your-app--connect-via-cql",
+      "target": "connect-your-app--index"
+    },
+    {
+      "source": "connect-your-app--connect-via-cql",
+      "target": "reference--feature-gates"
+    },
+    {
+      "source": "connect-your-app--connect-via-cql",
+      "target": "understand--security"
+    },
+    {
+      "source": "connect-your-app--discovery",
+      "target": "connect-your-app--index"
+    },
+    {
+      "source": "connect-your-app--discovery",
+      "target": "understand--networking"
+    },
+    {
+      "source": "connect-your-app--index",
+      "target": "deploy-scylladb--deploy-your-first-cluster"
+    },
+    {
+      "source": "connect-your-app--index",
+      "target": "deploy-scylladb--reference-deployments--reference-deployment-eks"
+    },
+    {
+      "source": "connect-your-app--index",
+      "target": "deploy-scylladb--reference-deployments--reference-deployment-gke"
+    },
+    {
+      "source": "connect-your-app--index",
+      "target": "deploy-scylladb--reference-deployments--reference-deployment-oke"
+    },
+    {
+      "source": "connect-your-app--index",
+      "target": "deploy-scylladb--reference-deployments--reference-deployment-openshift"
+    },
+    {
+      "source": "connect-your-app--index",
+      "target": "troubleshoot--index"
+    },
+    {
+      "source": "contributing--index",
+      "target": "troubleshoot--collect-debugging-information--must-gather"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--configure-cpu-pinning",
+      "target": "deploy-scylladb--before-you-deploy--index"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--configure-cpu-pinning",
+      "target": "deploy-scylladb--before-you-deploy--overview"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--configure-cpu-pinning",
+      "target": "deploy-scylladb--index"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--configure-cpu-pinning",
+      "target": "deploy-scylladb--production-checklist"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--configure-cpu-pinning",
+      "target": "install-operator--provision-infrastructure--set-up-eks-cluster"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--configure-cpu-pinning",
+      "target": "install-operator--provision-infrastructure--set-up-gke-cluster"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--configure-cpu-pinning",
+      "target": "install-operator--provision-infrastructure--set-up-oke-cluster"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--configure-cpu-pinning",
+      "target": "troubleshoot--troubleshoot-performance"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--configure-cpu-pinning",
+      "target": "understand--tuning"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--configure-nodes",
+      "target": "deploy-scylladb--before-you-deploy--configure-operator"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--configure-nodes",
+      "target": "deploy-scylladb--before-you-deploy--index"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--configure-nodes",
+      "target": "deploy-scylladb--before-you-deploy--overview"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--configure-nodes",
+      "target": "deploy-scylladb--deploy-your-first-cluster"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--configure-nodes",
+      "target": "deploy-scylladb--index"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--configure-nodes",
+      "target": "deploy-scylladb--install-scylladb-manager"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--configure-nodes",
+      "target": "deploy-scylladb--production-checklist"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--configure-nodes",
+      "target": "deploy-scylladb--reference-deployments--reference-deployment-eks"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--configure-nodes",
+      "target": "deploy-scylladb--reference-deployments--reference-deployment-gke"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--configure-nodes",
+      "target": "deploy-scylladb--reference-deployments--reference-deployment-oke"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--configure-nodes",
+      "target": "deploy-scylladb--reference-deployments--reference-deployment-openshift"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--configure-nodes",
+      "target": "operate--migrate-rack-to-new-node-pool"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--configure-nodes",
+      "target": "understand--manager"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--configure-nodes",
+      "target": "understand--storage"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--configure-nodes",
+      "target": "understand--tuning"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--configure-operator",
+      "target": "deploy-scylladb--before-you-deploy--index"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--configure-operator",
+      "target": "deploy-scylladb--before-you-deploy--overview"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--configure-operator",
+      "target": "deploy-scylladb--index"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--configure-operator",
+      "target": "deploy-scylladb--set-up-monitoring--overview"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--configure-operator",
+      "target": "understand--tuning"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--index",
+      "target": "deploy-scylladb--before-you-deploy--overview"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--index",
+      "target": "deploy-scylladb--before-you-deploy--set-up-dedicated-node-pools"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--index",
+      "target": "deploy-scylladb--index"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--overview",
+      "target": "deploy-scylladb--before-you-deploy--set-up-dedicated-node-pools"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--overview",
+      "target": "deploy-scylladb--index"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--overview",
+      "target": "deploy-scylladb--overview"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--overview",
+      "target": "deploy-scylladb--reference-deployments--index"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--set-up-dedicated-node-pools",
+      "target": "deploy-scylladb--deploy-your-first-cluster"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--set-up-dedicated-node-pools",
+      "target": "deploy-scylladb--index"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--set-up-dedicated-node-pools",
+      "target": "deploy-scylladb--production-checklist"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--set-up-dedicated-node-pools",
+      "target": "deploy-scylladb--reference-deployments--index"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--set-up-dedicated-node-pools",
+      "target": "deploy-scylladb--reference-deployments--reference-deployment-eks"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--set-up-dedicated-node-pools",
+      "target": "deploy-scylladb--reference-deployments--reference-deployment-gke"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--set-up-dedicated-node-pools",
+      "target": "deploy-scylladb--reference-deployments--reference-deployment-oke"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--set-up-dedicated-node-pools",
+      "target": "deploy-scylladb--reference-deployments--reference-deployment-openshift"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--set-up-dedicated-node-pools",
+      "target": "install-operator--provision-infrastructure--overview"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--set-up-dedicated-node-pools",
+      "target": "install-operator--provision-infrastructure--set-up-eks-cluster"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--set-up-dedicated-node-pools",
+      "target": "install-operator--provision-infrastructure--set-up-gke-cluster"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--set-up-dedicated-node-pools",
+      "target": "install-operator--provision-infrastructure--set-up-oke-cluster"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--set-up-dedicated-node-pools",
+      "target": "install-operator--provision-infrastructure--set-up-openshift-cluster"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--set-up-dedicated-node-pools",
+      "target": "operate--migrate-rack-to-new-node-pool"
+    },
+    {
+      "source": "deploy-scylladb--before-you-deploy--set-up-dedicated-node-pools",
+      "target": "troubleshoot--investigate-restarts"
+    },
+    {
+      "source": "deploy-scylladb--deploy-multi-dc-cluster",
+      "target": "deploy-scylladb--deploy-your-first-cluster"
+    },
+    {
+      "source": "deploy-scylladb--deploy-multi-dc-cluster",
+      "target": "deploy-scylladb--index"
+    },
+    {
+      "source": "deploy-scylladb--deploy-multi-dc-cluster",
+      "target": "deploy-scylladb--overview"
+    },
+    {
+      "source": "deploy-scylladb--deploy-multi-dc-cluster",
+      "target": "deploy-scylladb--production-checklist"
+    },
+    {
+      "source": "deploy-scylladb--deploy-multi-dc-cluster",
+      "target": "get-started--what-is-scylladb-operator"
+    },
+    {
+      "source": "deploy-scylladb--deploy-multi-dc-cluster",
+      "target": "install-operator--install-with-helm"
+    },
+    {
+      "source": "deploy-scylladb--deploy-multi-dc-cluster",
+      "target": "understand--index"
+    },
+    {
+      "source": "deploy-scylladb--deploy-multi-dc-cluster",
+      "target": "understand--manager"
+    },
+    {
+      "source": "deploy-scylladb--deploy-multi-dc-cluster",
+      "target": "understand--networking"
+    },
+    {
+      "source": "deploy-scylladb--deploy-multi-dc-cluster",
+      "target": "understand--security"
+    },
+    {
+      "source": "deploy-scylladb--deploy-your-first-cluster",
+      "target": "deploy-scylladb--index"
+    },
+    {
+      "source": "deploy-scylladb--deploy-your-first-cluster",
+      "target": "deploy-scylladb--overview"
+    },
+    {
+      "source": "deploy-scylladb--deploy-your-first-cluster",
+      "target": "deploy-scylladb--production-checklist"
+    },
+    {
+      "source": "deploy-scylladb--deploy-your-first-cluster",
+      "target": "deploy-scylladb--reference-deployments--index"
+    },
+    {
+      "source": "deploy-scylladb--deploy-your-first-cluster",
+      "target": "deploy-scylladb--reference-deployments--reference-deployment-openshift"
+    },
+    {
+      "source": "deploy-scylladb--deploy-your-first-cluster",
+      "target": "get-started--what-is-scylladb-operator"
+    },
+    {
+      "source": "deploy-scylladb--deploy-your-first-cluster",
+      "target": "install-operator--install-on-openshift"
+    },
+    {
+      "source": "deploy-scylladb--deploy-your-first-cluster",
+      "target": "install-operator--install-with-gitops"
+    },
+    {
+      "source": "deploy-scylladb--deploy-your-first-cluster",
+      "target": "install-operator--install-with-helm"
+    },
+    {
+      "source": "deploy-scylladb--deploy-your-first-cluster",
+      "target": "reference--api--index"
+    },
+    {
+      "source": "deploy-scylladb--index",
+      "target": "deploy-scylladb--install-scylladb-manager"
+    },
+    {
+      "source": "deploy-scylladb--index",
+      "target": "deploy-scylladb--overview"
+    },
+    {
+      "source": "deploy-scylladb--index",
+      "target": "deploy-scylladb--production-checklist"
+    },
+    {
+      "source": "deploy-scylladb--index",
+      "target": "deploy-scylladb--reference-deployments--index"
+    },
+    {
+      "source": "deploy-scylladb--index",
+      "target": "deploy-scylladb--reference-deployments--reference-deployment-eks"
+    },
+    {
+      "source": "deploy-scylladb--index",
+      "target": "deploy-scylladb--reference-deployments--reference-deployment-gke"
+    },
+    {
+      "source": "deploy-scylladb--index",
+      "target": "deploy-scylladb--reference-deployments--reference-deployment-oke"
+    },
+    {
+      "source": "deploy-scylladb--index",
+      "target": "deploy-scylladb--reference-deployments--reference-deployment-openshift"
+    },
+    {
+      "source": "deploy-scylladb--index",
+      "target": "deploy-scylladb--set-up-monitoring--exposing-grafana"
+    },
+    {
+      "source": "deploy-scylladb--index",
+      "target": "deploy-scylladb--set-up-monitoring--external-prometheus-on-openshift"
+    },
+    {
+      "source": "deploy-scylladb--index",
+      "target": "deploy-scylladb--set-up-monitoring--index"
+    },
+    {
+      "source": "deploy-scylladb--index",
+      "target": "deploy-scylladb--set-up-monitoring--overview"
+    },
+    {
+      "source": "deploy-scylladb--index",
+      "target": "deploy-scylladb--set-up-monitoring--setup"
+    },
+    {
+      "source": "deploy-scylladb--index",
+      "target": "deploy-scylladb--set-up-networking--expose-clusters"
+    },
+    {
+      "source": "deploy-scylladb--index",
+      "target": "deploy-scylladb--set-up-networking--index"
+    },
+    {
+      "source": "deploy-scylladb--install-scylladb-manager",
+      "target": "deploy-scylladb--overview"
+    },
+    {
+      "source": "deploy-scylladb--install-scylladb-manager",
+      "target": "install-operator--install-with-gitops"
+    },
+    {
+      "source": "deploy-scylladb--install-scylladb-manager",
+      "target": "install-operator--install-with-helm"
+    },
+    {
+      "source": "deploy-scylladb--install-scylladb-manager",
+      "target": "operate--restore-from-backup"
+    },
+    {
+      "source": "deploy-scylladb--install-scylladb-manager",
+      "target": "understand--manager"
+    },
+    {
+      "source": "deploy-scylladb--overview",
+      "target": "deploy-scylladb--production-checklist"
+    },
+    {
+      "source": "deploy-scylladb--overview",
+      "target": "deploy-scylladb--reference-deployments--index"
+    },
+    {
+      "source": "deploy-scylladb--overview",
+      "target": "deploy-scylladb--set-up-monitoring--overview"
+    },
+    {
+      "source": "deploy-scylladb--overview",
+      "target": "deploy-scylladb--set-up-networking--index"
+    },
+    {
+      "source": "deploy-scylladb--overview",
+      "target": "get-started--index"
+    },
+    {
+      "source": "deploy-scylladb--overview",
+      "target": "install-operator--install-on-openshift"
+    },
+    {
+      "source": "deploy-scylladb--overview",
+      "target": "install-operator--install-with-gitops"
+    },
+    {
+      "source": "deploy-scylladb--overview",
+      "target": "install-operator--install-with-helm"
+    },
+    {
+      "source": "deploy-scylladb--overview",
+      "target": "reference--releases"
+    },
+    {
+      "source": "deploy-scylladb--production-checklist",
+      "target": "deploy-scylladb--reference-deployments--reference-deployment-eks"
+    },
+    {
+      "source": "deploy-scylladb--production-checklist",
+      "target": "deploy-scylladb--reference-deployments--reference-deployment-gke"
+    },
+    {
+      "source": "deploy-scylladb--production-checklist",
+      "target": "deploy-scylladb--reference-deployments--reference-deployment-oke"
+    },
+    {
+      "source": "deploy-scylladb--production-checklist",
+      "target": "deploy-scylladb--reference-deployments--reference-deployment-openshift"
+    },
+    {
+      "source": "deploy-scylladb--production-checklist",
+      "target": "deploy-scylladb--set-up-monitoring--overview"
+    },
+    {
+      "source": "deploy-scylladb--production-checklist",
+      "target": "operate--back-up-and-restore"
+    },
+    {
+      "source": "deploy-scylladb--production-checklist",
+      "target": "operate--configure-io-properties"
+    },
+    {
+      "source": "deploy-scylladb--production-checklist",
+      "target": "troubleshoot--configure-coredumps"
+    },
+    {
+      "source": "deploy-scylladb--reference-deployments--index",
+      "target": "deploy-scylladb--reference-deployments--reference-deployment-eks"
+    },
+    {
+      "source": "deploy-scylladb--reference-deployments--index",
+      "target": "deploy-scylladb--reference-deployments--reference-deployment-gke"
+    },
+    {
+      "source": "deploy-scylladb--reference-deployments--index",
+      "target": "deploy-scylladb--reference-deployments--reference-deployment-oke"
+    },
+    {
+      "source": "deploy-scylladb--reference-deployments--index",
+      "target": "deploy-scylladb--reference-deployments--reference-deployment-openshift"
+    },
+    {
+      "source": "deploy-scylladb--reference-deployments--reference-deployment-eks",
+      "target": "install-operator--install-with-gitops"
+    },
+    {
+      "source": "deploy-scylladb--reference-deployments--reference-deployment-eks",
+      "target": "install-operator--provision-infrastructure--set-up-eks-cluster"
+    },
+    {
+      "source": "deploy-scylladb--reference-deployments--reference-deployment-gke",
+      "target": "install-operator--install-with-gitops"
+    },
+    {
+      "source": "deploy-scylladb--reference-deployments--reference-deployment-gke",
+      "target": "install-operator--provision-infrastructure--set-up-gke-cluster"
+    },
+    {
+      "source": "deploy-scylladb--reference-deployments--reference-deployment-oke",
+      "target": "deploy-scylladb--set-up-monitoring--overview"
+    },
+    {
+      "source": "deploy-scylladb--reference-deployments--reference-deployment-oke",
+      "target": "install-operator--install-with-gitops"
+    },
+    {
+      "source": "deploy-scylladb--reference-deployments--reference-deployment-oke",
+      "target": "install-operator--provision-infrastructure--set-up-oke-cluster"
+    },
+    {
+      "source": "deploy-scylladb--reference-deployments--reference-deployment-openshift",
+      "target": "deploy-scylladb--set-up-monitoring--external-prometheus-on-openshift"
+    },
+    {
+      "source": "deploy-scylladb--reference-deployments--reference-deployment-openshift",
+      "target": "install-operator--install-on-openshift"
+    },
+    {
+      "source": "deploy-scylladb--reference-deployments--reference-deployment-openshift",
+      "target": "install-operator--provision-infrastructure--set-up-openshift-cluster"
+    },
+    {
+      "source": "deploy-scylladb--reference-deployments--reference-deployment-openshift",
+      "target": "reference--releases"
+    },
+    {
+      "source": "deploy-scylladb--set-up-monitoring--exposing-grafana",
+      "target": "deploy-scylladb--set-up-monitoring--external-prometheus-on-openshift"
+    },
+    {
+      "source": "deploy-scylladb--set-up-monitoring--exposing-grafana",
+      "target": "deploy-scylladb--set-up-monitoring--index"
+    },
+    {
+      "source": "deploy-scylladb--set-up-monitoring--exposing-grafana",
+      "target": "deploy-scylladb--set-up-monitoring--overview"
+    },
+    {
+      "source": "deploy-scylladb--set-up-monitoring--exposing-grafana",
+      "target": "deploy-scylladb--set-up-monitoring--setup"
+    },
+    {
+      "source": "deploy-scylladb--set-up-monitoring--exposing-grafana",
+      "target": "understand--monitoring"
+    },
+    {
+      "source": "deploy-scylladb--set-up-monitoring--external-prometheus-on-openshift",
+      "target": "deploy-scylladb--set-up-monitoring--index"
+    },
+    {
+      "source": "deploy-scylladb--set-up-monitoring--external-prometheus-on-openshift",
+      "target": "deploy-scylladb--set-up-monitoring--overview"
+    },
+    {
+      "source": "deploy-scylladb--set-up-monitoring--external-prometheus-on-openshift",
+      "target": "deploy-scylladb--set-up-monitoring--setup"
+    },
+    {
+      "source": "deploy-scylladb--set-up-monitoring--external-prometheus-on-openshift",
+      "target": "install-operator--overview"
+    },
+    {
+      "source": "deploy-scylladb--set-up-monitoring--external-prometheus-on-openshift",
+      "target": "understand--monitoring"
+    },
+    {
+      "source": "deploy-scylladb--set-up-monitoring--index",
+      "target": "deploy-scylladb--set-up-monitoring--overview"
+    },
+    {
+      "source": "deploy-scylladb--set-up-monitoring--index",
+      "target": "deploy-scylladb--set-up-monitoring--setup"
+    },
+    {
+      "source": "deploy-scylladb--set-up-monitoring--overview",
+      "target": "deploy-scylladb--set-up-monitoring--setup"
+    },
+    {
+      "source": "deploy-scylladb--set-up-monitoring--overview",
+      "target": "understand--monitoring"
+    },
+    {
+      "source": "deploy-scylladb--set-up-monitoring--setup",
+      "target": "install-operator--overview"
+    },
+    {
+      "source": "deploy-scylladb--set-up-monitoring--setup",
+      "target": "understand--monitoring"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--expose-clusters",
+      "target": "deploy-scylladb--set-up-networking--index"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--expose-clusters",
+      "target": "deploy-scylladb--set-up-networking--ipv6--get-started"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--expose-clusters",
+      "target": "reference--ipv6-configuration"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--index",
+      "target": "deploy-scylladb--set-up-networking--ipv6--configure-dual-stack"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--index",
+      "target": "deploy-scylladb--set-up-networking--ipv6--configure-single-stack"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--index",
+      "target": "deploy-scylladb--set-up-networking--ipv6--get-started"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--index",
+      "target": "deploy-scylladb--set-up-networking--ipv6--index"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--index",
+      "target": "deploy-scylladb--set-up-networking--ipv6--ipv6-concepts"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--index",
+      "target": "deploy-scylladb--set-up-networking--ipv6--migration"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--index",
+      "target": "deploy-scylladb--set-up-networking--ipv6--troubleshooting"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--index",
+      "target": "troubleshoot--index"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--ipv6--configure-dual-stack",
+      "target": "deploy-scylladb--set-up-networking--ipv6--configure-single-stack"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--ipv6--configure-dual-stack",
+      "target": "deploy-scylladb--set-up-networking--ipv6--get-started"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--ipv6--configure-dual-stack",
+      "target": "deploy-scylladb--set-up-networking--ipv6--index"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--ipv6--configure-dual-stack",
+      "target": "deploy-scylladb--set-up-networking--ipv6--ipv6-concepts"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--ipv6--configure-dual-stack",
+      "target": "deploy-scylladb--set-up-networking--ipv6--migration"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--ipv6--configure-dual-stack",
+      "target": "deploy-scylladb--set-up-networking--ipv6--troubleshooting"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--ipv6--configure-dual-stack",
+      "target": "reference--ipv6-configuration"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--ipv6--configure-single-stack",
+      "target": "deploy-scylladb--set-up-networking--ipv6--index"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--ipv6--configure-single-stack",
+      "target": "deploy-scylladb--set-up-networking--ipv6--troubleshooting"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--ipv6--configure-single-stack",
+      "target": "reference--ipv6-configuration"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--ipv6--get-started",
+      "target": "deploy-scylladb--set-up-networking--ipv6--index"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--ipv6--get-started",
+      "target": "deploy-scylladb--set-up-networking--ipv6--ipv6-concepts"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--ipv6--get-started",
+      "target": "deploy-scylladb--set-up-networking--ipv6--migration"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--ipv6--get-started",
+      "target": "reference--ipv6-configuration"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--ipv6--index",
+      "target": "deploy-scylladb--set-up-networking--ipv6--ipv6-concepts"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--ipv6--index",
+      "target": "deploy-scylladb--set-up-networking--ipv6--migration"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--ipv6--index",
+      "target": "deploy-scylladb--set-up-networking--ipv6--troubleshooting"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--ipv6--index",
+      "target": "reference--ipv6-configuration"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--ipv6--index",
+      "target": "understand--networking"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--ipv6--ipv6-concepts",
+      "target": "deploy-scylladb--set-up-networking--ipv6--migration"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--ipv6--ipv6-concepts",
+      "target": "deploy-scylladb--set-up-networking--ipv6--troubleshooting"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--ipv6--ipv6-concepts",
+      "target": "reference--ipv6-configuration"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--ipv6--migration",
+      "target": "deploy-scylladb--set-up-networking--ipv6--troubleshooting"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--ipv6--migration",
+      "target": "reference--ipv6-configuration"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--ipv6--migration",
+      "target": "understand--manager"
+    },
+    {
+      "source": "deploy-scylladb--set-up-networking--ipv6--troubleshooting",
+      "target": "reference--ipv6-configuration"
+    },
+    {
+      "source": "get-started--concepts-for-k8s-beginners",
+      "target": "get-started--index"
+    },
+    {
+      "source": "get-started--concepts-for-k8s-beginners",
+      "target": "reference--nodetool-alternatives"
+    },
+    {
+      "source": "get-started--concepts-for-k8s-beginners",
+      "target": "troubleshoot--index"
+    },
+    {
+      "source": "get-started--index",
+      "target": "get-started--what-is-scylladb-operator"
+    },
+    {
+      "source": "get-started--index",
+      "target": "install-operator--overview"
+    },
+    {
+      "source": "get-started--what-is-scylladb-operator",
+      "target": "install-operator--index"
+    },
+    {
+      "source": "get-started--what-is-scylladb-operator",
+      "target": "install-operator--set-up-multi-dc-infrastructure"
+    },
+    {
+      "source": "get-started--what-is-scylladb-operator",
+      "target": "reference--releases"
+    },
+    {
+      "source": "get-started--what-is-scylladb-operator",
+      "target": "understand--index"
+    },
+    {
+      "source": "get-started--what-is-scylladb-operator",
+      "target": "understand--manager"
+    },
+    {
+      "source": "install-operator--index",
+      "target": "install-operator--install-on-openshift"
+    },
+    {
+      "source": "install-operator--index",
+      "target": "install-operator--install-with-gitops"
+    },
+    {
+      "source": "install-operator--index",
+      "target": "install-operator--install-with-helm"
+    },
+    {
+      "source": "install-operator--index",
+      "target": "install-operator--overview"
+    },
+    {
+      "source": "install-operator--index",
+      "target": "install-operator--provision-infrastructure--index"
+    },
+    {
+      "source": "install-operator--index",
+      "target": "install-operator--provision-infrastructure--overview"
+    },
+    {
+      "source": "install-operator--index",
+      "target": "install-operator--provision-infrastructure--set-up-eks-cluster"
+    },
+    {
+      "source": "install-operator--index",
+      "target": "install-operator--provision-infrastructure--set-up-gke-cluster"
+    },
+    {
+      "source": "install-operator--index",
+      "target": "install-operator--provision-infrastructure--set-up-oke-cluster"
+    },
+    {
+      "source": "install-operator--index",
+      "target": "install-operator--provision-infrastructure--set-up-openshift-cluster"
+    },
+    {
+      "source": "install-operator--index",
+      "target": "install-operator--set-up-multi-dc-infrastructure"
+    },
+    {
+      "source": "install-operator--install-on-openshift",
+      "target": "install-operator--install-with-gitops"
+    },
+    {
+      "source": "install-operator--install-on-openshift",
+      "target": "install-operator--install-with-helm"
+    },
+    {
+      "source": "install-operator--install-on-openshift",
+      "target": "install-operator--overview"
+    },
+    {
+      "source": "install-operator--install-on-openshift",
+      "target": "install-operator--provision-infrastructure--overview"
+    },
+    {
+      "source": "install-operator--install-on-openshift",
+      "target": "install-operator--provision-infrastructure--set-up-openshift-cluster"
+    },
+    {
+      "source": "install-operator--install-on-openshift",
+      "target": "upgrade--upgrade-operator"
+    },
+    {
+      "source": "install-operator--install-with-gitops",
+      "target": "install-operator--install-with-helm"
+    },
+    {
+      "source": "install-operator--install-with-gitops",
+      "target": "install-operator--overview"
+    },
+    {
+      "source": "install-operator--install-with-gitops",
+      "target": "install-operator--provision-infrastructure--overview"
+    },
+    {
+      "source": "install-operator--install-with-gitops",
+      "target": "upgrade--upgrade-operator"
+    },
+    {
+      "source": "install-operator--install-with-helm",
+      "target": "install-operator--overview"
+    },
+    {
+      "source": "install-operator--install-with-helm",
+      "target": "install-operator--provision-infrastructure--overview"
+    },
+    {
+      "source": "install-operator--install-with-helm",
+      "target": "upgrade--upgrade-operator"
+    },
+    {
+      "source": "install-operator--overview",
+      "target": "install-operator--provision-infrastructure--overview"
+    },
+    {
+      "source": "install-operator--provision-infrastructure--index",
+      "target": "install-operator--provision-infrastructure--overview"
+    },
+    {
+      "source": "install-operator--provision-infrastructure--index",
+      "target": "install-operator--provision-infrastructure--set-up-eks-cluster"
+    },
+    {
+      "source": "install-operator--provision-infrastructure--index",
+      "target": "install-operator--provision-infrastructure--set-up-gke-cluster"
+    },
+    {
+      "source": "install-operator--provision-infrastructure--index",
+      "target": "install-operator--provision-infrastructure--set-up-oke-cluster"
+    },
+    {
+      "source": "install-operator--provision-infrastructure--index",
+      "target": "install-operator--provision-infrastructure--set-up-openshift-cluster"
+    },
+    {
+      "source": "install-operator--provision-infrastructure--overview",
+      "target": "install-operator--provision-infrastructure--set-up-eks-cluster"
+    },
+    {
+      "source": "install-operator--provision-infrastructure--overview",
+      "target": "install-operator--provision-infrastructure--set-up-gke-cluster"
+    },
+    {
+      "source": "install-operator--provision-infrastructure--overview",
+      "target": "install-operator--provision-infrastructure--set-up-oke-cluster"
+    },
+    {
+      "source": "install-operator--provision-infrastructure--overview",
+      "target": "install-operator--provision-infrastructure--set-up-openshift-cluster"
+    },
+    {
+      "source": "install-operator--provision-infrastructure--overview",
+      "target": "reference--releases"
+    },
+    {
+      "source": "install-operator--provision-infrastructure--set-up-openshift-cluster",
+      "target": "reference--releases"
+    },
+    {
+      "source": "install-operator--set-up-multi-dc-infrastructure",
+      "target": "understand--networking"
+    },
+    {
+      "source": "operate--back-up-and-restore",
+      "target": "operate--index"
+    },
+    {
+      "source": "operate--back-up-and-restore",
+      "target": "operate--perform-rolling-restart"
+    },
+    {
+      "source": "operate--back-up-and-restore",
+      "target": "operate--restore-from-backup"
+    },
+    {
+      "source": "operate--back-up-and-restore",
+      "target": "understand--manager"
+    },
+    {
+      "source": "operate--configure-io-properties",
+      "target": "operate--index"
+    },
+    {
+      "source": "operate--configure-io-properties",
+      "target": "operate--pass-scylladb-arguments"
+    },
+    {
+      "source": "operate--expand-storage-volumes",
+      "target": "operate--index"
+    },
+    {
+      "source": "operate--expand-storage-volumes",
+      "target": "operate--replace-nodes"
+    },
+    {
+      "source": "operate--expand-storage-volumes",
+      "target": "operate--scale-add-remove-racks"
+    },
+    {
+      "source": "operate--expand-storage-volumes",
+      "target": "understand--statefulsets-and-racks"
+    },
+    {
+      "source": "operate--index",
+      "target": "operate--migrate-rack-to-new-node-pool"
+    },
+    {
+      "source": "operate--index",
+      "target": "operate--pass-scylladb-arguments"
+    },
+    {
+      "source": "operate--index",
+      "target": "operate--perform-rolling-restart"
+    },
+    {
+      "source": "operate--index",
+      "target": "operate--replace-nodes"
+    },
+    {
+      "source": "operate--index",
+      "target": "operate--restore-from-backup"
+    },
+    {
+      "source": "operate--index",
+      "target": "operate--scale-add-remove-racks"
+    },
+    {
+      "source": "operate--index",
+      "target": "operate--use-maintenance-mode"
+    },
+    {
+      "source": "operate--migrate-rack-to-new-node-pool",
+      "target": "operate--scale-add-remove-racks"
+    },
+    {
+      "source": "operate--migrate-rack-to-new-node-pool",
+      "target": "understand--statefulsets-and-racks"
+    },
+    {
+      "source": "operate--pass-scylladb-arguments",
+      "target": "operate--perform-rolling-restart"
+    },
+    {
+      "source": "operate--pass-scylladb-arguments",
+      "target": "reference--nodetool-alternatives"
+    },
+    {
+      "source": "operate--pass-scylladb-arguments",
+      "target": "troubleshoot--change-log-level"
+    },
+    {
+      "source": "operate--perform-rolling-restart",
+      "target": "operate--replace-nodes"
+    },
+    {
+      "source": "operate--perform-rolling-restart",
+      "target": "operate--restore-from-backup"
+    },
+    {
+      "source": "operate--perform-rolling-restart",
+      "target": "operate--scale-add-remove-racks"
+    },
+    {
+      "source": "operate--perform-rolling-restart",
+      "target": "understand--statefulsets-and-racks"
+    },
+    {
+      "source": "operate--perform-rolling-restart",
+      "target": "upgrade--upgrade-scylladb"
+    },
+    {
+      "source": "operate--replace-nodes",
+      "target": "operate--scale-add-remove-racks"
+    },
+    {
+      "source": "operate--replace-nodes",
+      "target": "reference--nodetool-alternatives"
+    },
+    {
+      "source": "operate--replace-nodes",
+      "target": "troubleshoot--recover-from-failed-replace"
+    },
+    {
+      "source": "operate--replace-nodes",
+      "target": "understand--statefulsets-and-racks"
+    },
+    {
+      "source": "operate--restore-from-backup",
+      "target": "understand--manager"
+    },
+    {
+      "source": "operate--scale-add-remove-racks",
+      "target": "reference--nodetool-alternatives"
+    },
+    {
+      "source": "operate--scale-add-remove-racks",
+      "target": "understand--automatic-data-cleanup"
+    },
+    {
+      "source": "operate--scale-add-remove-racks",
+      "target": "understand--statefulsets-and-racks"
+    },
+    {
+      "source": "operate--use-maintenance-mode",
+      "target": "reference--nodetool-alternatives"
+    },
+    {
+      "source": "operate--use-maintenance-mode",
+      "target": "understand--statefulsets-and-racks"
+    },
+    {
+      "source": "operate--use-maintenance-mode",
+      "target": "upgrade--upgrade-scylladb"
+    },
+    {
+      "source": "reference--api--index",
+      "target": "reference--index"
+    },
+    {
+      "source": "reference--benchmarking",
+      "target": "reference--index"
+    },
+    {
+      "source": "reference--conditions",
+      "target": "reference--index"
+    },
+    {
+      "source": "reference--conditions",
+      "target": "troubleshoot--check-cluster-health"
+    },
+    {
+      "source": "reference--conditions",
+      "target": "troubleshoot--collect-debugging-information--must-gather-contents"
+    },
+    {
+      "source": "reference--conditions",
+      "target": "troubleshoot--investigate-restarts"
+    },
+    {
+      "source": "reference--feature-gates",
+      "target": "reference--index"
+    },
+    {
+      "source": "reference--feature-gates",
+      "target": "understand--bootstrap-sync"
+    },
+    {
+      "source": "reference--feature-gates",
+      "target": "understand--security"
+    },
+    {
+      "source": "reference--index",
+      "target": "reference--ipv6-configuration"
+    },
+    {
+      "source": "reference--index",
+      "target": "reference--known-issues"
+    },
+    {
+      "source": "reference--index",
+      "target": "reference--nodetool-alternatives"
+    },
+    {
+      "source": "reference--index",
+      "target": "reference--releases"
+    },
+    {
+      "source": "reference--index",
+      "target": "reference--sizing-guide"
+    },
+    {
+      "source": "reference--known-issues",
+      "target": "reference--releases"
+    },
+    {
+      "source": "reference--nodetool-alternatives",
+      "target": "troubleshoot--change-log-level"
+    },
+    {
+      "source": "reference--nodetool-alternatives",
+      "target": "troubleshoot--recover-from-failed-replace"
+    },
+    {
+      "source": "reference--nodetool-alternatives",
+      "target": "understand--automatic-data-cleanup"
+    },
+    {
+      "source": "reference--nodetool-alternatives",
+      "target": "understand--statefulsets-and-racks"
+    },
+    {
+      "source": "reference--releases",
+      "target": "upgrade--upgrade-scylladb"
+    },
+    {
+      "source": "troubleshoot--change-log-level",
+      "target": "troubleshoot--index"
+    },
+    {
+      "source": "troubleshoot--change-log-level",
+      "target": "understand--statefulsets-and-racks"
+    },
+    {
+      "source": "troubleshoot--check-cluster-health",
+      "target": "troubleshoot--collect-debugging-information--system-tables"
+    },
+    {
+      "source": "troubleshoot--check-cluster-health",
+      "target": "troubleshoot--index"
+    },
+    {
+      "source": "troubleshoot--check-cluster-health",
+      "target": "troubleshoot--investigate-restarts"
+    },
+    {
+      "source": "troubleshoot--collect-debugging-information--index",
+      "target": "troubleshoot--collect-debugging-information--must-gather"
+    },
+    {
+      "source": "troubleshoot--collect-debugging-information--index",
+      "target": "troubleshoot--collect-debugging-information--must-gather-contents"
+    },
+    {
+      "source": "troubleshoot--collect-debugging-information--index",
+      "target": "troubleshoot--collect-debugging-information--system-tables"
+    },
+    {
+      "source": "troubleshoot--collect-debugging-information--index",
+      "target": "troubleshoot--index"
+    },
+    {
+      "source": "troubleshoot--collect-debugging-information--index",
+      "target": "troubleshoot--investigate-restarts"
+    },
+    {
+      "source": "troubleshoot--collect-debugging-information--index",
+      "target": "troubleshoot--recover-from-failed-replace"
+    },
+    {
+      "source": "troubleshoot--collect-debugging-information--must-gather",
+      "target": "troubleshoot--collect-debugging-information--must-gather-contents"
+    },
+    {
+      "source": "troubleshoot--collect-debugging-information--must-gather",
+      "target": "troubleshoot--collect-debugging-information--system-tables"
+    },
+    {
+      "source": "troubleshoot--collect-debugging-information--must-gather",
+      "target": "troubleshoot--index"
+    },
+    {
+      "source": "troubleshoot--collect-debugging-information--must-gather-contents",
+      "target": "troubleshoot--collect-debugging-information--system-tables"
+    },
+    {
+      "source": "troubleshoot--collect-debugging-information--must-gather-contents",
+      "target": "troubleshoot--index"
+    },
+    {
+      "source": "troubleshoot--collect-debugging-information--system-tables",
+      "target": "troubleshoot--index"
+    },
+    {
+      "source": "troubleshoot--common-errors",
+      "target": "troubleshoot--index"
+    },
+    {
+      "source": "troubleshoot--configure-coredumps",
+      "target": "troubleshoot--index"
+    },
+    {
+      "source": "troubleshoot--index",
+      "target": "troubleshoot--investigate-restarts"
+    },
+    {
+      "source": "troubleshoot--index",
+      "target": "troubleshoot--recover-from-failed-replace"
+    },
+    {
+      "source": "troubleshoot--index",
+      "target": "troubleshoot--troubleshoot-performance"
+    },
+    {
+      "source": "troubleshoot--index",
+      "target": "upgrade--index"
+    },
+    {
+      "source": "troubleshoot--investigate-restarts",
+      "target": "understand--statefulsets-and-racks"
+    },
+    {
+      "source": "troubleshoot--recover-from-failed-replace",
+      "target": "understand--statefulsets-and-racks"
+    },
+    {
+      "source": "understand--automatic-data-cleanup",
+      "target": "understand--index"
+    },
+    {
+      "source": "understand--automatic-data-cleanup",
+      "target": "understand--pod-disruption-budgets"
+    },
+    {
+      "source": "understand--automatic-data-cleanup",
+      "target": "understand--sidecar"
+    },
+    {
+      "source": "understand--bootstrap-sync",
+      "target": "understand--ignition"
+    },
+    {
+      "source": "understand--bootstrap-sync",
+      "target": "understand--index"
+    },
+    {
+      "source": "understand--bootstrap-sync",
+      "target": "understand--security"
+    },
+    {
+      "source": "understand--bootstrap-sync",
+      "target": "understand--sidecar"
+    },
+    {
+      "source": "understand--ignition",
+      "target": "understand--index"
+    },
+    {
+      "source": "understand--ignition",
+      "target": "understand--manager"
+    },
+    {
+      "source": "understand--ignition",
+      "target": "understand--security"
+    },
+    {
+      "source": "understand--ignition",
+      "target": "understand--sidecar"
+    },
+    {
+      "source": "understand--ignition",
+      "target": "understand--tuning"
+    },
+    {
+      "source": "understand--index",
+      "target": "understand--manager"
+    },
+    {
+      "source": "understand--index",
+      "target": "understand--monitoring"
+    },
+    {
+      "source": "understand--index",
+      "target": "understand--networking"
+    },
+    {
+      "source": "understand--index",
+      "target": "understand--pod-disruption-budgets"
+    },
+    {
+      "source": "understand--index",
+      "target": "understand--security"
+    },
+    {
+      "source": "understand--index",
+      "target": "understand--sidecar"
+    },
+    {
+      "source": "understand--index",
+      "target": "understand--statefulsets-and-racks"
+    },
+    {
+      "source": "understand--index",
+      "target": "understand--storage"
+    },
+    {
+      "source": "understand--index",
+      "target": "understand--tuning"
+    },
+    {
+      "source": "understand--manager",
+      "target": "understand--security"
+    },
+    {
+      "source": "understand--networking",
+      "target": "understand--security"
+    },
+    {
+      "source": "understand--networking",
+      "target": "understand--sidecar"
+    },
+    {
+      "source": "understand--networking",
+      "target": "understand--statefulsets-and-racks"
+    },
+    {
+      "source": "understand--pod-disruption-budgets",
+      "target": "understand--security"
+    },
+    {
+      "source": "understand--pod-disruption-budgets",
+      "target": "understand--statefulsets-and-racks"
+    },
+    {
+      "source": "understand--security",
+      "target": "understand--sidecar"
+    },
+    {
+      "source": "understand--sidecar",
+      "target": "understand--statefulsets-and-racks"
+    },
+    {
+      "source": "understand--sidecar",
+      "target": "understand--tuning"
+    },
+    {
+      "source": "upgrade--index",
+      "target": "upgrade--upgrade-operator"
+    },
+    {
+      "source": "upgrade--index",
+      "target": "upgrade--upgrade-scylladb"
+    }
+  ],
+  "sections": {
+    "connect-your-app": "#4a90d9",
+    "contributing": "#27ae60",
+    "deploy-scylladb": "#e67e22",
+    "get-started": "#8e44ad",
+    "index.md": "#16a085",
+    "install-operator": "#c0392b",
+    "operate": "#7f8c8d",
+    "reference": "#f1c40f",
+    "troubleshoot": "#2980b9",
+    "understand": "#95a5a6",
+    "upgrade": "#d35400"
+  }
+}
