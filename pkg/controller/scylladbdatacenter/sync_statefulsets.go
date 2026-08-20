@@ -671,6 +671,17 @@ func (sdcc *Controller) syncStatefulSets(
 			}
 		}
 
+		// Scale-downs are committed to the rack status before any decommission intent is stamped, and the
+		// committed target overrides the spec node count until the operation concludes.
+		pcs, handled, err := sdcc.ensureRackDecommissionGating(ctx, sdc, status, sts, *req.Spec.Replicas, rackServices)
+		progressingConditions = append(progressingConditions, pcs...)
+		if err != nil {
+			return progressingConditions, err
+		}
+		if handled {
+			return progressingConditions, nil
+		}
+
 		// Wait if any decommissioning is in progress.
 		for _, svc := range rackServices {
 			if svc.Labels[naming.DecommissionedLabel] == naming.LabelValueFalse {

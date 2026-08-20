@@ -10212,6 +10212,17 @@ spec:
                       currentVersion:
                         description: version specifies the current version of ScyllaDB in use.
                         type: string
+                      decommission:
+                        description: |-
+                          decommission tracks an in-flight scale-down of the rack and is present only while the operation
+                          is in progress. While present, node count changes in the spec take effect only after the
+                          operation concludes.
+                        properties:
+                          desiredNodes:
+                            description: desiredNodes specifies the committed target node count of the in-flight scale-down.
+                            format: int32
+                            type: integer
+                        type: object
                       name:
                         description: name specifies the name of datacenter this status describes.
                         type: string

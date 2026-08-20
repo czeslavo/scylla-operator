@@ -496,6 +496,18 @@ type RackStatus struct {
 	// stale should eventually become false when the appropriate controller writes a fresh status.
 	// +optional
 	Stale *bool `json:"stale,omitempty"`
+
+	// decommission tracks an in-flight scale-down of the rack and is present only while the operation
+	// is in progress. While present, node count changes in the spec take effect only after the
+	// operation concludes.
+	// +optional
+	Decommission *RackDecommissionStatus `json:"decommission,omitempty"`
+}
+
+// RackDecommissionStatus describes an in-flight scale-down of a ScyllaDB Rack.
+type RackDecommissionStatus struct {
+	// desiredNodes specifies the committed target node count of the in-flight scale-down.
+	DesiredNodes *int32 `json:"desiredNodes,omitempty"`
 }
 
 // ScyllaDBDatacenterStatus defines the observed state of ScyllaDBDatacenter.

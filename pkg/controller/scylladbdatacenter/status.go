@@ -131,7 +131,10 @@ func (sdcc *Controller) calculateStatus(sdc *scyllav1alpha1.ScyllaDBDatacenter, 
 	// Calculate the status for racks.
 	for _, rack := range sdc.Spec.Racks {
 		stsName := naming.StatefulSetNameForRack(rack, sdc)
-		status.Racks = append(status.Racks, *calculateRackStatus(sdcc.podLister, sdc, rack.Name, statefulSetMap[stsName]))
+		rackStatus := calculateRackStatus(sdcc.podLister, sdc, rack.Name, statefulSetMap[stsName])
+		// Carry over the record of an in-flight scale-down; it is cleared explicitly when the operation concludes.
+		rackStatus.Decommission = getRackDecommissionStatus(&sdc.Status, rack.Name)
+		status.Racks = append(status.Racks, *rackStatus)
 	}
 
 	updateAggregatedStatusFields(status)

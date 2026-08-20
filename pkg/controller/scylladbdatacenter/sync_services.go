@@ -36,6 +36,16 @@ func getEffectiveRackNodeCount(sdc *scyllav1alpha1.ScyllaDBDatacenter, rackName 
 	}
 
 	effectiveNodeCount := *nodeCount
+
+	// The committed target of an in-flight scale-down overrides the spec in both directions
+	// until the operation concludes.
+	if record := getRackDecommissionStatus(&sdc.Status, rackName); record != nil && record.DesiredNodes != nil {
+		effectiveNodeCount = *record.DesiredNodes
+	}
+
+	// The decommission labels can only narrow the count further: a stamped member is irrevocably leaving
+	// and must never re-enter the required range, even if the record disagrees (stale labels, restored
+	// status). Normally the stamped ordinals all lie at or above the committed target, so this is a no-op.
 	for _, svc := range services {
 		if svc.Labels[naming.RackNameLabel] != rackName {
 			continue
