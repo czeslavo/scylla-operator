@@ -2,6 +2,9 @@ name: "E2E: KinD (Helm)"
 
 on:
   pull_request:
+  push:
+    branches:
+    - kind-helm-cluster-setup-experiment
   workflow_dispatch:
 
 concurrency:
