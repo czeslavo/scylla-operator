@@ -41,40 +41,91 @@ defaults:
 permissions:
   contents: read
 
+# actions/checkout clones as the runner user, but the kube-tools image declares no USER, so the job runs as root and
+# git refuses to operate on a tree it sees as foreign. See the equivalent comment in ci-jobs.yaml.
+env:
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: safe.directory
+  GIT_CONFIG_VALUE_0: "*"
+
 jobs:
   e2e:
     name: e2e
     runs-on: ubuntu-latest
     timeout-minutes: 150
+    # The job runs inside the kube-tools image, the same environment the prow kind presubmits ran in. It is privileged
+    # so that podman can create the kind node containers.
+    container:
+      image: quay.io/scylladb/scylla-operator-images:kube-tools
+      options: --privileged
+      # The podman instance backing kind must have its container storage on a host bind mount: left on the container's
+      # own filesystem it would sit on docker's overlayfs, the volumes podman serves to the kind nodes would end up on
+      # overlayfs too, and containerd inside the nodes fails every overlay mount there with EINVAL.
+      volumes:
+      - /mnt/containers:/var/lib/containers
     steps:
     - name: Checkout
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         persist-credentials: false
 
-    - name: Start the kind e2e container
-      uses: ./.github/actions/kind-e2e/start-container
-      with:
-        artifacts-dir: ${{ github.workspace }}/artifacts
+    - name: Configure the container
+      run: |
+        set -euExo pipefail
+        shopt -s inherit_errexit
+
+        # The github.workspace context holds the host path, which differs from the one inside the job container.
+        echo "ARTIFACTS=${GITHUB_WORKSPACE}/artifacts" | tee -a "${GITHUB_ENV}"
+
+        # Disable pids limit to allow high parallelism in tests.
+        sed -i '/\[containers\]/a pids_limit = 0' /etc/containers/containers.conf
+
+        # kind nodes host many pods, each with several watches; the defaults are too low and manifest as obscure
+        # "too many open files" failures.
+        sysctl fs.inotify.max_user_instances=8192 fs.inotify.max_user_watches=1048576
 
     - name: Run the e2e suite
-      uses: ./.github/actions/kind-e2e/run-suite
-      with:
-        suite: ${{ inputs.suite }}
-        scylladb-image-ref: ${{ inputs.scylladb-image-ref }}
-        enable-parallel-node-operations: ${{ inputs.enable-parallel-node-operations }}
-        parallelism: ${{ inputs.parallelism }}
-        e2e-timeout: ${{ inputs.e2e-timeout }}
+      env:
+        SO_SUITE: ${{ inputs.suite }}
+        SCYLLADB_IMAGE_REF: ${{ inputs.scylladb-image-ref }}
+        SO_SCYLLACLUSTER_ENABLE_PARALLEL_NODE_OPERATIONS: ${{ inputs.enable-parallel-node-operations }}
+        SO_E2E_PARALLELISM: ${{ inputs.parallelism }}
+        SO_E2E_TIMEOUT: ${{ inputs.e2e-timeout }}
+      run: |
+        set -euExo pipefail
+        shopt -s inherit_errexit
 
+        # INT first so the suite can shut down and artifacts still get gathered; SIGKILL follows 10 minutes later.
+        timeout --verbose --signal=INT --kill-after=10m 120m make test-e2e-kind
+
+    # A failure before the suite starts leaves no must-gather behind, and the kind cluster dies with the job, so dump
+    # the basic cluster state while it is still around. Every probe is best-effort.
     - name: Dump cluster state
       if: failure()
-      uses: ./.github/actions/kind-e2e/dump-cluster-state
+      env:
+        KIND_EXPERIMENTAL_PROVIDER: podman
+        CLUSTER_NAME: scylla-operator-e2e
+      run: |
+        set -euExo pipefail
+        shopt -s inherit_errexit
+
+        kubeconfig="$( mktemp )"
+        kind get kubeconfig --name="${CLUSTER_NAME}" > "${kubeconfig}" || true
+        export KUBECONFIG="${kubeconfig}"
+        kubectl get nodes -o=wide |& tee "${ARTIFACTS}/debug-nodes.txt" || true
+        kubectl get pods -A -o=wide |& tee "${ARTIFACTS}/debug-pods.txt" || true
+        kubectl get events -A --sort-by=.lastTimestamp &> "${ARTIFACTS}/debug-events.txt" || true
+        kubectl describe pods -A &> "${ARTIFACTS}/debug-describe-pods.txt" || true
+
+        # Machine facts and node-level logs, for failures the cluster API cannot explain.
+        { nproc; free -h; df -h /var/lib/containers; ulimit -a; sysctl fs.inotify; stat -fc %T /sys/fs/cgroup; } \
+          &> "${ARTIFACTS}/debug-system.txt" || true
+        podman ps -a &> "${ARTIFACTS}/debug-podman-ps.txt" || true
+        kind export logs --name="${CLUSTER_NAME}" "${ARTIFACTS}/kind-logs" &> "${ARTIFACTS}/debug-kind-export.txt" || true
 
     - name: Pack and upload artifacts
       if: always()
       uses: ./.github/actions/pack-and-upload-artifacts
       with:
         name: artifacts-${{ inputs.name }}-${{ github.run_attempt }}
-        directory: ${{ github.workspace }}/artifacts
-        # The container producing the artifacts runs as root.
-        sudo: "true"
+        directory: ${{ env.ARTIFACTS }}
