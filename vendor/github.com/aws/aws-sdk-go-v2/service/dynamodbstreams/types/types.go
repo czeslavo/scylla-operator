@@ -726,11 +726,15 @@ func (v *StreamDescription) SerializeMembers(s smithy.ShapeSerializer) {
 	if v.CreationRequestDateTime != nil {
 		s.WriteTime(schemas.StreamDescription_CreationRequestDateTime, *v.CreationRequestDateTime)
 	}
-	serializeKeySchema(s, schemas.StreamDescription_KeySchema, v.KeySchema)
+	if v.KeySchema != nil {
+		serializeKeySchema(s, schemas.StreamDescription_KeySchema, v.KeySchema)
+	}
 	if v.LastEvaluatedShardId != nil {
 		s.WriteString(schemas.StreamDescription_LastEvaluatedShardId, *v.LastEvaluatedShardId)
 	}
-	serializeShardDescriptionList(s, schemas.StreamDescription_Shards, v.Shards)
+	if v.Shards != nil {
+		serializeShardDescriptionList(s, schemas.StreamDescription_Shards, v.Shards)
+	}
 	if v.StreamArn != nil {
 		s.WriteString(schemas.StreamDescription_StreamArn, *v.StreamArn)
 	}
@@ -792,9 +796,11 @@ func (v *StreamDescription) Deserialize(d smithy.ShapeDeserializer) error {
 // DynamoDB table.
 type StreamRecord struct {
 
-	// The approximate date and time when the stream record was created, in [ISO 8601] format
-	// and rounded down to the closest second.
+	// The approximate date and time when the stream record was created, in [UNIX epoch time] format
+	// and rounded down to the closest second. Some tools and SDKs may convert this
+	// value to a different format, such as [ISO 8601].
 	//
+	// [UNIX epoch time]: http://www.epochconverter.com/
 	// [ISO 8601]: https://www.iso.org/iso-8601-date-and-time-format.html
 	ApproximateCreationDateTime *time.Time
 
@@ -838,9 +844,15 @@ func (v *StreamRecord) SerializeMembers(s smithy.ShapeSerializer) {
 	if v.ApproximateCreationDateTime != nil {
 		s.WriteTime(schemas.StreamRecord_ApproximateCreationDateTime, *v.ApproximateCreationDateTime)
 	}
-	serializeAttributeMap(s, schemas.StreamRecord_Keys, v.Keys)
-	serializeAttributeMap(s, schemas.StreamRecord_NewImage, v.NewImage)
-	serializeAttributeMap(s, schemas.StreamRecord_OldImage, v.OldImage)
+	if v.Keys != nil {
+		serializeAttributeMap(s, schemas.StreamRecord_Keys, v.Keys)
+	}
+	if v.NewImage != nil {
+		serializeAttributeMap(s, schemas.StreamRecord_NewImage, v.NewImage)
+	}
+	if v.OldImage != nil {
+		serializeAttributeMap(s, schemas.StreamRecord_OldImage, v.OldImage)
+	}
 	if v.SequenceNumber != nil {
 		s.WriteString(schemas.StreamRecord_SequenceNumber, *v.SequenceNumber)
 	}
