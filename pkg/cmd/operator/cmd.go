@@ -42,6 +42,7 @@ func NewOperatorCommand(streams genericclioptions.IOStreams) *cobra.Command {
 	cmd.AddCommand(NewNodeSetupCmd(streams))
 	cmd.AddCommand(NewCleanupJobCmd(streams))
 	cmd.AddCommand(NewMustGatherCmd(streams))
+	cmd.AddCommand(NewDiagnoseCmd(streams))
 	cmd.AddCommand(probeserver.NewServeProbesCmd(streams))
 	cmd.AddCommand(NewIgnitionCmd(streams))
 	cmd.AddCommand(NewRlimitsJobCmd(streams))

@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SODA report: {{.Ext.Cluster.Namespace}}/{{.Ext.Cluster.Name}}</title>
+<style>
+:root { --bg:#f5f6f8; --surface:#fff; --fg:#1b1e25; --muted:#5f6775; --line:#dde0e6; --bad:#c62828; --warn:#a86400;
+  --good:#1e7b3c; --sd:#2f5fc4; --soda:#7a3fc8; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+@media (prefers-color-scheme: dark) { :root { --bg:#101318; --surface:#181c23; --fg:#e4e7ed; --muted:#9aa2b0;
+  --line:#2b313c; --bad:#ff6b6b; --warn:#f0b43c; --good:#5fd38a; --sd:#7fa3ff; --soda:#c39bff; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14.5px/1.5 var(--sans); }
+main { max-width: 1200px; margin: 0 auto; padding: 32px 16px 64px; display: grid; gap: 28px; }
+h1 { margin: 0; font-size: 26px; } h2 { margin: 0 0 10px; font-size: 19px; } h3 { margin: 0; font-size: 15px; }
+code, .mono { font-family: var(--mono); font-size: .9em; }
+.muted { color: var(--muted); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; }
+.head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; align-items: flex-end; }
+.verdict { font-size: 18px; font-weight: 700; } .verdict.bad { color: var(--bad); } .verdict.warn { color: var(--warn); }
+.verdict.good { color: var(--good); }
+.stats { display: flex; gap: 22px; } .stat b { display: block; font-size: 24px; }
+.stat.bad b { color: var(--bad); } .stat.warn b { color: var(--warn); }
+dl.meta { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; margin: 10px 0 0; font-size: 13px; }
+dl.meta dt { color: var(--muted); } dl.meta dd { margin: 0; overflow-wrap: anywhere; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; vertical-align: top; padding: 6px 9px; border-bottom: 1px solid var(--line); }
+th { font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.tag { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 4px; border: 1px solid; white-space: nowrap; }
+.tag.sd { color: var(--sd); } .tag.soda { color: var(--soda); }
+.state-Succeeded { color: var(--good); } .state-Degraded { color: var(--warn); } .state-Failed { color: var(--bad); }
+.ok { color: var(--good); font-weight: 700; } .no { color: var(--bad); font-weight: 700; } .na { color: var(--muted); }
+.finding { display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.finding:last-child { border-bottom: 0; }
+.finding .msg { overflow-wrap: anywhere; }
+.nodes { font-size: 12.5px; color: var(--muted); }
+details summary { cursor: pointer; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; background: var(--bg); padding: 8px; border-radius: 6px; }
+.lvl-required { font-weight: 600; } .lvl-optional { color: var(--muted); }
+footer { font-size: 12.5px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+<header class="card">
+  <div class="head">
+    <div>
+      <div class="muted">SODA · {{.Ext.Cluster.Kind}}</div>
+      <h1>{{.Ext.Cluster.Namespace}}/{{.Ext.Cluster.Name}}</h1>
+      <div class="verdict {{.VerdictClass}}">{{.Verdict}}</div>
+    </div>
+    <div class="stats">
+      <div class="stat bad"><b>{{.NFailures}}</b>failures</div>
+      <div class="stat warn"><b>{{.NWarnings}}</b>warnings</div>
+      <div class="stat"><b>{{.NInconsistent}}</b>inconsistencies</div>
+      <div class="stat"><b>{{len .Ext.Nodes}}</b>nodes</div>
+    </div>
+  </div>
+  <dl class="meta">
+    <dt>Generated</dt><dd>{{.Ext.GeneratedAt}}</dd>
+    <dt>SODA</dt><dd class="mono">{{.Ext.SODAVersion}}</dd>
+    <dt>Scylla Doctor</dt><dd>{{.Ext.ScyllaDoctorVersion}}{{with .Ext.Bundle}}{{if .Image}} from <code>{{.Image}}</code>{{end}}{{end}}</dd>
+    {{with .Ext.SkippedAnalyzers}}<dt>Skipped analyzers</dt><dd>{{join . ", "}} (they call scylladb.com)</dd>{{end}}
+  </dl>
+</header>
+
+<section class="card">
+  <h2>Nodes</h2>
+  <div class="scroll"><table>
+    <tr><th>Node</th><th>Kubernetes node</th><th>DC / rack</th><th>Collection</th><th>Scylla Doctor checks</th><th>Scylla Doctor analysis</th></tr>
+    {{range .Ext.Nodes}}<tr>
+      <td class="mono">{{.Name}}</td><td class="mono">{{.KubernetesNode}}</td><td>{{.Datacenter}} / {{.Rack}}</td>
+      <td><span class="state-{{.Collection.State}}">{{.Collection.State}}</span> <span class="muted">{{printf "%.0f" .Collection.DurationSeconds}} s</span>{{with .Collection.Reason}}<div class="nodes">{{.}}</div>{{end}}</td>
+      <td>{{if .Collectors}}{{count .Collectors "PASSED"}} passed, {{count .Collectors "SKIPPED"}} skipped, {{count .Collectors "FAILED"}} failed{{else}}<span class="na">none</span>{{end}}</td>
+      <td>{{if .Analyzers}}{{count .Analyzers "PASSED"}} passed, {{count .Analyzers "WARNING"}} warnings, {{count .Analyzers "FAILED"}} failed, {{count .Analyzers "SKIPPED"}} skipped{{else}}<span class="na">none</span>{{end}}</td>
+    </tr>{{end}}
+  </table></div>
+</section>
+
+<section class="card">
+  <h2>Failures</h2>
+  {{if .Failures}}{{range .Failures}}<div class="finding">
+    <div><span class="tag {{if eq .Source "soda"}}soda{{else}}sd{{end}}">{{source .Source}}</span> <h3 style="display:inline">{{.Analyzer}}</h3></div>
+    <div class="msg">{{.Message}}</div>
+    <div class="nodes">{{len .Nodes}} node(s): {{join .Nodes ", "}}</div>
+  </div>{{end}}{{else}}<p class="muted">None.</p>{{end}}
+</section>
+
+<section class="card">
+  <h2>Warnings</h2>
+  {{if .Warnings}}{{range .Warnings}}<div class="finding">
+    <div><span class="tag {{if eq .Source "soda"}}soda{{else}}sd{{end}}">{{source .Source}}</span> <h3 style="display:inline">{{.Analyzer}}</h3></div>
+    <div class="msg">{{.Message}}</div>
+    <div class="nodes">{{len .Nodes}} node(s): {{join .Nodes ", "}}</div>
+  </div>{{end}}{{else}}<p class="muted">None.</p>{{end}}
+</section>
+
+<section class="card">
+  <h2>Differences between nodes</h2>
+  <p class="muted">Collectors whose vitals differ between nodes, as Scylla Doctor Cluster compares them.</p>
+  {{if .Inconsistencies}}{{range .Inconsistencies}}<details>
+    <summary><span class="tag sd">{{source .Source}}</span> <b>{{.Collector}}</b> <span class="muted">({{len .Pairs}} pair(s))</span></summary>
+    {{range .Pairs}}<div class="nodes">{{.A}} vs {{.B}}</div><pre>{{.Diff}}</pre>{{end}}
+  </details>{{end}}{{else}}<p class="muted">None.</p>{{end}}
+</section>
+
+<section class="card">
+  <h2>ScyllaDB image runtime contract</h2>
+  <p class="muted">What Scylla Doctor needs from the ScyllaDB image it runs in, checked in each scylla container before collection. {{.ContractNote}}</p>
+  <div class="scroll"><table>
+    <tr><th>Requirement</th><th>Level</th>{{range .NodeNames}}<th class="mono">{{.}}</th>{{end}}<th>Used by</th><th>Without it</th></tr>
+    {{range .Contract}}<tr>
+      <td class="mono">{{.ID}}</td><td class="lvl-{{.Level}}">{{.Level}}</td>
+      {{range .Cells}}<td title="{{.Detail}}">{{if not .Known}}<span class="na">?</span>{{else if .Satisfied}}<span class="ok">✓</span>{{else}}<span class="no">✗</span> <span class="nodes">{{.Detail}}</span>{{end}}</td>{{end}}
+      <td>{{.UsedBy}}</td><td class="muted">{{.Impact}}</td>
+    </tr>{{end}}
+  </table></div>
+</section>
+
+<section class="card">
+  <h2>Kubernetes</h2>
+  <div class="scroll"><table>
+    <tr><th>Pod</th><th>Kubernetes node</th><th>Phase</th><th>Ready</th><th>QoS class</th><th>Restarts</th></tr>
+    {{range .Pods}}<tr><td class="mono">{{.Name}}</td><td class="mono">{{.KubernetesNode}}</td><td>{{.Phase}}</td>
+      <td>{{if .Ready}}<span class="ok">✓</span>{{else}}<span class="no">✗</span>{{end}}</td><td>{{.QOSClass}}</td><td>{{.Restarts}}</td></tr>{{end}}
+  </table></div>
+</section>
+
+{{with .Ext.Errors}}<section class="card">
+  <h2>Problems during the run</h2>
+  <ul>{{range .}}<li>{{.}}</li>{{end}}</ul>
+</section>{{end}}
+
+<footer>
+  Scylla Doctor's vitals, per-node analysis and cluster report are in <code>scylla-doctor/</code> of this archive, unchanged.
+  SODA's own vitals and analysis use the same formats in <code>soda/</code>; Kubernetes objects and logs are in
+  <code>kubernetes/must-gather/</code>. This page renders <code>report/soda-report.json</code>.
+</footer>
+</main>
+</body>
+</html>
