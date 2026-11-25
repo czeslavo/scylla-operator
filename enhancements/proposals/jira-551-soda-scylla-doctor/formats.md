@@ -52,6 +52,59 @@ analyzer judges and that Scylla Doctor Cluster can compare between nodes. Raw ob
 tooling, and copying them into vitals would only duplicate them. When a check needs something from them, a SODA
 collector extracts just that fact into vitals, as `ScyllaDBPodCollector` does for the Pod.
 
+## Files that belong to vitals
+
+Scylla Doctor keeps file-like data in two ways.
+
+**1. Raw command output inline.** A collector entry can carry an `output` field holding the command's output as
+text:
+- eight collectors keep it by default (`[<Collector>] include_output` overrides that), and `--include-output` adds
+  it for all;
+- in a kind run, `nodetool cfstats` was 112 KB of a node's 350 KB vitals, and the schema description 1.2 KB;
+- SODA keeps it, because Scylla Doctor's vitals are copied byte for byte;
+- `output` is not part of the contract, so SODA never reads it;
+- SODA doesn't pass `--include-output`.
+
+**2. Side files named in a message.** `ScyllaLogsCollector` and `ScyllaManagerAgentLogsCollector` write
+`journalctl` output to `$TMPDIR/scylla_logs_<timestamp>.txt`.
+- They compress it to `scylla_logs_<timestamp>.tar.gz` next to it and delete the `.txt`.
+- The vitals only say "gathered successfully to [<path>.txt]", in the message, which names the file that was just
+  deleted.
+- Both collectors skip in containers today, but SODA handles side files in general:
+  - SODA runs Scylla Doctor with `TMPDIR` set to its run directory, so side files land there and are removed with
+    it, instead of piling up in the scylla container's `/tmp`.
+  - After the run, every file in the run directory that SODA didn't put there is copied to
+    `scylla-doctor/files/<node>/`. The total per node is limited by `--side-files-limit-bytes` (256 MiB by
+    default).
+  - Each file is listed in the report's and manifest's `nodes[].files`: name, size, archive path and sha256, or why
+    it was skipped.
+  - Checked on kind with files planted during a run: one was copied with a matching checksum, one larger than the
+    limit was listed as skipped, and nothing was left in the container.
+
+**Proposed for Scylla Doctor, backward compatible:** reference side files in the collector's `data`, not its
+`message`:
+
+```json
+"ScyllaLogsCollector": {
+  "status": 0,
+  "message": "Scylla logs gathered successfully",
+  "data": {"files": [{"name": "scylla_logs_20261125183000.tar.gz", "sha256": "…", "sizeBytes": 123456}]},
+  "mask": [["files"]]
+}
+```
+
+- **Relative names:** names are relative to the directory holding the vitals file. Scylla Doctor would write side
+  files there (or to a `--files-dir`), not to the temporary directory.
+- **A contract, not a message:** the file becomes part of the vitals contract instead of a path in free text. Tools
+  such as SODA and support's importer can find it without parsing messages, and can check its checksum.
+- **The message no longer changes per run:** Scylla Doctor Cluster's shipped configuration excludes
+  `ScyllaLogsCollector` from the comparison between nodes because of that timestamped path. The mask covers the
+  per-node `files` instead.
+- **Correctness:** the reference would name the file that actually exists (the `.tar.gz`).
+
+SODA's own collectors could use the same `data.files` convention for archive paths. For example,
+`ScyllaDBPodCollector` could point at the Pod's logs in the must-gather dump.
+
 ## Analysis
 
 Scylla Doctor's per-node analysis (`--load-vitals <file> --output json`) is keyed by analyzer name:
@@ -95,7 +148,7 @@ It adds one optional key, `soda`:
 | `generatedAt`, `sodaVersion`, `scyllaDoctorVersion` | when and with what |
 | `bundle` | bundle image and the sha256 of each file in it |
 | `cluster` | kind, namespace, name, UID |
-| `nodes[]` | per node: Pod, Kubernetes node, datacenter, rack, collection state, reason, duration and exit code, and Scylla Doctor's collector and analyzer counts by status |
+| `nodes[]` | per node: Pod, Kubernetes node, datacenter, rack, collection state, reason, duration and exit code, Scylla Doctor's collector and analyzer counts by status, and the side files Scylla Doctor wrote (`files`) |
 | `sources` | for every analyzer or collector in the report, `scylla-doctor` or `soda` |
 | `skippedAnalyzers` | analyzers turned off for this run (by default the two that call scylladb.com) |
 | `errors` | problems during the run that aren't findings about the cluster |
@@ -116,6 +169,7 @@ scylla-doctor/vitals/<node>.vitals.json        Scylla Doctor, unchanged
 scylla-doctor/analysis/<node>.analysis.json    Scylla Doctor per-node analysis, unchanged
 scylla-doctor/cluster/report.json              Scylla Doctor Cluster report, unchanged (+ report.stderr.log)
 scylla-doctor/runs/<node>/{stdout,stderr}.log  Scylla Doctor's console output
+scylla-doctor/files/<node>/...                 files Scylla Doctor wrote next to its vitals (listed in nodes[].files)
 soda/vitals/<node>.vitals.json                 SODA's vitals (Scylla Doctor's format)
 soda/analysis/<node>.analysis.json             SODA's analysis (Scylla Doctor's format)
 kubernetes/must-gather/...                     must-gather of the ScyllaCluster's namespace (no Secrets)

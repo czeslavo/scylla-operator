@@ -83,7 +83,7 @@ apply it. The Job's comments show how to copy the archive out.
 
 ### Useful flags
 
-`--node-timeout`, `--parallelism`, `--skip-analyzer`, `--skip-must-gather`, `--dest-dir`, `--bundle-pull-secret`,
+`--node-timeout`, `--parallelism`, `--side-files-limit-bytes`, `--skip-analyzer`, `--skip-must-gather`, `--dest-dir`, `--bundle-pull-secret`,
 `--analysis-memory`, `--keep-running-after`. By default, `ScyllaUpdateAnalyzer` and `DriverVersionAnalyzer` are
 skipped because they call scylladb.com, so analysis works without internet access.
 
@@ -101,6 +101,7 @@ skipped because they call scylladb.com, so analysis works without internet acces
 | Failures are recorded, not fatal | A failed node, analysis step or must-gather becomes a finding or a "problem during the run"; the rest continues. |
 | Secrets only over stdin | Exec arguments end up in API requests and audit logs. `sd.conf` is written with umask 077 and removed even when the run is cancelled. |
 | Output goes to files in the container and is read back with separate execs | A broken or hanging exec stream (seen once on GKE) then loses nothing: SODA reads the exit code and vitals back, and fails the node only when Scylla Doctor didn't finish. Kind can't reproduce the hang, so this path is untested. |
+| Scylla Doctor's side files are collected | Scylla Doctor runs with `TMPDIR` set to SODA's run directory. Files it writes there (today only the log collectors, which skip in containers) are copied into the archive up to a size limit and listed with checksums, instead of being lost or left in the container. See [formats.md](formats.md#files-that-belong-to-vitals). |
 | Cleanup stops an unfinished run | Closing an exec stream doesn't stop the command. Cleanup stops Scylla Doctor by its PID when it hasn't written an exit code, then removes the run directory. |
 | ScyllaCluster (v1) only | Enough for the PoC. ScyllaDBDatacenter and ScyllaDBCluster need their own lookup of the member Pods. |
 | must-gather is reused with the `view` role | It collects what `view` can read in the namespace and logs the rest (for example Roles, Leases, monitoring CRs) as forbidden. |
@@ -151,9 +152,11 @@ skipped because they call scylladb.com, so analysis works without internet acces
 2. Don't pass the CQL password on `cqlsh`'s command line inside the container; use a cqlshrc or credentials file.
 3. Make exit codes distinguish "the tool failed" from "the node has findings".
 4. Accept non-Scylla-Doctor vitals sources in Scylla Doctor Cluster, or define a merge step. See [formats.md](formats.md).
-5. Mask per-node values in `ScyllaExtraConfigurationFiles` (`docker.conf` holds each node's address) and make the
+5. Reference side files (the log collectors' `journalctl` output) in the collector's `data`, relative to the vitals
+   file, instead of an absolute path in the message. See [formats.md](formats.md#files-that-belong-to-vitals).
+6. Mask per-node values in `ScyllaExtraConfigurationFiles` (`docker.conf` holds each node's address) and make the
    `NitroDetailedStats` skip message deterministic: both produce noise in the differences between nodes.
-6. Publish the bundle (or its inputs) from release engineering.
+7. Publish the bundle (or its inputs) from release engineering.
 
 ## Asks for the ScyllaDB image owners
 

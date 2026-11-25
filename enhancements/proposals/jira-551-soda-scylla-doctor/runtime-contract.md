@@ -37,7 +37,7 @@ A failed check doesn't stop collection; Scylla Doctor reports what it can.
 | `python` | required | executable: `/opt/scylladb/python3/bin/python3` | Scylla Doctor itself, cqlsh, perftune.py | Scylla Doctor cannot start |
 | `python-version` | required | Python >= 3.8 | Scylla Doctor itself | Scylla Doctor cannot start |
 | `pyyaml` | required | Python module `yaml` | Scylla Doctor itself (its only non-stdlib import) | Scylla Doctor cannot start |
-| `posix-shell` | required | on `PATH`: `sh`, `cat`, `mkdir`, `rm`, `chmod`, `timeout` | SODA: staging, bounding the run, cleanup | SODA cannot run Scylla Doctor |
+| `posix-shell` | required | on `PATH`: `sh`, `cat`, `mkdir`, `rm`, `chmod`, `timeout`, `wc` | SODA: staging, bounding the run, collecting side files, cleanup | SODA cannot run Scylla Doctor |
 | `tmp-writable` | required | writableDirectory: `/tmp` | SODA: run directory | SODA cannot run Scylla Doctor |
 | `home-writable` | required | writableDirectory: `/root` | cqlsh unpacks its bundled packages into $HOME/.shiv | cqlsh fails, and with it 26 checks |
 | `scylla-yaml` | required | file: `/etc/scylla/scylla.yaml` | Scylla Doctor's configuration checks, cqlsh address | 29 checks fail |
