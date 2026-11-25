@@ -32,7 +32,7 @@ func failed(message string) vitals.CollectorResult {
 func SODAVitals(out *NodeOutput, c *contract.Contract) vitals.Vitals {
 	v := vitals.Vitals{}
 	v[SODAVersionCollector] = passed(map[string]any{
-		"version":       build.GitCommit(),
+		"version":       vitals.SODAVersion(build.GitCommit()),
 		"formatVersion": "soda.scylladb.com/vitals/v1alpha1",
 	})
 	v[ScyllaDBPodCollector] = passed(podData(out.Pod))

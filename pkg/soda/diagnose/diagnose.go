@@ -328,7 +328,7 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 	finished := time.Now().UTC()
 	ext := vitals.SODAExtension{
 		GeneratedAt:         finished.Format(time.RFC3339),
-		SODAVersion:         build.GitCommit(),
+		SODAVersion:         vitals.SODAVersion(build.GitCommit()),
 		ScyllaDoctorVersion: bundleInfo.ScyllaDoctorVersion,
 		Bundle:              bundleInfo,
 		Cluster:             clusterRef,
@@ -350,7 +350,7 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 	m := manifest{
 		FormatVersion:   "soda.scylladb.com/archive/v1alpha1",
 		RunID:           runID,
-		SODAVersion:     build.GitCommit(),
+		SODAVersion:     vitals.SODAVersion(build.GitCommit()),
 		StartedAt:       started.Format(time.RFC3339),
 		FinishedAt:      finished.Format(time.RFC3339),
 		AnalysisRuntime: rt.Describe(),

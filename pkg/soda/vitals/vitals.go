@@ -209,3 +209,11 @@ func (f Findings) AddFinding(analyzer, message, node string) {
 	sort.Strings(nodes)
 	f[analyzer][message] = nodes
 }
+
+// SODAVersion identifies the SODA build that wrote a file.
+func SODAVersion(gitCommit string) string {
+	if len(gitCommit) == 0 {
+		return "development build"
+	}
+	return gitCommit
+}
