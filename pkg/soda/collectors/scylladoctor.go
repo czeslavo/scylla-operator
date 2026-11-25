@@ -92,10 +92,13 @@ func CollectScyllaDoctor(ctx context.Context, execer *kube.Execer, pod *corev1.P
 	// 2. Stage Scylla Doctor and, only when needed, its CQL login. umask keeps sd.conf readable by root only.
 	dir := "/tmp/soda-" + o.RunID
 	defer func() {
-		// A fresh context: a cancelled or timed-out run must still remove sd.conf.
+		// A fresh context: a cancelled or timed-out run must still stop Scylla Doctor and remove sd.conf. Closing an
+		// exec stream doesn't stop the command, so a run that hasn't written its exit code is stopped by its PID
+		// (timeout's, which passes the signal on to Scylla Doctor).
 		cctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		res, err := execer.Exec(cctx, ns, name, ctr, []string{"rm", "-rf", "--", dir}, nil)
+		cleanup := `if [ -f "$0/pid" ] && [ ! -f "$0/exit" ]; then kill -TERM "$(cat "$0/pid")" 2>/dev/null; fi; rm -rf -- "$0"`
+		res, err := execer.Exec(cctx, ns, name, ctr, []string{"sh", "-c", cleanup, dir}, nil)
 		if err != nil || res.ExitCode != 0 {
 			klog.ErrorS(err, "Can't clean up the run directory", "Pod", ns+"/"+name, "Dir", dir)
 		}
@@ -113,13 +116,14 @@ func CollectScyllaDoctor(ctx context.Context, execer *kube.Execer, pod *corev1.P
 		cfArgs = ` -cf sd.conf`
 	}
 
-	// 3. Run it. Output goes to files and is read back separately, so a hanging exec stream loses nothing.
+	// 3. Run it. Output goes to files and is read back separately, so an exec stream that hangs or breaks after
+	// Scylla Doctor finished loses nothing: the results are still read back below.
 	secs := int(o.Timeout.Seconds())
-	script := fmt.Sprintf(`cd "$0" && timeout -k 10 %d %s scylla_doctor.pyz%s --save-vitals vitals.json > stdout.log 2> stderr.log; echo $? > exit`,
-		secs, o.Contract.Interpreter, cfArgs)
-	res, err = run(o.Timeout+time.Minute, []string{"sh", "-c", script, dir}, nil)
-	if err != nil {
-		return fail(vitals.NodeCollectionFailed, fmt.Sprintf("running Scylla Doctor failed: %v", err))
+	script := fmt.Sprintf(`cd "$0" || exit 1; timeout -k 10 %d %s scylla_doctor.pyz%s --save-vitals vitals.json > stdout.log 2> stderr.log & `+
+		`echo $! > pid; wait $!; echo $? > exit`, secs, o.Contract.Interpreter, cfArgs)
+	_, runErr := run(o.Timeout+time.Minute, []string{"sh", "-c", script, dir}, nil)
+	if runErr != nil {
+		klog.InfoS("The exec running Scylla Doctor ended with an error; reading back what it wrote", "Pod", ns+"/"+name, "Error", runErr)
 	}
 
 	// 4. Read the results back.
@@ -134,6 +138,14 @@ func CollectScyllaDoctor(ctx context.Context, execer *kube.Execer, pod *corev1.P
 	out.Stderr = read("stderr.log")
 	if code, err := strconv.Atoi(strings.TrimSpace(string(read("exit")))); err == nil {
 		out.Collection.ExitCode = &code
+	}
+	if out.Collection.ExitCode == nil {
+		// No exit code: Scylla Doctor didn't finish. The deferred cleanup stops it.
+		reason := "Scylla Doctor didn't finish"
+		if runErr != nil {
+			reason += ": " + runErr.Error()
+		}
+		return fail(vitals.NodeCollectionFailed, reason)
 	}
 	out.RawVitals = read("vitals.json")
 	if len(out.RawVitals) == 0 {
