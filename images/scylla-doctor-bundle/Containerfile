@@ -1,0 +1,63 @@
+# Scylla Doctor bundle image for SODA (proof of concept; Release Engineering will own the real build).
+#
+# The image is a delivery and versioning vehicle with two uses:
+#   - collection: SODA copies /opt/scylla-doctor/collect/scylla_doctor.pyz out of it and runs it inside each scylla
+#     container over exec. There it runs on the ScyllaDB image's own Python and tools, which is the runtime contract
+#     described in /opt/scylla-doctor/runtime-contract.json;
+#   - analysis: SODA runs Scylla Doctor's per-node analysis and Scylla Doctor Cluster in a Pod started from this image,
+#     so it carries a Python with Scylla Doctor Cluster's dependencies.
+#
+# Build inputs (not in git, see README.md and prepare-inputs.sh) go to ./inputs:
+#   scylla-doctor-<version>.tar.gz        public, collection-only build (basic)
+#   scylla-doctor-full-<version>.tar.gz   private build with analyzers
+#   scylla_doctor_cluster.pyz             `make -C scylla-doctor-cluster portable` at tag scylla-doctor-v<version>
+#   scylla_doctor_cluster.ini             shipped Scylla Doctor Cluster configuration
+#
+# podman build -t localhost/scylla-doctor-bundle:1.15-poc images/scylla-doctor-bundle
+
+FROM registry.access.redhat.com/ubi9/ubi-minimal@sha256:08d4c70f1baf6537a0728656cf7942d561e74a35916509d205b6519861266352
+
+ARG SCYLLA_DOCTOR_VERSION=1.15
+
+# tar: SODA streams vitals in and analysis results out of the analysis Pod. kubectl cp needs it too.
+RUN microdnf install -y --setopt=install_weak_deps=0 --nodocs python3.12 python3.12-pip tar gzip && \
+    microdnf clean all
+
+COPY requirements.txt /opt/scylla-doctor/requirements.txt
+RUN python3.12 -m pip install --no-cache-dir --require-hashes -r /opt/scylla-doctor/requirements.txt
+
+COPY inputs/ /tmp/inputs/
+RUN set -eu; \
+    mkdir -p /opt/scylla-doctor/collect /opt/scylla-doctor/analyze /tmp/basic /tmp/full; \
+    tar -xzf "/tmp/inputs/scylla-doctor-${SCYLLA_DOCTOR_VERSION}.tar.gz" -C /tmp/basic; \
+    tar -xzf "/tmp/inputs/scylla-doctor-full-${SCYLLA_DOCTOR_VERSION}.tar.gz" -C /tmp/full; \
+    install -m 0644 /tmp/basic/scylla_doctor.pyz /opt/scylla-doctor/collect/scylla_doctor.pyz; \
+    install -m 0644 /tmp/full/scylla_doctor.pyz /opt/scylla-doctor/analyze/scylla_doctor_full.pyz; \
+    install -m 0644 /tmp/inputs/scylla_doctor_cluster.pyz /opt/scylla-doctor/analyze/scylla_doctor_cluster.pyz; \
+    install -m 0644 /tmp/inputs/scylla_doctor_cluster.ini /opt/scylla-doctor/analyze/scylla_doctor_cluster.ini; \
+    install -m 0644 /tmp/full/LICENSE /opt/scylla-doctor/LICENSE; \
+    rm -rf /tmp/inputs /tmp/basic /tmp/full
+
+COPY runtime-contract.json /opt/scylla-doctor/runtime-contract.json
+
+# bundle.json lets SODA record exactly what it ran.
+RUN set -eu; cd /opt/scylla-doctor; \
+    { printf '{"scyllaDoctorVersion": "%s", "files": {' "${SCYLLA_DOCTOR_VERSION}"; \
+      first=1; for f in collect/scylla_doctor.pyz analyze/scylla_doctor_full.pyz analyze/scylla_doctor_cluster.pyz \
+                       analyze/scylla_doctor_cluster.ini runtime-contract.json; do \
+        [ "$first" = 1 ] || printf ', '; first=0; \
+        printf '"%s": "sha256:%s"' "$f" "$(sha256sum "$f" | cut -d' ' -f1)"; \
+      done; printf '}}\n'; } > bundle.json; \
+    python3.12 -c 'import json; json.load(open("bundle.json"))'
+
+LABEL org.opencontainers.image.title="scylla-doctor-bundle" \
+      org.opencontainers.image.description="Scylla Doctor collection and analysis bundle for SODA (PoC)" \
+      org.opencontainers.image.version="${SCYLLA_DOCTOR_VERSION}" \
+      org.opencontainers.image.licenses="AGPL-3.0-only"
+
+ENV SCYLLA_DOCTOR_BUNDLE_DIR=/opt/scylla-doctor \
+    SCYLLA_DOCTOR_PYTHON=/usr/bin/python3.12
+
+USER 65532:65532
+WORKDIR /tmp
+CMD ["sleep", "infinity"]

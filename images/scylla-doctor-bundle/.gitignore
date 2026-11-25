@@ -1,0 +1,2 @@
+# Scylla Doctor build inputs: the full build and Scylla Doctor Cluster are private. Never commit them.
+/inputs/
