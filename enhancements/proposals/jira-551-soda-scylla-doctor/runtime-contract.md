@@ -65,6 +65,12 @@ A failed check doesn't stop collection; Scylla Doctor reports what it can.
 
 ## Notes
 
+- **What is verified and what is inferred.** Each requirement was either seen in the trace or read in the source.
+  The "without it" impacts are inferred from Scylla Doctor's dependencies between checks, except for the cases
+  observed in the spike: no scylla container root (all ScyllaDB tools, configuration and data), a failed `cqlsh`
+  login (26 checks) and missing `free`, `pgrep` and `sysctl`. Removing `rpm`, `supervisorctl` or a writable `$HOME`
+  alone was never tried. That the wrappers use absolute paths was confirmed for `scylla` and `hwloc-calc`.
+
 - **The interpreter is `scylla-python3`.** Scylla Doctor's own Python needs are small: Python 3.8 or newer and PyYAML.
   But `cqlsh` and `perftune.py` run on `scylla-python3` too, so the image must keep it even if Scylla Doctor brought
   its own Python.

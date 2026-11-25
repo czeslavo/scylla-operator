@@ -46,6 +46,12 @@ ScyllaCluster's conditions, the operator's version and configuration, NodeConfig
 `soda/vitals/_cluster.vitals.json` in the same format would hold them, with findings attributed to the node name
 `_cluster`. This keeps the report's `{message: [nodes]}` shape.
 
+**Kubernetes objects and logs are not vitals.** Manifests and container logs stay as must-gather files under
+`kubernetes/must-gather/`, in the layout `scylla-operator must-gather` already produces. Vitals hold facts that an
+analyzer judges and that Scylla Doctor Cluster can compare between nodes. Raw objects already have a format and
+tooling, and copying them into vitals would only duplicate them. When a check needs something from them, a SODA
+collector extracts just that fact into vitals, as `ScyllaDBPodCollector` does for the Pod.
+
 ## Analysis
 
 Scylla Doctor's per-node analysis (`--load-vitals <file> --output json`) is keyed by analyzer name:

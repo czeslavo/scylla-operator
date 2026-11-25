@@ -100,6 +100,8 @@ skipped because they call scylladb.com, so analysis works without internet acces
 | A node is judged by its vitals, not by exit codes | Scylla Doctor exits 0 with failed checks, and Scylla Doctor Cluster exits 1 on any finding. SODA checks that the vitals parse and that `ScyllaConfigurationFile`, `Cqlsh` and `SystemConfig` passed. |
 | Failures are recorded, not fatal | A failed node, analysis step or must-gather becomes a finding or a "problem during the run"; the rest continues. |
 | Secrets only over stdin | Exec arguments end up in API requests and audit logs. `sd.conf` is written with umask 077 and removed even when the run is cancelled. |
+| Output goes to files in the container and is read back with separate execs | A broken or hanging exec stream (seen once on GKE) then loses nothing: SODA reads the exit code and vitals back, and fails the node only when Scylla Doctor didn't finish. Kind can't reproduce the hang, so this path is untested. |
+| Cleanup stops an unfinished run | Closing an exec stream doesn't stop the command. Cleanup stops Scylla Doctor by its PID when it hasn't written an exit code, then removes the run directory. |
 | ScyllaCluster (v1) only | Enough for the PoC. ScyllaDBDatacenter and ScyllaDBCluster need their own lookup of the member Pods. |
 | must-gather is reused with the `view` role | It collects what `view` can read in the namespace and logs the rest (for example Roles, Leases, monitoring CRs) as forbidden. |
 
@@ -115,6 +117,13 @@ skipped because they call scylladb.com, so analysis works without internet acces
   Node 0 has extra tools from an earlier spike run, which accounts for the differences between nodes.
 - **Hygiene:** no CQL password in the run directory or the archive; no `/tmp/soda-*` left in the scylla containers;
   the analysis Pod is deleted; Secrets are not in the must-gather dump.
+- **Wrong CQL password:** every node is reported as Degraded, and SODA's first failure names the cause ("calling cqlsh
+  failed, please check cql authentication configuration"). The run still completes.
+- **Interrupted mid-collection (SIGINT):**
+  - The run directory and the Scylla Doctor process were gone at once, and the analysis Pod was deleted.
+  - A `cqlsh` query already in flight ran to completion on its own within about 30 s, with the password in its
+    arguments until then.
+  - SODA still wrote a partial archive recording the failed nodes.
 - **RBAC:** derived by running as the ServiceAccount. Exec needs both `get` (websocket) and `create` (SPDY) on
   `pods/exec`.
 
@@ -126,6 +135,10 @@ skipped because they call scylladb.com, so analysis works without internet acces
 - **Distribution:** the full Scylla Doctor build and Scylla Doctor Cluster are private (DOCTOR-159), so who may pull
   the bundle needs deciding.
 - **Multi-datacenter clusters, ScyllaDBDatacenter and ScyllaDBCluster:** not covered.
+- **Collection scope:** only the ScyllaCluster's namespace, because the role is namespaced. The operator's logs and
+  configuration, ScyllaOperatorConfig, NodeConfigs and Kubernetes nodes are not collected. They need a cluster-scoped
+  read role, or the existing `must-gather` run by an admin.
+- **Production-like clusters:** nothing ran on GKE or OpenShift in this PoC; everything above is kind.
 - **Cluster-scoped Kubernetes vitals:** SODA's collectors are per node. A proposal for cluster-scoped ones is in
   [formats.md](formats.md).
 - **Air gap:** analysis skips the two analyzers that call scylladb.com; collection makes no external calls beyond
