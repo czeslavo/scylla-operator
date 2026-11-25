@@ -5,8 +5,14 @@ package collectors
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -36,6 +42,11 @@ type NodeCollectOptions struct {
 	Contract  *contract.Contract
 	// Timeout bounds Scylla Doctor's run inside the container.
 	Timeout time.Duration
+	// SideFilesDir receives files Scylla Doctor wrote next to its vitals; SideFilesArchiveDir is the same directory
+	// relative to the archive root. SideFilesLimitBytes caps their total size per node.
+	SideFilesDir        string
+	SideFilesArchiveDir string
+	SideFilesLimitBytes int64
 }
 
 type NodeOutput struct {
@@ -47,7 +58,15 @@ type NodeOutput struct {
 	Vitals          vitals.Vitals
 	Stdout          []byte
 	Stderr          []byte
+	SideFiles       []vitals.SideFile
 	Collection      vitals.NodeCollection
+}
+
+// sodaRunFiles are the files SODA itself puts in or creates in the run directory; everything else there was
+// written by Scylla Doctor.
+var sodaRunFiles = map[string]bool{
+	"scylla_doctor.pyz": true, "sd.conf": true, "vitals.json": true, "stdout.log": true, "stderr.log": true,
+	"exit": true, "pid": true,
 }
 
 // CollectScyllaDoctor runs the runtime contract check and Scylla Doctor in a node's scylla container.
@@ -118,8 +137,10 @@ func CollectScyllaDoctor(ctx context.Context, execer *kube.Execer, pod *corev1.P
 
 	// 3. Run it. Output goes to files and is read back separately, so an exec stream that hangs or breaks after
 	// Scylla Doctor finished loses nothing: the results are still read back below.
+	// TMPDIR points into the run directory: Scylla Doctor writes side files (the log collectors' journalctl output)
+	// to the temporary directory, so they are picked up below and removed with the run directory.
 	secs := int(o.Timeout.Seconds())
-	script := fmt.Sprintf(`cd "$0" || exit 1; timeout -k 10 %d %s scylla_doctor.pyz%s --save-vitals vitals.json > stdout.log 2> stderr.log & `+
+	script := fmt.Sprintf(`cd "$0" || exit 1; TMPDIR="$0" timeout -k 10 %d %s scylla_doctor.pyz%s --save-vitals vitals.json > stdout.log 2> stderr.log & `+
 		`echo $! > pid; wait $!; echo $? > exit`, secs, o.Contract.Interpreter, cfArgs)
 	_, runErr := run(o.Timeout+time.Minute, []string{"sh", "-c", script, dir}, nil)
 	if runErr != nil {
@@ -155,6 +176,7 @@ func CollectScyllaDoctor(ctx context.Context, execer *kube.Execer, pod *corev1.P
 	if err := json.Unmarshal(out.RawVitals, &out.Vitals); err != nil {
 		return fail(vitals.NodeCollectionFailed, fmt.Sprintf("Scylla Doctor's vitals don't parse: %v", err))
 	}
+	out.SideFiles = collectSideFiles(ctx, execer, pod, dir, o)
 
 	// 5. Judge by the checks everything depends on; exit codes can't tell. Each one depends on the previous, so the
 	// first that didn't pass is the root cause (later messages list prerequisites in no stable order).
@@ -187,4 +209,67 @@ func exitCodeString(c *int) string {
 		return "unknown"
 	}
 	return strconv.Itoa(*c)
+}
+
+// collectSideFiles copies files Scylla Doctor left in the run directory into the archive, up to a size budget.
+// Failures are recorded per file; they never fail the node.
+func collectSideFiles(ctx context.Context, execer *kube.Execer, pod *corev1.Pod, dir string, o NodeCollectOptions) []vitals.SideFile {
+	ns, name, ctr := pod.Namespace, pod.Name, naming.ScyllaContainerName
+	list := `cd "$0" || exit 1; for f in * .[!.]*; do [ -f "$f" ] && printf '%s\t%s\n' "$(wc -c < "$f")" "$f"; done; true`
+	cctx, cancel := context.WithTimeout(ctx, time.Minute)
+	res, err := execer.Exec(cctx, ns, name, ctr, []string{"sh", "-c", list, dir}, nil)
+	cancel()
+	if err != nil || res.ExitCode != 0 {
+		klog.ErrorS(err, "Can't list Scylla Doctor's side files", "Pod", ns+"/"+name)
+		return nil
+	}
+
+	var files []vitals.SideFile
+	budget := o.SideFilesLimitBytes
+	for _, line := range strings.Split(strings.TrimSpace(string(res.Stdout)), "\n") {
+		size, fname, ok := strings.Cut(line, "\t")
+		if !ok || sodaRunFiles[fname] || strings.ContainsAny(fname, "/\\") {
+			continue
+		}
+		sf := vitals.SideFile{Name: fname}
+		sf.SizeBytes, _ = strconv.ParseInt(strings.TrimSpace(size), 10, 64)
+		if sf.SizeBytes > budget {
+			sf.Skipped = fmt.Sprintf("over the per-node side file limit (%d bytes left)", budget)
+			files = append(files, sf)
+			continue
+		}
+		if err := copySideFile(ctx, execer, pod, dir+"/"+fname, filepath.Join(o.SideFilesDir, fname), &sf); err != nil {
+			sf.Skipped = err.Error()
+		} else {
+			budget -= sf.SizeBytes
+			sf.ArchivePath = filepath.ToSlash(filepath.Join(o.SideFilesArchiveDir, fname))
+		}
+		files = append(files, sf)
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].Name < files[j].Name })
+	return files
+}
+
+func copySideFile(ctx context.Context, execer *kube.Execer, pod *corev1.Pod, src, dst string, sf *vitals.SideFile) error {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	f, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	h := sha256.New()
+	cctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+	code, stderr, err := execer.ExecToWriter(cctx, pod.Namespace, pod.Name, naming.ScyllaContainerName, []string{"cat", src}, io.MultiWriter(f, h))
+	if err == nil && code != 0 {
+		err = fmt.Errorf("cat exited with %d: %s", code, bytes.TrimSpace(stderr))
+	}
+	if err != nil {
+		_ = os.Remove(dst)
+		return fmt.Errorf("can't copy it: %w", err)
+	}
+	sf.SHA256 = hex.EncodeToString(h.Sum(nil))
+	return f.Close()
 }

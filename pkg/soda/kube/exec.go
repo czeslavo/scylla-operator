@@ -35,12 +35,26 @@ type ExecResult struct {
 	ExitCode int
 }
 
+// ExecToWriter runs command in the container and streams its stdout to w, for outputs too large to buffer.
+// It returns the exit code (-1 when the exec itself failed) and stderr.
+func (e *Execer) ExecToWriter(ctx context.Context, namespace, pod, container string, command []string, w io.Writer) (int, []byte, error) {
+	var stderr bytes.Buffer
+	code, err := e.stream(ctx, namespace, pod, container, command, nil, w, &stderr)
+	return code, stderr.Bytes(), err
+}
+
 // Exec runs command in the container. Arguments end up in the API request and in audit logs, so secrets must go
 // over stdin only. A non-zero exit is returned in ExecResult, not as an error; err means the exec itself failed.
 // Every call must carry a deadline: an exec into a GKE Pod once hung for 31 minutes after the command finished.
 func (e *Execer) Exec(ctx context.Context, namespace, pod, container string, command []string, stdin io.Reader) (*ExecResult, error) {
+	var stdout, stderr bytes.Buffer
+	code, err := e.stream(ctx, namespace, pod, container, command, stdin, &stdout, &stderr)
+	return &ExecResult{Stdout: stdout.Bytes(), Stderr: stderr.Bytes(), ExitCode: code}, err
+}
+
+func (e *Execer) stream(ctx context.Context, namespace, pod, container string, command []string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
 	if _, ok := ctx.Deadline(); !ok {
-		return nil, fmt.Errorf("exec without a deadline is not allowed")
+		return -1, fmt.Errorf("exec without a deadline is not allowed")
 	}
 
 	req := e.kubeClient.CoreV1().RESTClient().Post().
@@ -58,35 +72,31 @@ func (e *Execer) Exec(ctx context.Context, namespace, pod, container string, com
 
 	wsExec, err := remotecommand.NewWebSocketExecutor(e.restConfig, http.MethodGet, req.URL().String())
 	if err != nil {
-		return nil, fmt.Errorf("can't create websocket executor: %w", err)
+		return -1, fmt.Errorf("can't create websocket executor: %w", err)
 	}
 	spdyExec, err := remotecommand.NewSPDYExecutor(e.restConfig, http.MethodPost, req.URL())
 	if err != nil {
-		return nil, fmt.Errorf("can't create spdy executor: %w", err)
+		return -1, fmt.Errorf("can't create spdy executor: %w", err)
 	}
 	// Fall back to SPDY only when the websocket upgrade itself failed, so a command never runs twice.
 	executor, err := remotecommand.NewFallbackExecutor(wsExec, spdyExec, func(err error) bool {
 		return httpstream.IsUpgradeFailure(err) || httpstream.IsHTTPSProxyError(err)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("can't create executor: %w", err)
+		return -1, fmt.Errorf("can't create executor: %w", err)
 	}
 
-	var stdout, stderr bytes.Buffer
 	err = executor.StreamWithContext(ctx, remotecommand.StreamOptions{
 		Stdin:  stdin,
-		Stdout: &stdout,
-		Stderr: &stderr,
+		Stdout: stdout,
+		Stderr: stderr,
 	})
-	res := &ExecResult{Stdout: stdout.Bytes(), Stderr: stderr.Bytes(), ExitCode: 0}
 	if err != nil {
 		var exitErr utilexec.ExitError
 		if errors.As(err, &exitErr) && exitErr.Exited() {
-			res.ExitCode = exitErr.ExitStatus()
-			return res, nil
+			return exitErr.ExitStatus(), nil
 		}
-		res.ExitCode = -1
-		return res, fmt.Errorf("can't exec %q in %s/%s/%s: %w", command[0], namespace, pod, container, err)
+		return -1, fmt.Errorf("can't exec %q in %s/%s/%s: %w", command[0], namespace, pod, container, err)
 	}
-	return res, nil
+	return 0, nil
 }

@@ -62,6 +62,7 @@ type Options struct {
 
 	CQLCredentialsSecret string
 	NodeTimeout          time.Duration
+	SideFilesLimitBytes  int64
 	Parallelism          int
 	SkippedAnalyzers     []string
 
@@ -86,6 +87,7 @@ const (
 	sdAnalysisDir  = "scylla-doctor/analysis"
 	sdClusterDir   = "scylla-doctor/cluster"
 	sdRunsDir      = "scylla-doctor/runs"
+	sdFilesDir     = "scylla-doctor/files"
 	sodaVitalsDir  = "soda/vitals"
 	sodaAnalysis   = "soda/analysis"
 	mustGatherDir  = "kubernetes/must-gather"
@@ -207,6 +209,9 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 			klog.InfoS("Collecting Scylla Doctor vitals", "Pod", pod.Namespace+"/"+pod.Name)
 			outputs[i] = collectors.CollectScyllaDoctor(ctx, execer, pod, collectors.NodeCollectOptions{
 				RunID: runID, Pyz: pyz, CQLConfig: cqlConfig, Contract: c, Timeout: o.NodeTimeout,
+				SideFilesDir:        path(sdFilesDir, pod.Name),
+				SideFilesArchiveDir: filepath.Join(sdFilesDir, pod.Name),
+				SideFilesLimitBytes: o.SideFilesLimitBytes,
 			})
 		}()
 	}
@@ -251,6 +256,7 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 			Datacenter:     out.Pod.Labels["scylla/datacenter"],
 			Rack:           out.Pod.Labels["scylla/rack"],
 			Collection:     out.Collection,
+			Files:          out.SideFiles,
 		}
 		if out.Vitals != nil {
 			summary.Collectors = vitals.CountCollectors(out.Vitals)
@@ -363,6 +369,7 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 			sdAnalysisDir:  "Scylla Doctor per-node analysis (--load-vitals --output json)",
 			sdClusterDir:   "Scylla Doctor Cluster report (--output json) and its stderr",
 			sdRunsDir:      "Scylla Doctor's console output per node",
+			sdFilesDir:     "files Scylla Doctor wrote next to its vitals, per node (listed in nodes[].files)",
 			sodaVitalsDir:  "SODA's per-node vitals, in Scylla Doctor's vitals format",
 			sodaAnalysis:   "SODA's per-node analysis, in Scylla Doctor's analysis format",
 			mustGatherDir:  "Kubernetes objects and logs (scylla-operator must-gather)",

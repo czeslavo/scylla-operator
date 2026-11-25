@@ -66,6 +66,9 @@ type CollectorResult struct {
 	Data    any             `json:"data"`
 	Message string          `json:"message"`
 	Mask    []any           `json:"mask"`
+	// Output is raw command output Scylla Doctor keeps inline for some collectors (or all, with --include-output).
+	// It is not part of the contract; SODA never reads it.
+	Output json.RawMessage `json:"output,omitempty"`
 }
 
 // Vitals is a vitals file, keyed by collector name.
@@ -132,6 +135,18 @@ type NodeSummary struct {
 	Collection     NodeCollection `json:"collection"`
 	Collectors     map[string]int `json:"collectors,omitempty"`
 	Analyzers      map[string]int `json:"analyzers,omitempty"`
+	Files          []SideFile     `json:"files,omitempty"`
+}
+
+// SideFile is a file Scylla Doctor wrote next to its vitals (for example the log collectors' journalctl output),
+// which its vitals only name in a collector's message.
+type SideFile struct {
+	Name        string `json:"name"`
+	SizeBytes   int64  `json:"sizeBytes"`
+	ArchivePath string `json:"archivePath,omitempty"`
+	SHA256      string `json:"sha256,omitempty"`
+	// Skipped says why the file is not in the archive (size limit, copy failure).
+	Skipped string `json:"skipped,omitempty"`
 }
 
 // NodeCollection says whether Scylla Doctor's collection on a node can be trusted.

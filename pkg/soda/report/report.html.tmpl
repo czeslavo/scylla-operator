@@ -72,7 +72,7 @@ footer { font-size: 12.5px; color: var(--muted); }
     <tr><th>Node</th><th>Kubernetes node</th><th>DC / rack</th><th>Collection</th><th>Scylla Doctor checks</th><th>Scylla Doctor analysis</th></tr>
     {{range .Ext.Nodes}}<tr>
       <td class="mono">{{.Name}}</td><td class="mono">{{.KubernetesNode}}</td><td>{{.Datacenter}} / {{.Rack}}</td>
-      <td><span class="state-{{.Collection.State}}">{{.Collection.State}}</span> <span class="muted">{{printf "%.0f" .Collection.DurationSeconds}} s</span>{{with .Collection.Reason}}<div class="nodes">{{.}}</div>{{end}}</td>
+      <td><span class="state-{{.Collection.State}}">{{.Collection.State}}</span> <span class="muted">{{printf "%.0f" .Collection.DurationSeconds}} s</span>{{with .Collection.Reason}}<div class="nodes">{{.}}</div>{{end}}{{range .Files}}<div class="nodes">file <code>{{.Name}}</code> ({{.SizeBytes}} B){{if .ArchivePath}}: <code>{{.ArchivePath}}</code>{{else}}: not copied, {{.Skipped}}{{end}}</div>{{end}}</td>
       <td>{{if .Collectors}}{{count .Collectors "PASSED"}} passed, {{count .Collectors "SKIPPED"}} skipped, {{count .Collectors "FAILED"}} failed{{else}}<span class="na">none</span>{{end}}</td>
       <td>{{if .Analyzers}}{{count .Analyzers "PASSED"}} passed, {{count .Analyzers "WARNING"}} warnings, {{count .Analyzers "FAILED"}} failed, {{count .Analyzers "SKIPPED"}} skipped{{else}}<span class="na">none</span>{{end}}</td>
     </tr>{{end}}

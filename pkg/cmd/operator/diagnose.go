@@ -60,6 +60,7 @@ type DiagnoseOptions struct {
 	AnalysisPodTimeout   time.Duration
 	CQLCredentialsSecret string
 	NodeTimeout          time.Duration
+	SideFilesLimitBytes  int64
 	Parallelism          int
 	SkippedAnalyzers     []string
 	SkipMustGather       bool
@@ -76,16 +77,17 @@ func NewDiagnoseOptions(streams genericclioptions.IOStreams) *DiagnoseOptions {
 		python = "python3"
 	}
 	return &DiagnoseOptions{
-		GatherBaseOptions:  NewGatherBaseOptions("scylla-operator-diagnose"),
-		BundleDir:          os.Getenv("SCYLLA_DOCTOR_BUNDLE_DIR"),
-		BundlePython:       python,
-		BundlePullPolicy:   string(corev1.PullIfNotPresent),
-		AnalysisMemory:     "1Gi",
-		AnalysisPodTimeout: time.Hour,
-		NodeTimeout:        10 * time.Minute,
-		Parallelism:        3,
-		SkippedAnalyzers:   diagnose.DefaultSkippedAnalyzers,
-		Archive:            true,
+		GatherBaseOptions:   NewGatherBaseOptions("scylla-operator-diagnose"),
+		BundleDir:           os.Getenv("SCYLLA_DOCTOR_BUNDLE_DIR"),
+		BundlePython:        python,
+		BundlePullPolicy:    string(corev1.PullIfNotPresent),
+		AnalysisMemory:      "1Gi",
+		AnalysisPodTimeout:  time.Hour,
+		NodeTimeout:         10 * time.Minute,
+		SideFilesLimitBytes: 256 * 1024 * 1024,
+		Parallelism:         3,
+		SkippedAnalyzers:    diagnose.DefaultSkippedAnalyzers,
+		Archive:             true,
 	}
 }
 
@@ -101,6 +103,7 @@ func (o *DiagnoseOptions) AddFlags(flagset *pflag.FlagSet) {
 	flagset.DurationVar(&o.AnalysisPodTimeout, "analysis-pod-timeout", o.AnalysisPodTimeout, "The analysis Pod ends on its own after this long, even if SODA dies.")
 	flagset.StringVar(&o.CQLCredentialsSecret, "cql-credentials-secret", o.CQLCredentialsSecret, "Secret with `username` and `password` keys for CQL, when authentication is on.")
 	flagset.DurationVar(&o.NodeTimeout, "node-timeout", o.NodeTimeout, "Maximum time Scylla Doctor may run on one node.")
+	flagset.Int64Var(&o.SideFilesLimitBytes, "side-files-limit-bytes", o.SideFilesLimitBytes, "Maximum total size of the files Scylla Doctor writes next to its vitals (such as logs) copied per node.")
 	flagset.IntVar(&o.Parallelism, "parallelism", o.Parallelism, "How many nodes are collected at the same time.")
 	flagset.StringArrayVar(&o.SkippedAnalyzers, "skip-analyzer", o.SkippedAnalyzers, "Scylla Doctor analyzer to skip. Defaults to the ones that call scylladb.com.")
 	flagset.BoolVar(&o.SkipMustGather, "skip-must-gather", o.SkipMustGather, "Don't collect Kubernetes objects and logs.")
@@ -149,6 +152,9 @@ func (o *DiagnoseOptions) Validate() error {
 	case corev1.PullAlways, corev1.PullIfNotPresent, corev1.PullNever:
 	default:
 		errs = append(errs, fmt.Errorf("unknown --bundle-pull-policy %q", o.BundlePullPolicy))
+	}
+	if o.SideFilesLimitBytes < 0 {
+		errs = append(errs, fmt.Errorf("--side-files-limit-bytes can't be negative"))
 	}
 	if o.Parallelism < 1 {
 		errs = append(errs, fmt.Errorf("--parallelism must be at least 1"))
@@ -201,6 +207,7 @@ func (o *DiagnoseOptions) Run(originalStreams genericclioptions.IOStreams, cmd *
 		AnalysisMemory:       o.AnalysisMemory,
 		CQLCredentialsSecret: o.CQLCredentialsSecret,
 		NodeTimeout:          o.NodeTimeout,
+		SideFilesLimitBytes:  o.SideFilesLimitBytes,
 		Parallelism:          o.Parallelism,
 		SkippedAnalyzers:     o.SkippedAnalyzers,
 	}
