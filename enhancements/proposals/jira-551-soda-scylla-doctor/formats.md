@@ -83,7 +83,8 @@ kubernetes/
 
 - **YAML:** manifests carry `apiVersion` and `kind` and leave out `managedFields`.
 - **Events:** each events file is a `v1` `List`, oldest first.
-- **Logs:** each log is limited by `--log-limit-bytes` and carries timestamps.
+- **Logs:** each log carries timestamps. `--log-tail-lines` keeps only the newest lines; the API's byte limit is
+  not used because it keeps the oldest.
 - **Secrets are never collected.** ConfigMaps owned by the cluster are, as in must-gather; any redaction rules
   should apply to them and to logs.
 - **Pointers from vitals:** every file is listed in its collector's `data.files` with its archive path, size and

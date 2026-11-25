@@ -93,7 +93,7 @@ apply it. The Job's comments show how to copy the archive out.
 
 ### Useful flags
 
-`--node-timeout`, `--parallelism`, `--side-files-limit-bytes`, `--log-limit-bytes`, `--operator-namespace`,
+`--node-timeout`, `--parallelism`, `--side-files-limit-bytes`, `--log-tail-lines`, `--operator-namespace`,
 `--skip-analyzer`, `--dest-dir`, `--bundle-pull-secret`,
 `--analysis-memory`, `--keep-running-after`. By default, `ScyllaUpdateAnalyzer` and `DriverVersionAnalyzer` are
 skipped because they call scylladb.com, so analysis works without internet access.
@@ -119,7 +119,8 @@ skipped because they call scylladb.com, so analysis works without internet acces
 
 ## What was validated (kind, ScyllaDB 2026.3.3, three nodes with CQL authentication)
 
-- **Workstation mode as the `soda` ServiceAccount:** all three nodes collected, 40 s end to end, a 3.1 MB archive.
+- **Workstation mode as the `soda` ServiceAccount:** all three nodes collected, 42–43 s end to end, a 3.6 MB archive
+  (3.1 MB before the scoped Kubernetes collection).
   Node 1's Scylla Doctor statuses are identical to the spike's exec baseline: 50 passed, 21 skipped, 3 failed.
 - **In-cluster Job:** the same results; the archive was copied out of the Pod with `kubectl cp`.
 - **The combined report:**
@@ -135,6 +136,11 @@ skipped because they call scylladb.com, so analysis works without internet acces
     SKIPPED, naming the manifest to apply, and the storage collector listed the PersistentVolume as not allowed.
   - With both optional manifests, everything was collected, including both operator Pods' logs.
   - `ScyllaClusterAnalyzer` passed. The in-cluster Job produced the same layout.
+  - `--log-tail-lines 100` kept the newest 100 lines of each log. The API's byte limit would have kept the oldest.
+  - The archive's `kubernetes/` tree was scanned for private keys, auth tokens, passwords and token-like values; none
+    were found. The only certificates are the public CA certificates in the cluster's CA ConfigMaps.
+  - The wrong-password test was rerun after this change, with the same result; the interrupt and side-file tests
+    were not.
 - **Wrong CQL password:** every node is reported as Degraded, and SODA's first failure names the cause ("calling cqlsh
   failed, please check cql authentication configuration"). The run still completes.
 - **Interrupted mid-collection (SIGINT):**
@@ -156,8 +162,12 @@ skipped because they call scylladb.com, so analysis works without internet acces
 - **Collection scope:** NodeConfigs and node tuning, the NodeConfig daemons' logs and Scylla Manager aren't
   collected yet. Like the operator, they need the optional read roles.
 - **Production-like clusters:** nothing ran on GKE or OpenShift in this PoC; everything above is kind.
-- **Cluster-scoped Kubernetes vitals:** SODA's collectors are per node. A proposal for cluster-scoped ones is in
-  [formats.md](formats.md).
+- **Credentials that expire mid-run:** in one run the workstation was suspended past the ServiceAccount token's
+  lifetime. SODA could no longer reach its analysis Pod or delete it. The Pod ended itself at its deadline
+  (`--analysis-pod-timeout`), but the Failed Pod object stayed until an admin deleted it. Nothing was left in the
+  scylla containers. Use tokens that outlive the run, or clean up Pods labelled `app.kubernetes.io/name=soda`.
+- **Kubernetes collection runs one node at a time,** each collector bounded by 5 minutes, and logs are complete
+  unless `--log-tail-lines` is set. Its time grows with the cluster; only three nodes were measured.
 - **Air gap:** analysis skips the two analyzers that call scylladb.com; collection makes no external calls beyond
   the cloud metadata probes Scylla Doctor does.
 
