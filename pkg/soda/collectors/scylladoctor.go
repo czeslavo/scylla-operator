@@ -144,20 +144,16 @@ func CollectScyllaDoctor(ctx context.Context, execer *kube.Execer, pod *corev1.P
 		return fail(vitals.NodeCollectionFailed, fmt.Sprintf("Scylla Doctor's vitals don't parse: %v", err))
 	}
 
-	// 5. Judge by the checks everything depends on; exit codes can't tell.
-	var reasons []string
+	// 5. Judge by the checks everything depends on; exit codes can't tell. Each one depends on the previous, so the
+	// first that didn't pass is the root cause (later messages list prerequisites in no stable order).
 	for _, c := range keyScyllaDoctorCollectors {
 		r, ok := out.Vitals[c]
 		if !ok {
-			reasons = append(reasons, c+" is missing")
-			continue
+			return fail(vitals.NodeCollectionDegraded, c+" is missing")
 		}
 		if r.Status != vitals.CollectorPassed {
-			reasons = append(reasons, fmt.Sprintf("%s %s: %s", c, r.Status, r.Message))
+			return fail(vitals.NodeCollectionDegraded, fmt.Sprintf("%s %s: %s", c, r.Status, r.Message))
 		}
-	}
-	if len(reasons) > 0 {
-		return fail(vitals.NodeCollectionDegraded, strings.Join(reasons, "; "))
 	}
 	return fail(vitals.NodeCollectionSucceeded, "")
 }
