@@ -42,7 +42,7 @@ Problems that don't stop a collector, such as one PersistentVolume it may not re
 **Why separate files and not extra entries in Scylla Doctor's.** Scylla Doctor and Scylla Doctor Cluster refuse
 vitals without their `SDVersionCollector`. That was checked with Scylla Doctor 1.15: Scylla Doctor Cluster reports a
 version mismatch, and `--load-vitals` raises. Writing a fake `SDVersionCollector` would be wrong, and editing Scylla
-Doctor's files would break support tooling (Iliad imports them as they are). So SODA has its own files in the same
+Doctor's files would break support tooling that imports them as they are. So SODA has its own files in the same
 format, under the same node names (the Pod name, which is also the stem of Scylla Doctor's vitals file).
 
 **Proposed extension, backward compatible.** A vitals file may hold a source collector other than
