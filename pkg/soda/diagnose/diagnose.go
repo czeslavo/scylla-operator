@@ -40,6 +40,10 @@ import (
 	"k8s.io/klog/v2"
 )
 
+// kubernetesCollectorTimeout bounds one Kubernetes collector, log streams included, so a stuck call can't hang
+// the run.
+const kubernetesCollectorTimeout = 5 * time.Minute
+
 // DefaultSkippedAnalyzers call scylladb.com during analysis; they are skipped so analysis works without internet.
 var DefaultSkippedAnalyzers = []string{"ScyllaUpdateAnalyzer", "DriverVersionAnalyzer"}
 
@@ -69,8 +73,8 @@ type Options struct {
 
 	// OperatorNamespace is where the operator runs, for the operator collector.
 	OperatorNamespace string
-	// LogsLimitBytes caps each container log SODA copies; 0 means no limit.
-	LogsLimitBytes int64
+	// LogsTailLines keeps only the newest lines of each container log SODA copies; 0 keeps everything.
+	LogsTailLines int64
 }
 
 type Result struct {
@@ -226,10 +230,13 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 		ScyllaClient:      o.ScyllaClient,
 		Namespace:         o.Namespace,
 		OperatorNamespace: o.OperatorNamespace,
-		LogsLimitBytes:    o.LogsLimitBytes,
+		LogsTailLines:     o.LogsTailLines,
 		ArchiveRoot:       o.DestDir,
 	}
-	if evs, err := o.KubeClient.CoreV1().Events(o.Namespace).List(ctx, metav1.ListOptions{}); err != nil {
+	ectx, ecancel := context.WithTimeout(ctx, time.Minute)
+	evs, err := o.KubeClient.CoreV1().Events(o.Namespace).List(ectx, metav1.ListOptions{})
+	ecancel()
+	if err != nil {
 		addErr("can't list events in %s: %v", o.Namespace, err)
 	} else {
 		env.Events = evs.Items
@@ -257,7 +264,9 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 
 		sv := collectors.SODAVitals(out, c)
 		for _, kc := range k8s.NodeCollectors() {
-			sv[kc.Name()] = kc.Collect(ctx, env, out.Pod)
+			cctx, cancel := context.WithTimeout(ctx, kubernetesCollectorTimeout)
+			sv[kc.Name()] = kc.Collect(cctx, env, out.Pod)
+			cancel()
 		}
 		sodaVitals[out.Name] = sv
 		rel := filepath.Join(sodaVitalsDir, out.Name+".vitals.json")
@@ -289,7 +298,9 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 	klog.InfoS("Collecting cluster-scoped Kubernetes vitals")
 	clusterVitals := vitals.Vitals{collectors.SODAVersionCollector: collectors.VersionResult()}
 	for _, kc := range k8s.ClusterCollectors() {
-		clusterVitals[kc.Name()] = kc.Collect(ctx, env, sc)
+		cctx, cancel := context.WithTimeout(ctx, kubernetesCollectorTimeout)
+		clusterVitals[kc.Name()] = kc.Collect(cctx, env, sc)
+		cancel()
 	}
 	sodaVitals[k8s.ClusterScope] = clusterVitals
 	rel := filepath.Join(sodaVitalsDir, k8s.ClusterScope+".vitals.json")

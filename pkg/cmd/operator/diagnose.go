@@ -57,7 +57,7 @@ type DiagnoseOptions struct {
 	ConfigFlags *kgenericclioptions.ConfigFlags
 
 	DestDir              string
-	LogsLimitBytes       int64
+	LogsTailLines        int64
 	OperatorNamespace    string
 	ClusterName          string
 	BundleImage          string
@@ -108,7 +108,7 @@ func NewDiagnoseOptions(streams genericclioptions.IOStreams) *DiagnoseOptions {
 func (o *DiagnoseOptions) AddFlags(flagset *pflag.FlagSet) {
 	o.ConfigFlags.AddFlags(flagset)
 	flagset.StringVar(&o.DestDir, "dest-dir", o.DestDir, "Directory for the results; it must not exist or be empty. Defaults to scylla-operator-diagnose-<random>.")
-	flagset.Int64Var(&o.LogsLimitBytes, "log-limit-bytes", o.LogsLimitBytes, "Maximum bytes collected per container log; 0 means unlimited.")
+	flagset.Int64Var(&o.LogsTailLines, "log-tail-lines", o.LogsTailLines, "Keep only the newest lines of each container log; 0 keeps everything.")
 	flagset.StringVar(&o.OperatorNamespace, "operator-namespace", o.OperatorNamespace, "Namespace the operator runs in, for its configuration and logs.")
 	flagset.StringVar(&o.ClusterName, "scylla-cluster", o.ClusterName, "Name of the ScyllaCluster to diagnose, in the namespace given by --namespace. (--cluster is kubeconfig's.)")
 	flagset.StringVar(&o.BundleImage, "bundle-image", o.BundleImage, "Scylla Doctor bundle image. SODA starts a short-lived analysis Pod from it.")
@@ -154,8 +154,8 @@ func NewDiagnoseCmd(streams genericclioptions.IOStreams) *cobra.Command {
 
 func (o *DiagnoseOptions) Validate() error {
 	var errs []error
-	if o.LogsLimitBytes < 0 {
-		errs = append(errs, fmt.Errorf("--log-limit-bytes can't be negative"))
+	if o.LogsTailLines < 0 {
+		errs = append(errs, fmt.Errorf("--log-tail-lines can't be negative"))
 	}
 	if len(o.DestDir) > 0 {
 		if entries, err := os.ReadDir(o.DestDir); err == nil && len(entries) > 0 {
@@ -240,7 +240,7 @@ func (o *DiagnoseOptions) Run(originalStreams genericclioptions.IOStreams, cmd *
 		ClusterName:          o.ClusterName,
 		DestDir:              o.DestDir,
 		OperatorNamespace:    o.OperatorNamespace,
-		LogsLimitBytes:       o.LogsLimitBytes,
+		LogsTailLines:        o.LogsTailLines,
 		BundleDir:            o.BundleDir,
 		BundlePython:         o.BundlePython,
 		BundleImage:          o.BundleImage,

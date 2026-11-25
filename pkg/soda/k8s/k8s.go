@@ -47,8 +47,9 @@ type Env struct {
 	ScyllaClient      scyllaversioned.Interface
 	Namespace         string
 	OperatorNamespace string
-	LogsLimitBytes    int64
-	ArchiveRoot       string
+	// LogsTailLines keeps only the newest lines of each log; 0 keeps everything.
+	LogsTailLines int64
+	ArchiveRoot   string
 	// Events are the namespace's events, listed once; nil when they couldn't be listed.
 	Events []corev1.Event
 }

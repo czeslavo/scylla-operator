@@ -89,11 +89,12 @@ func writeLog(ctx context.Context, env *Env, f *files, pod *corev1.Pod, containe
 	return writePodLog(ctx, env, f, pod.Namespace, pod.Name, container, previous, "logs/"+name)
 }
 
-// writePodLog streams a container's log into the archive, limited by --log-limit-bytes.
+// writePodLog streams a container's log into the archive. With --log-tail-lines it keeps the newest lines: the
+// API's limitBytes would keep the oldest and drop the ones a diagnosis needs most.
 func writePodLog(ctx context.Context, env *Env, f *files, namespace, pod, container string, previous bool, rel string) error {
 	opts := &corev1.PodLogOptions{Container: container, Previous: previous, Timestamps: true}
-	if env.LogsLimitBytes > 0 {
-		opts.LimitBytes = &env.LogsLimitBytes
+	if env.LogsTailLines > 0 {
+		opts.TailLines = &env.LogsTailLines
 	}
 	stream, err := env.KubeClient.CoreV1().Pods(namespace).GetLogs(pod, opts).Stream(ctx)
 	if err != nil {
