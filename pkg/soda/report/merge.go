@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/scylladb/scylla-operator/pkg/soda/k8s"
 	"github.com/scylladb/scylla-operator/pkg/soda/vitals"
 )
 
@@ -22,9 +23,13 @@ type NodeInput struct {
 	SODAAnalysis vitals.Analysis
 }
 
-// Merge returns the combined report. sdReport may be nil when Scylla Doctor Cluster didn't run; vitalsPaths are the
-// archive-relative paths of every vitals file the report is based on.
-func Merge(sdReport *vitals.ClusterReport, nodes []NodeInput, vitalsPaths []string, ext vitals.SODAExtension) *vitals.ClusterReport {
+// ClusterScope is the "node" name cluster-scoped findings are attributed to, so they keep the report's
+// {message: [nodes]} shape.
+const ClusterScope = k8s.ClusterScope
+
+// Merge returns the combined report. sdReport may be nil when Scylla Doctor Cluster didn't run; clusterAnalysis
+// holds SODA's cluster-scoped results; vitalsPaths are the archive-relative paths of every vitals file used.
+func Merge(sdReport *vitals.ClusterReport, nodes []NodeInput, clusterAnalysis vitals.Analysis, vitalsPaths []string, ext vitals.SODAExtension) *vitals.ClusterReport {
 	out := &vitals.ClusterReport{
 		Vitals:          append([]string{}, vitalsPaths...),
 		Failures:        vitals.Findings{},
@@ -74,6 +79,17 @@ func Merge(sdReport *vitals.ClusterReport, nodes []NodeInput, vitalsPaths []stri
 				out.Warnings.AddFinding(a, r.Message, node)
 				sources[a] = vitals.SourceSODA
 			}
+		}
+	}
+
+	for a, r := range clusterAnalysis {
+		switch r.Status {
+		case vitals.AnalyzerFailed:
+			out.Failures.AddFinding(a, r.Message, ClusterScope)
+			sources[a] = vitals.SourceSODA
+		case vitals.AnalyzerWarning:
+			out.Warnings.AddFinding(a, r.Message, ClusterScope)
+			sources[a] = vitals.SourceSODA
 		}
 	}
 

@@ -2,7 +2,7 @@
 //
 //  1. find the ScyllaDB Pods;
 //  2. on each, check the runtime contract and run Scylla Doctor inside the scylla container over exec;
-//  3. collect SODA's Kubernetes-side vitals and a must-gather dump;
+//  3. collect Kubernetes objects, logs and vitals, per node and for the cluster;
 //  4. analyze in the Scylla Doctor bundle (per-node analysis, Scylla Doctor Cluster) and with SODA's analyzers;
 //  5. write the combined report, its HTML rendering and an archive.
 //
@@ -26,6 +26,7 @@ import (
 	"github.com/scylladb/scylla-operator/pkg/soda/analyzers"
 	"github.com/scylladb/scylla-operator/pkg/soda/collectors"
 	"github.com/scylladb/scylla-operator/pkg/soda/contract"
+	"github.com/scylladb/scylla-operator/pkg/soda/k8s"
 	"github.com/scylladb/scylla-operator/pkg/soda/kube"
 	"github.com/scylladb/scylla-operator/pkg/soda/report"
 	"github.com/scylladb/scylla-operator/pkg/soda/runtime"
@@ -66,8 +67,10 @@ type Options struct {
 	Parallelism          int
 	SkippedAnalyzers     []string
 
-	// MustGather dumps Kubernetes objects and logs into a directory; nil skips it.
-	MustGather func(ctx context.Context, destDir string) error
+	// OperatorNamespace is where the operator runs, for the operator collector.
+	OperatorNamespace string
+	// LogsLimitBytes caps each container log SODA copies; 0 means no limit.
+	LogsLimitBytes int64
 }
 
 type Result struct {
@@ -90,7 +93,7 @@ const (
 	sdFilesDir     = "scylla-doctor/files"
 	sodaVitalsDir  = "soda/vitals"
 	sodaAnalysis   = "soda/analysis"
-	mustGatherDir  = "kubernetes/must-gather"
+	kubernetesDir  = "kubernetes"
 	reportDir      = "report"
 	manifestFile   = "manifest.json"
 	reportJSONFile = "report/soda-report.json"
@@ -121,7 +124,7 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 		runErrors = append(runErrors, msg)
 	}
 	path := func(rel ...string) string { return filepath.Join(append([]string{o.DestDir}, rel...)...) }
-	for _, d := range []string{sdVitalsDir, sdAnalysisDir, sdClusterDir, sdRunsDir, sodaVitalsDir, sodaAnalysis, reportDir} {
+	for _, d := range []string{sdVitalsDir, sdAnalysisDir, sdClusterDir, sdRunsDir, sodaVitalsDir, sodaAnalysis, kubernetesDir, reportDir} {
 		if err := os.MkdirAll(path(d), 0o755); err != nil {
 			return nil, err
 		}
@@ -217,6 +220,21 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 	}
 	wg.Wait()
 
+	// Kubernetes-side collection shares the namespace's events, listed once.
+	env := &k8s.Env{
+		KubeClient:        o.KubeClient,
+		ScyllaClient:      o.ScyllaClient,
+		Namespace:         o.Namespace,
+		OperatorNamespace: o.OperatorNamespace,
+		LogsLimitBytes:    o.LogsLimitBytes,
+		ArchiveRoot:       o.DestDir,
+	}
+	if evs, err := o.KubeClient.CoreV1().Events(o.Namespace).List(ctx, metav1.ListOptions{}); err != nil {
+		addErr("can't list events in %s: %v", o.Namespace, err)
+	} else {
+		env.Events = evs.Items
+	}
+
 	// 4. Write per-node outputs. Scylla Doctor's vitals are written byte-for-byte as it produced them.
 	sodaVitals := map[string]vitals.Vitals{}
 	nodeInputs := make([]report.NodeInput, 0, len(outputs))
@@ -238,13 +256,16 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 		}
 
 		sv := collectors.SODAVitals(out, c)
+		for _, kc := range k8s.NodeCollectors() {
+			sv[kc.Name()] = kc.Collect(ctx, env, out.Pod)
+		}
 		sodaVitals[out.Name] = sv
 		rel := filepath.Join(sodaVitalsDir, out.Name+".vitals.json")
 		if err := vitals.WriteJSONFile(path(rel), sv); err != nil {
 			return nil, err
 		}
 		vitalsPaths = append(vitalsPaths, rel)
-		sa := analyzers.Run(sv)
+		sa := analyzers.RunNode(sv)
 		if err := vitals.WriteJSONFile(path(sodaAnalysis, out.Name+".analysis.json"), sa); err != nil {
 			return nil, err
 		}
@@ -264,15 +285,21 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 		nodeInputs = append(nodeInputs, report.NodeInput{Summary: summary, SODAAnalysis: sa})
 	}
 
-	// 5. Kubernetes objects and logs.
-	if o.MustGather != nil {
-		klog.InfoS("Collecting Kubernetes objects and logs (must-gather)")
-		if err := os.MkdirAll(path(mustGatherDir), 0o755); err != nil {
-			return nil, err
-		}
-		if err := o.MustGather(ctx, path(mustGatherDir)); err != nil {
-			addErr("must-gather: %v", err)
-		}
+	// 5. Cluster-scoped Kubernetes vitals, written like a node's under the name _cluster.
+	klog.InfoS("Collecting cluster-scoped Kubernetes vitals")
+	clusterVitals := vitals.Vitals{collectors.SODAVersionCollector: collectors.VersionResult()}
+	for _, kc := range k8s.ClusterCollectors() {
+		clusterVitals[kc.Name()] = kc.Collect(ctx, env, sc)
+	}
+	sodaVitals[k8s.ClusterScope] = clusterVitals
+	rel := filepath.Join(sodaVitalsDir, k8s.ClusterScope+".vitals.json")
+	if err := vitals.WriteJSONFile(path(rel), clusterVitals); err != nil {
+		return nil, err
+	}
+	vitalsPaths = append(vitalsPaths, rel)
+	clusterAnalysis := analyzers.RunCluster(clusterVitals)
+	if err := vitals.WriteJSONFile(path(sodaAnalysis, k8s.ClusterScope+".analysis.json"), clusterAnalysis); err != nil {
+		return nil, err
 	}
 
 	// 6. Scylla Doctor analysis in the bundle runtime.
@@ -341,7 +368,7 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 		SkippedAnalyzers:    skips,
 		Errors:              runErrors,
 	}
-	combined := report.Merge(sdReport, nodeInputs, vitalsPaths, ext)
+	combined := report.Merge(sdReport, nodeInputs, clusterAnalysis, vitalsPaths, ext)
 	if err := vitals.WriteJSONFile(path(reportJSONFile), combined); err != nil {
 		return nil, err
 	}
@@ -365,16 +392,17 @@ func Run(ctx context.Context, o Options) (*Result, error) {
 		Nodes:           combined.SODA.Nodes,
 		Errors:          runErrors,
 		Layout: map[string]string{
-			sdVitalsDir:    "Scylla Doctor per-node vitals, unchanged (<node>.vitals.json)",
-			sdAnalysisDir:  "Scylla Doctor per-node analysis (--load-vitals --output json)",
-			sdClusterDir:   "Scylla Doctor Cluster report (--output json) and its stderr",
-			sdRunsDir:      "Scylla Doctor's console output per node",
-			sdFilesDir:     "files Scylla Doctor wrote next to its vitals, per node (listed in nodes[].files)",
-			sodaVitalsDir:  "SODA's per-node vitals, in Scylla Doctor's vitals format",
-			sodaAnalysis:   "SODA's per-node analysis, in Scylla Doctor's analysis format",
-			mustGatherDir:  "Kubernetes objects and logs (scylla-operator must-gather)",
-			reportJSONFile: "combined report: Scylla Doctor Cluster's format plus a `soda` key",
-			reportHTMLFile: "the combined report for people",
+			sdVitalsDir:               "Scylla Doctor per-node vitals, unchanged (<node>.vitals.json)",
+			sdAnalysisDir:             "Scylla Doctor per-node analysis (--load-vitals --output json)",
+			sdClusterDir:              "Scylla Doctor Cluster report (--output json) and its stderr",
+			sdRunsDir:                 "Scylla Doctor's console output per node",
+			sdFilesDir:                "files Scylla Doctor wrote next to its vitals, per node (listed in nodes[].files)",
+			sodaVitalsDir:             "SODA's per-node vitals, in Scylla Doctor's vitals format",
+			sodaAnalysis:              "SODA's per-node analysis, in Scylla Doctor's analysis format",
+			"kubernetes/cluster":      "Kubernetes objects and logs of the ScyllaCluster as a whole and of the operator",
+			"kubernetes/nodes/<node>": "Kubernetes objects and logs of one ScyllaDB node: Pod, member Service, logs, events, storage, Kubernetes Node",
+			reportJSONFile:            "combined report: Scylla Doctor Cluster's format plus a `soda` key",
+			reportHTMLFile:            "the combined report for people",
 		},
 	}
 	if err := vitals.WriteJSONFile(path(manifestFile), m); err != nil {

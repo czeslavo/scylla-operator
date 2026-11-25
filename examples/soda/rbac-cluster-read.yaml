@@ -1,0 +1,27 @@
+# Optional: cluster-scoped reads for SODA's Kubernetes collectors (proof of concept). Without it, SODA skips the
+# Kubernetes Node and PersistentVolume of each ScyllaDB node and the ScyllaOperatorConfig, and says so in the report.
+# Replace the ServiceAccount's namespace "scylla".
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: soda-cluster-read
+rules:
+- apiGroups: [""]
+  resources: ["nodes", "persistentvolumes"]
+  verbs: ["get"]
+- apiGroups: ["scylla.scylladb.com"]
+  resources: ["scyllaoperatorconfigs"]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: soda-cluster-read
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: soda-cluster-read
+subjects:
+- kind: ServiceAccount
+  name: soda
+  namespace: scylla

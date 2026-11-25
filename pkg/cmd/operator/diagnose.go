@@ -2,21 +2,27 @@ package operator
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"time"
 
 	scyllaversioned "github.com/scylladb/scylla-operator/pkg/client/scylla/clientset/versioned"
-	"github.com/scylladb/scylla-operator/pkg/gather/collect"
+	"github.com/scylladb/scylla-operator/pkg/cmdutil"
 	"github.com/scylladb/scylla-operator/pkg/genericclioptions"
 	"github.com/scylladb/scylla-operator/pkg/signals"
 	"github.com/scylladb/scylla-operator/pkg/soda/diagnose"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	apimachineryutilerrors "k8s.io/apimachinery/pkg/util/errors"
+	apimachineryutilrand "k8s.io/apimachinery/pkg/util/rand"
+	kgenericclioptions "k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	cliflag "k8s.io/component-base/cli/flag"
 	"k8s.io/klog/v2"
 	"k8s.io/kubectl/pkg/util/templates"
 )
@@ -25,8 +31,8 @@ var (
 	diagnoseLongDescription = templates.LongDesc(`
 		diagnose runs SODA (Scylla Operator Diagnostic Automation) against one ScyllaCluster.
 
-		It runs Scylla Doctor inside every ScyllaDB node's scylla container over exec, collects Kubernetes-side
-		vitals and a must-gather dump, analyzes everything with Scylla Doctor, Scylla Doctor Cluster and SODA's own
+		It runs Scylla Doctor inside every ScyllaDB node's scylla container over exec, collects Kubernetes objects,
+		logs and vitals per node and for the cluster, analyzes everything with Scylla Doctor, Scylla Doctor Cluster and SODA's own
 		analyzers, and writes an archive with Scylla Doctor's outputs, a combined report and an HTML report.
 
 		Scylla Doctor comes from its bundle image. From a workstation, pass --bundle-image: SODA starts a short-lived
@@ -48,8 +54,11 @@ var (
 )
 
 type DiagnoseOptions struct {
-	*GatherBaseOptions
+	ConfigFlags *kgenericclioptions.ConfigFlags
 
+	DestDir              string
+	LogsLimitBytes       int64
+	OperatorNamespace    string
 	ClusterName          string
 	BundleImage          string
 	BundleDir            string
@@ -63,10 +72,11 @@ type DiagnoseOptions struct {
 	SideFilesLimitBytes  int64
 	Parallelism          int
 	SkippedAnalyzers     []string
-	SkipMustGather       bool
 	Archive              bool
 	KeepRunningAfter     time.Duration
 
+	restConfig   *rest.Config
+	kubeClient   kubernetes.Interface
 	scyllaClient scyllaversioned.Interface
 	namespace    string
 }
@@ -77,7 +87,11 @@ func NewDiagnoseOptions(streams genericclioptions.IOStreams) *DiagnoseOptions {
 		python = "python3"
 	}
 	return &DiagnoseOptions{
-		GatherBaseOptions:   NewGatherBaseOptions("scylla-operator-diagnose"),
+		ConfigFlags: kgenericclioptions.NewConfigFlags(true).WithWrapConfigFn(func(c *rest.Config) *rest.Config {
+			c.UserAgent = genericclioptions.MakeVersionedUserAgent("scylla-operator-diagnose")
+			return c
+		}),
+		OperatorNamespace:   "scylla-operator",
 		BundleDir:           os.Getenv("SCYLLA_DOCTOR_BUNDLE_DIR"),
 		BundlePython:        python,
 		BundlePullPolicy:    string(corev1.PullIfNotPresent),
@@ -92,7 +106,10 @@ func NewDiagnoseOptions(streams genericclioptions.IOStreams) *DiagnoseOptions {
 }
 
 func (o *DiagnoseOptions) AddFlags(flagset *pflag.FlagSet) {
-	o.GatherBaseOptions.AddFlags(flagset)
+	o.ConfigFlags.AddFlags(flagset)
+	flagset.StringVar(&o.DestDir, "dest-dir", o.DestDir, "Directory for the results; it must not exist or be empty. Defaults to scylla-operator-diagnose-<random>.")
+	flagset.Int64Var(&o.LogsLimitBytes, "log-limit-bytes", o.LogsLimitBytes, "Maximum bytes collected per container log; 0 means unlimited.")
+	flagset.StringVar(&o.OperatorNamespace, "operator-namespace", o.OperatorNamespace, "Namespace the operator runs in, for its configuration and logs.")
 	flagset.StringVar(&o.ClusterName, "scylla-cluster", o.ClusterName, "Name of the ScyllaCluster to diagnose, in the namespace given by --namespace. (--cluster is kubeconfig's.)")
 	flagset.StringVar(&o.BundleImage, "bundle-image", o.BundleImage, "Scylla Doctor bundle image. SODA starts a short-lived analysis Pod from it.")
 	flagset.StringVar(&o.BundleDir, "bundle-dir", o.BundleDir, "Local Scylla Doctor bundle directory, when SODA runs inside the bundle image. Defaults to $SCYLLA_DOCTOR_BUNDLE_DIR.")
@@ -106,7 +123,6 @@ func (o *DiagnoseOptions) AddFlags(flagset *pflag.FlagSet) {
 	flagset.Int64Var(&o.SideFilesLimitBytes, "side-files-limit-bytes", o.SideFilesLimitBytes, "Maximum total size of the files Scylla Doctor writes next to its vitals (such as logs) copied per node.")
 	flagset.IntVar(&o.Parallelism, "parallelism", o.Parallelism, "How many nodes are collected at the same time.")
 	flagset.StringArrayVar(&o.SkippedAnalyzers, "skip-analyzer", o.SkippedAnalyzers, "Scylla Doctor analyzer to skip. Defaults to the ones that call scylladb.com.")
-	flagset.BoolVar(&o.SkipMustGather, "skip-must-gather", o.SkipMustGather, "Don't collect Kubernetes objects and logs.")
 	flagset.BoolVar(&o.Archive, "archive", o.Archive, "Pack the destination directory into <dest-dir>.tar.gz.")
 	flagset.DurationVar(&o.KeepRunningAfter, "keep-running-after", o.KeepRunningAfter, "Keep running this long after finishing, so the archive can be copied out of a Job's Pod.")
 }
@@ -138,7 +154,14 @@ func NewDiagnoseCmd(streams genericclioptions.IOStreams) *cobra.Command {
 
 func (o *DiagnoseOptions) Validate() error {
 	var errs []error
-	errs = append(errs, o.GatherBaseOptions.Validate())
+	if o.LogsLimitBytes < 0 {
+		errs = append(errs, fmt.Errorf("--log-limit-bytes can't be negative"))
+	}
+	if len(o.DestDir) > 0 {
+		if entries, err := os.ReadDir(o.DestDir); err == nil && len(entries) > 0 {
+			errs = append(errs, fmt.Errorf("destination directory %q is not empty", o.DestDir))
+		}
+	}
 	if len(o.ClusterName) == 0 {
 		errs = append(errs, fmt.Errorf("--scylla-cluster is required"))
 	}
@@ -163,10 +186,15 @@ func (o *DiagnoseOptions) Validate() error {
 }
 
 func (o *DiagnoseOptions) Complete() error {
-	if err := o.GatherBaseOptions.Complete(); err != nil {
-		return err
-	}
 	var err error
+	o.restConfig, err = o.ConfigFlags.ToRESTConfig()
+	if err != nil {
+		return fmt.Errorf("can't create RESTConfig: %w", err)
+	}
+	o.kubeClient, err = kubernetes.NewForConfig(o.restConfig)
+	if err != nil {
+		return fmt.Errorf("can't build kubernetes clientset: %w", err)
+	}
 	o.scyllaClient, err = scyllaversioned.NewForConfig(o.restConfig)
 	if err != nil {
 		return fmt.Errorf("can't build scylla clientset: %w", err)
@@ -179,9 +207,22 @@ func (o *DiagnoseOptions) Complete() error {
 }
 
 func (o *DiagnoseOptions) Run(originalStreams genericclioptions.IOStreams, cmd *cobra.Command) error {
-	if err := o.GatherBaseOptions.RunInit(originalStreams, cmd); err != nil {
-		return err
+	if len(o.DestDir) == 0 {
+		o.DestDir = "scylla-operator-diagnose-" + apimachineryutilrand.String(12)
 	}
+	if err := os.MkdirAll(o.DestDir, 0o770); err != nil {
+		return fmt.Errorf("can't create destination directory %q: %w", o.DestDir, err)
+	}
+	// Log to stderr and to a file that goes into the archive.
+	for k, v := range map[string]string{"logtostderr": "false", "alsologtostderr": "true",
+		"log_file": filepath.Join(o.DestDir, "scylla-operator-diagnose.log")} {
+		if err := flag.Set(k, v); err != nil {
+			return fmt.Errorf("can't set %s flag: %w", k, err)
+		}
+	}
+	flag.Parse()
+	cmdutil.LogCommandStarting(cmd)
+	cliflag.PrintFlags(cmd.Flags())
 
 	stopCh := signals.StopChannel()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -197,7 +238,9 @@ func (o *DiagnoseOptions) Run(originalStreams genericclioptions.IOStreams, cmd *
 		ScyllaClient:         o.scyllaClient,
 		Namespace:            o.namespace,
 		ClusterName:          o.ClusterName,
-		DestDir:              o.cliFlags.DestDir,
+		DestDir:              o.DestDir,
+		OperatorNamespace:    o.OperatorNamespace,
+		LogsLimitBytes:       o.LogsLimitBytes,
 		BundleDir:            o.BundleDir,
 		BundlePython:         o.BundlePython,
 		BundleImage:          o.BundleImage,
@@ -210,9 +253,6 @@ func (o *DiagnoseOptions) Run(originalStreams genericclioptions.IOStreams, cmd *
 		SideFilesLimitBytes:  o.SideFilesLimitBytes,
 		Parallelism:          o.Parallelism,
 		SkippedAnalyzers:     o.SkippedAnalyzers,
-	}
-	if !o.SkipMustGather {
-		opts.MustGather = o.mustGather
 	}
 
 	res, err := diagnose.Run(ctx, opts)
@@ -236,7 +276,7 @@ func (o *DiagnoseOptions) Run(originalStreams genericclioptions.IOStreams, cmd *
 	}
 
 	if o.Archive {
-		archive, err := diagnose.CreateArchive(o.cliFlags.DestDir)
+		archive, err := diagnose.CreateArchive(o.DestDir)
 		if err != nil {
 			return fmt.Errorf("can't create the archive: %w", err)
 		}
@@ -251,29 +291,4 @@ func (o *DiagnoseOptions) Run(originalStreams genericclioptions.IOStreams, cmd *
 		}
 	}
 	return nil
-}
-
-// mustGather collects the ScyllaCluster and everything in its namespace, the way must-gather does.
-func (o *DiagnoseOptions) mustGather(ctx context.Context, destDir string) error {
-	discoverer := collect.NewResourceDiscoverer(o.cliFlags.IncludeSensitiveResources, o.discoveryClient)
-	resources, err := discoverer.DiscoverResources(o.resourcesToExclude...)
-	if err != nil {
-		return fmt.Errorf("can't discover resources: %w", err)
-	}
-	collector := collect.NewCollector(
-		destDir,
-		o.GetPrinters(),
-		o.restConfig,
-		resources,
-		o.kubeClient.CoreV1(),
-		o.dynamicClient,
-		true,
-		true,
-		o.cliFlags.LogsLimitBytes,
-	)
-	ri, err := findResource(resources, schema.GroupResource{Group: "scylla.scylladb.com", Resource: "scyllaclusters"})
-	if err != nil {
-		return err
-	}
-	return collector.CollectResourceObject(ctx, ri, o.namespace, o.ClusterName)
 }

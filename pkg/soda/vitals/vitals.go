@@ -138,6 +138,13 @@ type NodeSummary struct {
 	Files          []SideFile     `json:"files,omitempty"`
 }
 
+// FileRef points from a vitals entry (data.files) to a file in the archive.
+type FileRef struct {
+	Path      string `json:"path"`
+	SizeBytes int64  `json:"sizeBytes"`
+	SHA256    string `json:"sha256"`
+}
+
 // SideFile is a file Scylla Doctor wrote next to its vitals (for example the log collectors' journalctl output),
 // which its vitals only name in a collector's message.
 type SideFile struct {

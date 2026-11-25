@@ -12,6 +12,7 @@ import (
 	"github.com/scylladb/scylla-operator/pkg/naming"
 	"github.com/scylladb/scylla-operator/pkg/soda/collectors"
 	"github.com/scylladb/scylla-operator/pkg/soda/contract"
+	"github.com/scylladb/scylla-operator/pkg/soda/k8s"
 	"github.com/scylladb/scylla-operator/pkg/soda/vitals"
 )
 
@@ -22,18 +23,32 @@ type Analyzer interface {
 	Analyze(v vitals.Vitals) vitals.AnalyzerResult
 }
 
-func All() []Analyzer {
+// NodeAnalyzers judge one node's SODA vitals.
+func NodeAnalyzers() []Analyzer {
 	return []Analyzer{
 		&RuntimeContractAnalyzer{},
 		&PodAnalyzer{},
 	}
 }
 
-// Run applies every analyzer to one node's SODA vitals. Like Scylla Doctor, an analyzer whose collector didn't pass
-// is skipped (collector skipped) or failed (collector failed) with a "Required ..." message.
-func Run(v vitals.Vitals) vitals.Analysis {
+// ClusterAnalyzers judge the cluster-scoped SODA vitals (soda/vitals/_cluster.vitals.json).
+func ClusterAnalyzers() []Analyzer {
+	return []Analyzer{
+		&ScyllaClusterAnalyzer{},
+	}
+}
+
+// RunNode applies the node analyzers to one node's SODA vitals.
+func RunNode(v vitals.Vitals) vitals.Analysis { return run(NodeAnalyzers(), v) }
+
+// RunCluster applies the cluster analyzers to the cluster-scoped SODA vitals.
+func RunCluster(v vitals.Vitals) vitals.Analysis { return run(ClusterAnalyzers(), v) }
+
+// run applies analyzers to vitals. Like Scylla Doctor, an analyzer whose collector didn't pass is skipped
+// (collector skipped) or failed (collector failed) with a "Required ..." message.
+func run(all []Analyzer, v vitals.Vitals) vitals.Analysis {
 	out := vitals.Analysis{}
-	for _, a := range All() {
+	for _, a := range all {
 		res, ok := checkDependencies(a, v)
 		if !ok {
 			out[a.Name()] = res
@@ -121,7 +136,7 @@ type PodAnalyzer struct{}
 
 func (*PodAnalyzer) Name() string        { return "ScyllaDBPodAnalyzer" }
 func (*PodAnalyzer) Description() string { return "ScyllaDB Pod is ready, stable and Guaranteed" }
-func (*PodAnalyzer) DependsOn() []string { return []string{collectors.ScyllaDBPodCollector} }
+func (*PodAnalyzer) DependsOn() []string { return []string{k8s.PodCollectorName} }
 
 func (a *PodAnalyzer) Analyze(v vitals.Vitals) vitals.AnalyzerResult {
 	data, err := decode[struct {
@@ -133,7 +148,7 @@ func (a *PodAnalyzer) Analyze(v vitals.Vitals) vitals.AnalyzerResult {
 			RestartCount          int32  `json:"restartCount"`
 			LastTerminationReason string `json:"lastTerminationReason"`
 		} `json:"containers"`
-	}](v, collectors.ScyllaDBPodCollector)
+	}](v, k8s.PodCollectorName)
 	if err != nil {
 		return vitals.AnalyzerResult{Status: vitals.AnalyzerFailed, Message: fmt.Sprintf("can't read the Pod data: %v", err)}
 	}
@@ -168,5 +183,73 @@ func (a *PodAnalyzer) Analyze(v vitals.Vitals) vitals.AnalyzerResult {
 		return vitals.AnalyzerResult{Status: vitals.AnalyzerWarning, Message: strings.Join(warnings, "; ")}
 	default:
 		return vitals.AnalyzerResult{Status: vitals.AnalyzerPassed, Message: "Pod is ready, Guaranteed and has not restarted"}
+	}
+}
+
+// ScyllaClusterAnalyzer is the example cluster-scoped analyzer: does the operator report the ScyllaCluster as
+// available, settled and not degraded?
+type ScyllaClusterAnalyzer struct{}
+
+func (*ScyllaClusterAnalyzer) Name() string { return "ScyllaClusterAnalyzer" }
+func (*ScyllaClusterAnalyzer) Description() string {
+	return "ScyllaCluster is available, not degraded and has settled"
+}
+func (*ScyllaClusterAnalyzer) DependsOn() []string { return []string{k8s.ScyllaClusterCollectorName} }
+
+func (a *ScyllaClusterAnalyzer) Analyze(v vitals.Vitals) vitals.AnalyzerResult {
+	data, err := decode[struct {
+		Generation         int64 `json:"generation"`
+		ObservedGeneration int64 `json:"observedGeneration"`
+		Conditions         []struct {
+			Type    string `json:"type"`
+			Status  string `json:"status"`
+			Message string `json:"message"`
+		} `json:"conditions"`
+		Racks map[string]struct {
+			Members      int32 `json:"members"`
+			ReadyMembers int32 `json:"readyMembers"`
+		} `json:"racks"`
+	}](v, k8s.ScyllaClusterCollectorName)
+	if err != nil {
+		return vitals.AnalyzerResult{Status: vitals.AnalyzerFailed, Message: fmt.Sprintf("can't read the ScyllaCluster data: %v", err)}
+	}
+	cond := map[string]string{}
+	msg := map[string]string{}
+	for _, c := range data.Conditions {
+		cond[c.Type], msg[c.Type] = c.Status, c.Message
+	}
+
+	var failures, warnings []string
+	if cond["Available"] != "True" {
+		failures = append(failures, "the ScyllaCluster is not Available")
+	}
+	if cond["Degraded"] == "True" {
+		failures = append(failures, "the ScyllaCluster is Degraded: "+msg["Degraded"])
+	}
+	if cond["Progressing"] == "True" {
+		warnings = append(warnings, "the ScyllaCluster is Progressing: "+msg["Progressing"])
+	}
+	if data.ObservedGeneration < data.Generation {
+		warnings = append(warnings, fmt.Sprintf("the operator hasn't observed the latest spec (generation %d, observed %d)", data.Generation, data.ObservedGeneration))
+	}
+	racks := make([]string, 0, len(data.Racks))
+	for name := range data.Racks {
+		racks = append(racks, name)
+	}
+	sort.Strings(racks)
+	for _, name := range racks {
+		r := data.Racks[name]
+		if r.ReadyMembers < r.Members {
+			warnings = append(warnings, fmt.Sprintf("rack %s has %d of %d members ready", name, r.ReadyMembers, r.Members))
+		}
+	}
+
+	switch {
+	case len(failures) > 0:
+		return vitals.AnalyzerResult{Status: vitals.AnalyzerFailed, Message: strings.Join(append(failures, warnings...), "; ")}
+	case len(warnings) > 0:
+		return vitals.AnalyzerResult{Status: vitals.AnalyzerWarning, Message: strings.Join(warnings, "; ")}
+	default:
+		return vitals.AnalyzerResult{Status: vitals.AnalyzerPassed, Message: "The ScyllaCluster is Available, not Degraded or Progressing, and all members are ready"}
 	}
 }

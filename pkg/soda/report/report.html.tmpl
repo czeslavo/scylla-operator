@@ -30,6 +30,7 @@ th, td { text-align: left; vertical-align: top; padding: 6px 9px; border-bottom:
 th { font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 .tag { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 4px; border: 1px solid; white-space: nowrap; }
 .tag.sd { color: var(--sd); } .tag.soda { color: var(--soda); }
+.tag.good { color: var(--good); } .tag.bad { color: var(--bad); }
 .state-Succeeded { color: var(--good); } .state-Degraded { color: var(--warn); } .state-Failed { color: var(--bad); }
 .ok { color: var(--good); font-weight: 700; } .no { color: var(--bad); font-weight: 700; } .na { color: var(--muted); }
 .finding { display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; padding: 9px 0; border-bottom: 1px solid var(--line); }
@@ -84,7 +85,7 @@ footer { font-size: 12.5px; color: var(--muted); }
   {{if .Failures}}{{range .Failures}}<div class="finding">
     <div><span class="tag {{if eq .Source "soda"}}soda{{else}}sd{{end}}">{{source .Source}}</span> <h3 style="display:inline">{{.Analyzer}}</h3></div>
     <div class="msg">{{.Message}}</div>
-    <div class="nodes">{{len .Nodes}} node(s): {{join .Nodes ", "}}</div>
+    <div class="nodes">{{nodes .Nodes}}</div>
   </div>{{end}}{{else}}<p class="muted">None.</p>{{end}}
 </section>
 
@@ -93,7 +94,7 @@ footer { font-size: 12.5px; color: var(--muted); }
   {{if .Warnings}}{{range .Warnings}}<div class="finding">
     <div><span class="tag {{if eq .Source "soda"}}soda{{else}}sd{{end}}">{{source .Source}}</span> <h3 style="display:inline">{{.Analyzer}}</h3></div>
     <div class="msg">{{.Message}}</div>
-    <div class="nodes">{{len .Nodes}} node(s): {{join .Nodes ", "}}</div>
+    <div class="nodes">{{nodes .Nodes}}</div>
   </div>{{end}}{{else}}<p class="muted">None.</p>{{end}}
 </section>
 
@@ -121,10 +122,24 @@ footer { font-size: 12.5px; color: var(--muted); }
 
 <section class="card">
   <h2>Kubernetes</h2>
+  <h3>Cluster</h3>
+  {{with .Cluster}}{{if .Collected}}
+  <p>ScyllaDB {{.Version}}. {{range .Conditions}}<span class="tag {{if .Healthy}}good{{else}}bad{{end}}">{{.Type}}={{.Status}}</span> {{end}}</p>
   <div class="scroll"><table>
-    <tr><th>Pod</th><th>Kubernetes node</th><th>Phase</th><th>Ready</th><th>QoS class</th><th>Restarts</th></tr>
+    <tr><th>Rack</th><th>Members</th><th>Ready</th><th>Available</th></tr>
+    {{range .Racks}}<tr><td class="mono">{{.Name}}</td><td>{{.Members}}</td><td>{{.Ready}}</td><td>{{.Available}}</td></tr>{{end}}
+  </table></div>
+  {{else}}<p class="muted">Not collected: {{.Message}}</p>{{end}}
+  {{with .Operator}}<p>Operator: <code>{{.}}</code></p>{{end}}
+  {{range .SkippedReasons}}<p class="nodes">{{.}}</p>{{end}}
+  <p class="nodes">{{.Files}} file(s) in <code>kubernetes/cluster/</code>.</p>
+  {{end}}
+  <h3 style="margin-top:14px">Nodes</h3>
+  <div class="scroll"><table>
+    <tr><th>Pod</th><th>Kubernetes node</th><th>Phase</th><th>Ready</th><th>QoS class</th><th>Restarts</th><th>Kubelet, instance type</th><th>Data volume</th><th>Files</th></tr>
     {{range .Pods}}<tr><td class="mono">{{.Name}}</td><td class="mono">{{.KubernetesNode}}</td><td>{{.Phase}}</td>
-      <td>{{if .Ready}}<span class="ok">✓</span>{{else}}<span class="no">✗</span>{{end}}</td><td>{{.QOSClass}}</td><td>{{.Restarts}}</td></tr>{{end}}
+      <td>{{if .Ready}}<span class="ok">✓</span>{{else}}<span class="no">✗</span>{{end}}</td><td>{{.QOSClass}}</td><td>{{.Restarts}}</td>
+      <td class="nodes">{{.NodeInfo}}</td><td>{{.Storage}}</td><td><code>kubernetes/nodes/{{.Name}}/</code> ({{.Files}})</td></tr>{{end}}
   </table></div>
 </section>
 
@@ -136,7 +151,7 @@ footer { font-size: 12.5px; color: var(--muted); }
 <footer>
   Scylla Doctor's vitals, per-node analysis and cluster report are in <code>scylla-doctor/</code> of this archive, unchanged.
   SODA's own vitals and analysis use the same formats in <code>soda/</code>; Kubernetes objects and logs are in
-  <code>kubernetes/must-gather/</code>. This page renders <code>report/soda-report.json</code>.
+  <code>kubernetes/cluster/</code> and <code>kubernetes/nodes/&lt;node&gt;/</code>. This page renders <code>report/soda-report.json</code>.
 </footer>
 </main>
 </body>

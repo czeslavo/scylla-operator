@@ -1,8 +1,9 @@
 # SODA's identity in the ScyllaCluster's namespace, for both ways of running it (proof of concept).
 # Replace the namespace "scylla" with the ScyllaCluster's namespace.
 #
-# - The built-in "view" ClusterRole, bound in this namespace only, covers what SODA reads: the ScyllaCluster, Pods,
-#   Pod logs and the rest of the namespace for the must-gather dump. It excludes Secrets.
+# - The built-in "view" ClusterRole, bound in this namespace only, covers what SODA reads here: the ScyllaCluster
+#   and the objects the operator owns for it, Pods and their logs, PersistentVolumeClaims and events. It excludes
+#   Secrets. Reads outside the namespace are optional: rbac-cluster-read.yaml and rbac-operator-read.yaml.
 # - pods/exec runs Scylla Doctor in the scylla containers. RBAC can't narrow exec to one container or command, so this
 #   is the permission a security review should look at.
 # - secrets/get is limited to the CQL credentials Secret, needed only when CQL authentication is on.

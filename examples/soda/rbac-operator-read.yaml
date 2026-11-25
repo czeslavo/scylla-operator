@@ -1,0 +1,32 @@
+# Optional: read the operator's Deployment and logs in its namespace (proof of concept). Without it, SODA skips them
+# and says so in the report. Replace the ServiceAccount's namespace "scylla"; the operator's namespace is
+# "scylla-operator" (SODA's --operator-namespace).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: soda-operator-read
+  namespace: scylla-operator
+rules:
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["list"]
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: soda-operator-read
+  namespace: scylla-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: soda-operator-read
+subjects:
+- kind: ServiceAccount
+  name: soda
+  namespace: scylla

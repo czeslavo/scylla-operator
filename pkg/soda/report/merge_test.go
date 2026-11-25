@@ -28,11 +28,13 @@ func TestMerge(t *testing.T) {
 		},
 	}
 
-	got := Merge(sd, nodes, []string{"scylla-doctor/vitals/n0.vitals.json"}, vitals.SODAExtension{})
+	cluster := vitals.Analysis{"ScyllaClusterAnalyzer": {Status: vitals.AnalyzerFailed, Message: "not Available"}}
+	got := Merge(sd, nodes, cluster, []string{"scylla-doctor/vitals/n0.vitals.json"}, vitals.SODAExtension{})
 
 	wantFailures := vitals.Findings{
 		"AuthenticationAnalyzer": {"Authentication is disabled": {"n0", "n1"}},
 		CollectionAnalyzer:       {"Scylla Doctor could not collect vitals: exec failed": {"n2"}},
+		"ScyllaClusterAnalyzer":  {"not Available": {ClusterScope}},
 	}
 	if diff := cmp.Diff(wantFailures, got.Failures); diff != "" {
 		t.Errorf("failures (-want +got):\n%s", diff)
@@ -50,6 +52,7 @@ func TestMerge(t *testing.T) {
 		"NICsCollector":          vitals.SourceScyllaDoctor,
 		"ScyllaDBPodAnalyzer":    vitals.SourceSODA,
 		CollectionAnalyzer:       vitals.SourceSODA,
+		"ScyllaClusterAnalyzer":  vitals.SourceSODA,
 	}
 	if diff := cmp.Diff(wantSources, got.SODA.Sources); diff != "" {
 		t.Errorf("sources (-want +got):\n%s", diff)

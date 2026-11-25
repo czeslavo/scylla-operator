@@ -11,6 +11,7 @@ import (
 
 	"github.com/scylladb/scylla-operator/pkg/soda/collectors"
 	"github.com/scylladb/scylla-operator/pkg/soda/contract"
+	"github.com/scylladb/scylla-operator/pkg/soda/k8s"
 	"github.com/scylladb/scylla-operator/pkg/soda/vitals"
 )
 
@@ -49,6 +50,29 @@ type contractRow struct {
 type podRow struct {
 	Name, KubernetesNode, Phase, QOSClass, Restarts string
 	Ready                                           bool
+	NodeInfo, Storage                               string
+	Files                                           int
+}
+
+type clusterView struct {
+	Collected      bool
+	Message        string
+	Version        string
+	Conditions     []conditionView
+	Racks          []rackRow
+	Operator       string
+	Files          int
+	SkippedReasons []string
+}
+
+type conditionView struct {
+	Type, Status string
+	Healthy      bool
+}
+
+type rackRow struct {
+	Name                      string
+	Members, Ready, Available int
 }
 
 type htmlData struct {
@@ -66,6 +90,7 @@ type htmlData struct {
 	Contract        []contractRow
 	ContractNote    string
 	Pods            []podRow
+	Cluster         clusterView
 }
 
 // RenderHTML renders the combined report. sodaVitals are SODA's per-node vitals (by node name); only SODA's own
@@ -93,9 +118,20 @@ func RenderHTML(rep *vitals.ClusterReport, sodaVitals map[string]vitals.Vitals, 
 		d.Contract = contractRows(c, d.NodeNames, sodaVitals)
 	}
 	d.Pods = podRows(d.NodeNames, sodaVitals)
+	d.Cluster = clusterViewOf(sodaVitals[ClusterScope])
 
 	funcs := template.FuncMap{
-		"join":   strings.Join,
+		"join": strings.Join,
+		"nodes": func(ns []string) string {
+			out := make([]string, 0, len(ns))
+			for _, n := range ns {
+				if n == ClusterScope {
+					n = "the cluster"
+				}
+				out = append(out, n)
+			}
+			return strings.Join(out, ", ")
+		},
 		"source": sourceLabel,
 		"count":  func(m map[string]int, k string) int { return m[k] },
 	}
@@ -199,6 +235,15 @@ func contractRows(c *contract.Contract, nodes []string, sv map[string]vitals.Vit
 	return rows
 }
 
+func decodeData(v vitals.Vitals, collector string, out any) bool {
+	r, ok := v[collector]
+	if !ok || r.Status != vitals.CollectorPassed {
+		return false
+	}
+	b, err := json.Marshal(r.Data)
+	return err == nil && json.Unmarshal(b, out) == nil
+}
+
 func podRows(nodes []string, sv map[string]vitals.Vitals) []podRow {
 	var rows []podRow
 	for _, n := range nodes {
@@ -206,8 +251,7 @@ func podRows(nodes []string, sv map[string]vitals.Vitals) []podRow {
 		if !ok {
 			continue
 		}
-		b, _ := json.Marshal(v[collectors.ScyllaDBPodCollector].Data)
-		var data struct {
+		var pod struct {
 			KubernetesNode string `json:"kubernetesNode"`
 			Phase          string `json:"phase"`
 			Ready          bool   `json:"ready"`
@@ -216,22 +260,109 @@ func podRows(nodes []string, sv map[string]vitals.Vitals) []podRow {
 				Name         string `json:"name"`
 				RestartCount int32  `json:"restartCount"`
 			} `json:"containers"`
+			Files []vitals.FileRef `json:"files"`
 		}
-		if json.Unmarshal(b, &data) != nil {
+		if !decodeData(v, k8s.PodCollectorName, &pod) {
 			continue
 		}
 		var restarts []string
-		for _, c := range data.Containers {
+		for _, c := range pod.Containers {
 			if c.RestartCount > 0 {
 				restarts = append(restarts, fmt.Sprintf("%s: %d", c.Name, c.RestartCount))
 			}
 		}
-		r := "none"
+		row := podRow{Name: n, KubernetesNode: pod.KubernetesNode, Phase: pod.Phase, QOSClass: pod.QOSClass,
+			Ready: pod.Ready, Restarts: "none", Files: len(pod.Files)}
 		if len(restarts) > 0 {
-			r = strings.Join(restarts, ", ")
+			row.Restarts = strings.Join(restarts, ", ")
 		}
-		rows = append(rows, podRow{Name: n, KubernetesNode: data.KubernetesNode, Phase: data.Phase, QOSClass: data.QOSClass,
-			Ready: data.Ready, Restarts: r})
+
+		var node struct {
+			KubeletVersion string           `json:"kubeletVersion"`
+			InstanceType   string           `json:"instanceType"`
+			Files          []vitals.FileRef `json:"files"`
+		}
+		if decodeData(v, k8s.KubernetesNodeCollectorName, &node) {
+			row.NodeInfo = strings.TrimSpace(node.KubeletVersion + " " + node.InstanceType)
+			row.Files += len(node.Files)
+		} else if r, ok := v[k8s.KubernetesNodeCollectorName]; ok {
+			row.NodeInfo = "not collected: " + r.Message
+		}
+
+		var storage struct {
+			Volumes []struct {
+				StorageClass string `json:"storageClass"`
+				Capacity     string `json:"capacity"`
+			} `json:"volumes"`
+			Files []vitals.FileRef `json:"files"`
+		}
+		if decodeData(v, k8s.StorageCollectorName, &storage) {
+			var parts []string
+			for _, vol := range storage.Volumes {
+				parts = append(parts, strings.TrimSpace(vol.Capacity+" "+vol.StorageClass))
+			}
+			row.Storage = strings.Join(parts, ", ")
+			row.Files += len(storage.Files)
+		}
+		rows = append(rows, row)
 	}
 	return rows
+}
+
+func clusterViewOf(v vitals.Vitals) clusterView {
+	cv := clusterView{}
+	if v == nil {
+		return cv
+	}
+	var sc struct {
+		Version    string              `json:"version"`
+		Conditions []map[string]string `json:"conditions"`
+		Racks      map[string]struct {
+			Members          int  `json:"members"`
+			ReadyMembers     int  `json:"readyMembers"`
+			AvailableMembers *int `json:"availableMembers"`
+		} `json:"racks"`
+		Files []vitals.FileRef `json:"files"`
+	}
+	if decodeData(v, k8s.ScyllaClusterCollectorName, &sc) {
+		cv.Collected = true
+		cv.Version, cv.Files = sc.Version, len(sc.Files)
+		// The aggregate conditions only; the per-controller ones stay in the vitals and the YAML.
+		for _, c := range sc.Conditions {
+			switch c["type"] {
+			case "Available":
+				cv.Conditions = append(cv.Conditions, conditionView{c["type"], c["status"], c["status"] == "True"})
+			case "Progressing", "Degraded":
+				cv.Conditions = append(cv.Conditions, conditionView{c["type"], c["status"], c["status"] == "False"})
+			}
+		}
+		for name, r := range sc.Racks {
+			row := rackRow{Name: name, Members: r.Members, Ready: r.ReadyMembers}
+			if r.AvailableMembers != nil {
+				row.Available = *r.AvailableMembers
+			}
+			cv.Racks = append(cv.Racks, row)
+		}
+		sort.Slice(cv.Racks, func(i, j int) bool { return cv.Racks[i].Name < cv.Racks[j].Name })
+	} else if r, ok := v[k8s.ScyllaClusterCollectorName]; ok {
+		cv.Message = r.Message
+	}
+
+	var op struct {
+		Images        []string         `json:"images"`
+		ReadyReplicas int32            `json:"readyReplicas"`
+		Replicas      int32            `json:"replicas"`
+		Problems      []string         `json:"problems"`
+		Files         []vitals.FileRef `json:"files"`
+	}
+	if decodeData(v, k8s.OperatorCollectorName, &op) {
+		if len(op.Images) > 0 {
+			cv.Operator = fmt.Sprintf("%s, %d/%d ready", strings.Join(op.Images, ", "), op.ReadyReplicas, op.Replicas)
+		}
+		cv.Files += len(op.Files)
+		cv.SkippedReasons = append(cv.SkippedReasons, op.Problems...)
+	} else if r, ok := v[k8s.OperatorCollectorName]; ok {
+		cv.SkippedReasons = append(cv.SkippedReasons, r.Message)
+	}
+	return cv
 }
