@@ -1,0 +1,90 @@
+# SODA as an in-cluster Job (proof of concept). Apply rbac.yaml first; replace the namespace "scylla", the
+# ScyllaCluster name and the images.
+#
+# The Pod runs from the Scylla Doctor bundle image, so analysis runs locally in it and no extra Pod is needed. An init
+# container copies the scylla-operator binary (which has the diagnose command) out of the operator image.
+#
+# When it finishes, the Pod keeps running for --keep-running-after so the archive can be copied out:
+#   pod=$(kubectl -n scylla get pods -l job-name=soda -o jsonpath='{.items[0].metadata.name}')
+#   kubectl -n scylla logs "${pod}" -c soda | tail     # look for "Archive: /output/soda.tar.gz"
+#   kubectl -n scylla cp -c soda "${pod}:/output/soda.tar.gz" ./soda.tar.gz
+#   kubectl -n scylla delete job soda
+#
+# The operator could later create this Job from a request object; it only has to fill in the ScyllaCluster name.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: soda
+  namespace: scylla
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 7200
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: soda
+    spec:
+      serviceAccountName: soda
+      restartPolicy: Never
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+      - name: soda-binary
+        image: quay.io/scylladb/scylla-operator:latest
+        command: ["cp", "/usr/bin/scylla-operator", "/soda/scylla-operator"]
+        securityContext: &containerSecurityContext
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        volumeMounts:
+        - name: soda-binary
+          mountPath: /soda
+      containers:
+      - name: soda
+        image: docker.io/scylladb/scylla-doctor-bundle:1.15
+        command:
+        - /soda/scylla-operator
+        - diagnose
+        - --namespace=$(POD_NAMESPACE)
+        - --scylla-cluster=scylla
+        - --bundle-dir=/opt/scylla-doctor
+        - --cql-credentials-secret=soda-cql
+        - --dest-dir=/output/soda
+        - --keep-running-after=1h
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        # Recorded in the report; keep it equal to the image above.
+        - name: SODA_BUNDLE_IMAGE
+          value: docker.io/scylladb/scylla-doctor-bundle:1.15
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            memory: 1Gi
+        securityContext: *containerSecurityContext
+        volumeMounts:
+        - name: soda-binary
+          mountPath: /soda
+          readOnly: true
+        - name: output
+          mountPath: /output
+        - name: tmp
+          mountPath: /tmp
+      volumes:
+      - name: soda-binary
+        emptyDir: {}
+      - name: output
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
 	"time"
 
 	scyllaversioned "github.com/scylladb/scylla-operator/pkg/client/scylla/clientset/versioned"
@@ -215,8 +216,13 @@ func (o *DiagnoseOptions) Run(originalStreams genericclioptions.IOStreams, cmd *
 
 	fmt.Fprintf(originalStreams.Out, "Report: %s\n", res.ReportHTML)
 	fmt.Fprintf(originalStreams.Out, "Findings: %d failures, %d warnings, %d differences between nodes\n", res.Failures, res.Warnings, res.Incons)
-	for n, s := range res.NodeStates {
-		fmt.Fprintf(originalStreams.Out, "Node %s: %s\n", n, s)
+	nodes := make([]string, 0, len(res.NodeStates))
+	for n := range res.NodeStates {
+		nodes = append(nodes, n)
+	}
+	sort.Strings(nodes)
+	for _, n := range nodes {
+		fmt.Fprintf(originalStreams.Out, "Node %s: %s\n", n, res.NodeStates[n])
 	}
 	for _, e := range res.RunErrors {
 		fmt.Fprintf(originalStreams.Out, "Problem: %s\n", e)

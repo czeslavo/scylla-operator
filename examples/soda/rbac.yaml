@@ -1,0 +1,56 @@
+# SODA's identity in the ScyllaCluster's namespace, for both ways of running it (proof of concept).
+# Replace the namespace "scylla" with the ScyllaCluster's namespace.
+#
+# - The built-in "view" ClusterRole, bound in this namespace only, covers what SODA reads: the ScyllaCluster, Pods,
+#   Pod logs and the rest of the namespace for the must-gather dump. It excludes Secrets.
+# - pods/exec runs Scylla Doctor in the scylla containers. RBAC can't narrow exec to one container or command, so this
+#   is the permission a security review should look at.
+# - secrets/get is limited to the CQL credentials Secret, needed only when CQL authentication is on.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: soda
+  namespace: scylla
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: soda-view
+  namespace: scylla
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: view
+subjects:
+- kind: ServiceAccount
+  name: soda
+  namespace: scylla
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: soda
+  namespace: scylla
+rules:
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  # Exec over websockets is authorized as "get", over SPDY as "create".
+  verbs: ["get", "create"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  resourceNames: ["soda-cql"]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: soda
+  namespace: scylla
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: soda
+subjects:
+- kind: ServiceAccount
+  name: soda
+  namespace: scylla

@@ -1,0 +1,25 @@
+# Extra permission for running SODA from a workstation: it starts a short-lived analysis Pod from the Scylla Doctor
+# bundle image and deletes it afterwards. Not needed for the in-cluster Job, which runs inside the bundle image.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: soda-analysis-pod
+  namespace: scylla
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: soda-analysis-pod
+  namespace: scylla
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: soda-analysis-pod
+subjects:
+- kind: ServiceAccount
+  name: soda
+  namespace: scylla
