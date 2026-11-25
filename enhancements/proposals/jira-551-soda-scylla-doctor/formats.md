@@ -46,11 +46,39 @@ ScyllaCluster's conditions, the operator's version and configuration, NodeConfig
 `soda/vitals/_cluster.vitals.json` in the same format would hold them, with findings attributed to the node name
 `_cluster`. This keeps the report's `{message: [nodes]}` shape.
 
-**Kubernetes objects and logs are not vitals.** Manifests and container logs stay as must-gather files under
-`kubernetes/must-gather/`, in the layout `scylla-operator must-gather` already produces. Vitals hold facts that an
-analyzer judges and that Scylla Doctor Cluster can compare between nodes. Raw objects already have a format and
-tooling, and copying them into vitals would only duplicate them. When a check needs something from them, a SODA
-collector extracts just that fact into vitals, as `ScyllaDBPodCollector` does for the Pod.
+**Kubernetes objects and logs are files, not vitals.**
+- **What vitals hold:** facts that an analyzer judges and that Scylla Doctor Cluster can compare between nodes.
+  Manifests and container logs aren't that, so they are kept as files in the archive.
+- **How analyzers use them:** when a check needs something from them, a SODA collector extracts just that fact into
+  vitals, as `ScyllaDBPodCollector` does for the Pod.
+- **The PoC's layout is a stopgap:** it runs `must-gather` on the ScyllaCluster's namespace and stores its dump
+  under `kubernetes/must-gather/`. That dump is organized by API resource, not by ScyllaDB node or cluster.
+- **What SODA should do instead:** gather the objects and logs itself, structured by the same scopes as vitals,
+  so each file sits next to the scope it describes.
+
+Proposed layout (not built):
+
+```
+kubernetes/
+  cluster/                            the ScyllaCluster as a whole
+    scyllacluster.yaml                and its ScyllaDBDatacenter(s)
+    statefulsets/, services/, configmaps/, poddisruptionbudgets/, ...   objects the operator owns for it
+    events.yaml                       events about those objects
+    operator/                         ScyllaOperatorConfig, the operator's Deployment and logs, NodeConfigs
+                                      (cluster-scoped: needs a cluster read role, or is skipped)
+  nodes/<node>/                       one ScyllaDB node; <node> is the same name as its vitals file
+    pod.yaml
+    logs/<container>.log, logs/<container>.previous.log
+    events.yaml                       events about the Pod
+    pvc.yaml                          its data volume claim (and pv.yaml with cluster read)
+    kubernetes-node.yaml              the Kubernetes Node it runs on (with cluster read)
+```
+
+- **Sensitive data:** Secrets are never collected; ConfigMaps and logs need the same redaction rules as today.
+- **Pointers from vitals:** SODA's collectors point at these files through `data.files` (see below). For example,
+  `ScyllaDBPodCollector` would point at `kubernetes/nodes/<node>/pod.yaml` and its logs.
+- **Matching scopes:** findings, vitals and raw evidence for a node then share one name across `scylla-doctor/`,
+  `soda/` and `kubernetes/`.
 
 ## Files that belong to vitals
 
@@ -103,7 +131,7 @@ text:
 - **Correctness:** the reference would name the file that actually exists (the `.tar.gz`).
 
 SODA's own collectors could use the same `data.files` convention for archive paths. For example,
-`ScyllaDBPodCollector` could point at the Pod's logs in the must-gather dump.
+`ScyllaDBPodCollector` could point at the Pod's manifest and logs under `kubernetes/nodes/<node>/`.
 
 ## Analysis
 
@@ -172,7 +200,8 @@ scylla-doctor/runs/<node>/{stdout,stderr}.log  Scylla Doctor's console output
 scylla-doctor/files/<node>/...                 files Scylla Doctor wrote next to its vitals (listed in nodes[].files)
 soda/vitals/<node>.vitals.json                 SODA's vitals (Scylla Doctor's format)
 soda/analysis/<node>.analysis.json             SODA's analysis (Scylla Doctor's format)
-kubernetes/must-gather/...                     must-gather of the ScyllaCluster's namespace (no Secrets)
+kubernetes/must-gather/...                     PoC stopgap: must-gather of the ScyllaCluster's namespace (no Secrets);
+                                               to be replaced by kubernetes/{cluster,nodes/<node>}/ (see above)
 report/soda-report.json                        combined report
 report/report.html                             combined report for people
 ```

@@ -104,7 +104,7 @@ skipped because they call scylladb.com, so analysis works without internet acces
 | Scylla Doctor's side files are collected | Scylla Doctor runs with `TMPDIR` set to SODA's run directory. Files it writes there (today only the log collectors, which skip in containers) are copied into the archive up to a size limit and listed with checksums, instead of being lost or left in the container. See [formats.md](formats.md#files-that-belong-to-vitals). |
 | Cleanup stops an unfinished run | Closing an exec stream doesn't stop the command. Cleanup stops Scylla Doctor by its PID when it hasn't written an exit code, then removes the run directory. |
 | ScyllaCluster (v1) only | Enough for the PoC. ScyllaDBDatacenter and ScyllaDBCluster need their own lookup of the member Pods. |
-| must-gather is reused with the `view` role | It collects what `view` can read in the namespace and logs the rest (for example Roles, Leases, monitoring CRs) as forbidden. |
+| must-gather is reused for manifests and logs, as a stopgap | It was the quickest way to have them in the archive. Its dump is organized by API resource, not by ScyllaDB node or cluster, so SODA should gather them itself in node- and cluster-scoped directories ([formats.md](formats.md), proposed layout). With the `view` role it collects what `view` can read in the namespace and logs the rest (for example Roles, Leases, monitoring CRs) as forbidden. |
 
 ## What was validated (kind, ScyllaDB 2026.3.3, three nodes with CQL authentication)
 
@@ -135,6 +135,8 @@ skipped because they call scylladb.com, so analysis works without internet acces
 - **Operator orchestration and periodic runs with opt-in upload:** not built. The Job shows the shape.
 - **Distribution:** the full Scylla Doctor build and Scylla Doctor Cluster are private (DOCTOR-159), so who may pull
   the bundle needs deciding.
+- **Structured Kubernetes collection:** manifests and logs come from a must-gather dump of the namespace. They
+  should be gathered by SODA itself, by node and cluster, as proposed in [formats.md](formats.md).
 - **Multi-datacenter clusters, ScyllaDBDatacenter and ScyllaDBCluster:** not covered.
 - **Collection scope:** only the ScyllaCluster's namespace, because the role is namespaced. The operator's logs and
   configuration, ScyllaOperatorConfig, NodeConfigs and Kubernetes nodes are not collected. They need a cluster-scoped
