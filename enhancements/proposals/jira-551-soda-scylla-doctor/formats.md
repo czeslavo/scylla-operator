@@ -17,13 +17,27 @@ Scylla Doctor's per-node vitals are an object keyed by collector name:
 Collector `status`: 0 passed, 1 failed, 2 skipped. Analyzer `status` uses different numbers: 0 passed, 1 skipped,
 2 warning, 3 failed.
 
-**SODA's vitals use exactly this format,** one file per node: `soda/vitals/<node>.vitals.json`.
+**SODA's vitals use exactly this format,** in one file per scope:
+- `soda/vitals/<node>.vitals.json` per ScyllaDB node;
+- `soda/vitals/_cluster.vitals.json` for the cluster as a whole. Its findings are attributed to the node name
+  `_cluster`, which keeps the report's `{message: [nodes]}` shape.
 
-| Collector | `data` |
-|---|---|
-| `SODAVersionCollector` | `version`, `formatVersion` (`soda.scylladb.com/vitals/v1alpha1`) |
-| `ScyllaDBPodCollector` | the Pod as Kubernetes sees it: phase, readiness, QoS class, Kubernetes node, datacenter, rack, ScyllaDB version label, containers (ready, restarts, last termination reason), the scylla container's requests and limits. Ephemeral containers are left out. |
-| `ScyllaDBRuntimeContractCollector` | the contract schema and Scylla Doctor versions, the interpreter, and one result per requirement: `id`, `level`, `satisfied`, `detail`, `usedBy`, `impact` |
+| Scope | Collector | `data` |
+|---|---|---|
+| both | `SODAVersionCollector` | `version`, `formatVersion` (`soda.scylladb.com/vitals/v1alpha1`) |
+| node | `ScyllaDBRuntimeContractCollector` | the contract schema and Scylla Doctor versions, the interpreter, and one result per requirement: `id`, `level`, `satisfied`, `detail`, `usedBy`, `impact` |
+| node | `ScyllaDBPodCollector` | the Pod as Kubernetes sees it: phase, readiness, QoS class, Kubernetes node, datacenter, rack, ScyllaDB version label, containers (ready, restarts, last termination reason), the scylla container's requests and limits, the member Service's IP. Ephemeral containers are left out. |
+| node | `ScyllaDBStorageCollector` | per data volume: claim, phase, access modes, requested and actual capacity, storage class; reclaim policy and CSI driver when PersistentVolumes may be read |
+| node | `KubernetesNodeCollector` | kubelet and container runtime versions, OS image, kernel, architecture, instance type, zone, capacity, allocatable, conditions, number of taints. Needs cluster read. |
+| cluster | `ScyllaClusterCollector` | spec version, generation and observed generation, conditions, rack status (members, ready, available, updated) |
+| cluster | `ScyllaOperatorCollector` | the operator's namespace, images, replicas and ready replicas, the resolved ScyllaDB utils image. Needs the operator read role. |
+
+The Kubernetes collectors also list the files they wrote under `data.files` (see "Kubernetes objects and logs"
+below).
+
+A collector the identity isn't allowed to run is SKIPPED, and its message names the RBAC manifest that grants the
+permission. Like a missing tool in Scylla Doctor, that's a gap in the setup, not a finding about the cluster.
+Problems that don't stop a collector, such as one PersistentVolume it may not read, are listed in `data.problems`.
 
 **Why separate files and not extra entries in Scylla Doctor's.** Scylla Doctor and Scylla Doctor Cluster refuse
 vitals without their `SDVersionCollector`. That was checked with Scylla Doctor 1.15: Scylla Doctor Cluster reports a
@@ -41,44 +55,41 @@ Scylla Doctor's tools would:
 Scylla Doctor Cluster could then compare SODA's collectors between nodes the same way, for example to show a node
 whose Pod is not Guaranteed while others are. Until then, SODA merges results itself (see below).
 
-**Cluster-scoped vitals: a proposal, not built.** Some Kubernetes facts belong to the cluster, not a node: the
-ScyllaCluster's conditions, the operator's version and configuration, NodeConfigs. A file
-`soda/vitals/_cluster.vitals.json` in the same format would hold them, with findings attributed to the node name
-`_cluster`. This keeps the report's `{message: [nodes]}` shape.
-
 **Kubernetes objects and logs are files, not vitals.**
 - **What vitals hold:** facts that an analyzer judges and that Scylla Doctor Cluster can compare between nodes.
   Manifests and container logs aren't that, so they are kept as files in the archive.
 - **How analyzers use them:** when a check needs something from them, a SODA collector extracts just that fact into
-  vitals, as `ScyllaDBPodCollector` does for the Pod.
-- **The PoC's layout is a stopgap:** it runs `must-gather` on the ScyllaCluster's namespace and stores its dump
-  under `kubernetes/must-gather/`. That dump is organized by API resource, not by ScyllaDB node or cluster.
-- **What SODA should do instead:** gather the objects and logs itself, structured by the same scopes as vitals,
-  so each file sits next to the scope it describes.
-
-Proposed layout (not built):
+  vitals.
+- **How the files are organized:** SODA gathers them itself, by the same scopes as vitals, so each file sits next to
+  the scope it describes.
 
 ```
 kubernetes/
-  cluster/                            the ScyllaCluster as a whole
-    scyllacluster.yaml                and its ScyllaDBDatacenter(s)
-    statefulsets/, services/, configmaps/, poddisruptionbudgets/, ...   objects the operator owns for it
-    events.yaml                       events about those objects
-    operator/                         ScyllaOperatorConfig, the operator's Deployment and logs, NodeConfigs
-                                      (cluster-scoped: needs a cluster read role, or is skipped)
-  nodes/<node>/                       one ScyllaDB node; <node> is the same name as its vitals file
-    pod.yaml
-    logs/<container>.log, logs/<container>.previous.log
-    events.yaml                       events about the Pod
-    pvc.yaml                          its data volume claim (and pv.yaml with cluster read)
-    kubernetes-node.yaml              the Kubernetes Node it runs on (with cluster read)
+  cluster/                                    ScyllaClusterCollector, ScyllaOperatorCollector
+    scyllacluster.yaml, scylladbdatacenter.yaml
+    statefulsets/, services/, configmaps/, poddisruptionbudgets/   objects labelled with the cluster's name,
+                                                                   except per-node ones
+    events.yaml                               events about those objects
+    operator/scyllaoperatorconfig.yaml        with cluster read
+    operator/deployment.yaml, operator/logs/<pod>.log              with the operator read role
+  nodes/<node>/                               <node> is the same name as the node's vitals files
+    pod.yaml, service.yaml                    ScyllaDBPodCollector: the Pod and its member Service
+    logs/<container>.log                      every container, init containers included
+    logs/<container>.previous.log             for containers that restarted
+    events.yaml                               events about the Pod
+    pvc-<claim>.yaml, pv-<volume>.yaml        ScyllaDBStorageCollector (PersistentVolumes with cluster read)
+    kubernetes-node.yaml                      KubernetesNodeCollector (with cluster read)
 ```
 
-- **Sensitive data:** Secrets are never collected; ConfigMaps and logs need the same redaction rules as today.
-- **Pointers from vitals:** SODA's collectors point at these files through `data.files` (see below). For example,
-  `ScyllaDBPodCollector` would point at `kubernetes/nodes/<node>/pod.yaml` and its logs.
-- **Matching scopes:** findings, vitals and raw evidence for a node then share one name across `scylla-doctor/`,
-  `soda/` and `kubernetes/`.
+- **YAML:** manifests carry `apiVersion` and `kind` and leave out `managedFields`.
+- **Events:** each events file is a `v1` `List`, oldest first.
+- **Logs:** each log is limited by `--log-limit-bytes` and carries timestamps.
+- **Secrets are never collected.** ConfigMaps owned by the cluster are, as in must-gather; any redaction rules
+  should apply to them and to logs.
+- **Pointers from vitals:** every file is listed in its collector's `data.files` with its archive path, size and
+  sha256. `files` and `problems` are masked, because the paths contain the node's name.
+- **Matching scopes:** a node's findings, vitals and raw evidence share one name across `scylla-doctor/`, `soda/`
+  and `kubernetes/`.
 
 ## Files that belong to vitals
 
@@ -130,8 +141,7 @@ text:
   per-node `files` instead.
 - **Correctness:** the reference would name the file that actually exists (the `.tar.gz`).
 
-SODA's own collectors could use the same `data.files` convention for archive paths. For example,
-`ScyllaDBPodCollector` could point at the Pod's manifest and logs under `kubernetes/nodes/<node>/`.
+SODA's own Kubernetes collectors already use the same `data.files` convention for their archive paths.
 
 ## Analysis
 
@@ -141,7 +151,10 @@ Scylla Doctor's per-node analysis (`--load-vitals <file> --output json`) is keye
 {"AuthenticationAnalyzer": {"description": "...", "status": 3, "message": "..."}}
 ```
 
-SODA's analyzers write the same format to `soda/analysis/<node>.analysis.json`. Like Scylla Doctor's, an analyzer
+SODA's analyzers write the same format to `soda/analysis/<node>.analysis.json` (node analyzers:
+`ScyllaDBRuntimeContractAnalyzer`, `ScyllaDBPodAnalyzer`) and `soda/analysis/_cluster.analysis.json` (cluster
+analyzers: `ScyllaClusterAnalyzer`, which checks the Available, Degraded and Progressing conditions, the observed
+generation and ready members per rack). Like Scylla Doctor's, an analyzer
 whose collector failed is failed with "Required X was not successful", and one whose collector was skipped is
 skipped.
 
@@ -200,8 +213,10 @@ scylla-doctor/runs/<node>/{stdout,stderr}.log  Scylla Doctor's console output
 scylla-doctor/files/<node>/...                 files Scylla Doctor wrote next to its vitals (listed in nodes[].files)
 soda/vitals/<node>.vitals.json                 SODA's vitals (Scylla Doctor's format)
 soda/analysis/<node>.analysis.json             SODA's analysis (Scylla Doctor's format)
-kubernetes/must-gather/...                     PoC stopgap: must-gather of the ScyllaCluster's namespace (no Secrets);
-                                               to be replaced by kubernetes/{cluster,nodes/<node>}/ (see above)
+soda/vitals/_cluster.vitals.json               SODA's cluster-scoped vitals
+soda/analysis/_cluster.analysis.json           SODA's cluster-scoped analysis
+kubernetes/cluster/...                         Kubernetes objects and logs of the cluster and the operator
+kubernetes/nodes/<node>/...                    Kubernetes objects and logs of one node (no Secrets anywhere)
 report/soda-report.json                        combined report
 report/report.html                             combined report for people
 ```

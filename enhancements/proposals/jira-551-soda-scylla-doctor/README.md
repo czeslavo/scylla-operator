@@ -3,7 +3,8 @@
 ## Summary
 
 SODA (Scylla Operator Diagnostic Automation) is `scylla-operator diagnose`. It diagnoses one ScyllaCluster by
-running Scylla Doctor on every ScyllaDB node. It adds Kubernetes-side vitals and a must-gather dump, analyzes all of
+running Scylla Doctor on every ScyllaDB node. It adds Kubernetes objects, logs and vitals per node and for the
+cluster, analyzes all of
 it with Scylla Doctor, Scylla Doctor Cluster and its own analyzers, and writes an archive with:
 - Scylla Doctor's outputs, unchanged;
 - a combined report in Scylla Doctor Cluster's format;
@@ -31,7 +32,9 @@ Related documents:
    b. stream in scylla_doctor.pyz and, with CQL auth, sd.conf (stdin only, umask 077)
    c. run it on the image's own Python: timeout N /opt/scylladb/python3/bin/python3 scylla_doctor.pyz --save-vitals
    d. read vitals and console output back with separate execs; rm -rf the run directory (also on cancellation)
- Kubernetes side: SODA collectors per node (Pod, runtime contract, SODA version) + must-gather of the namespace
+ Kubernetes side, by scope (kubernetes/nodes/<node>/ and kubernetes/cluster/), with vitals pointing at the files:
+   per node: Pod, member Service, logs, events, data volume, Kubernetes Node; per cluster: ScyllaCluster, the
+   objects the operator owns for it, events, the operator's configuration, Deployment and logs
  analysis in the bundle (analysis Pod or locally):
    Scylla Doctor per-node analysis (--load-vitals --output json), Scylla Doctor Cluster (--output json),
    SODA analyzers (Go) on SODA's vitals
@@ -65,6 +68,13 @@ authentication, create a Secret with `username` and `password` keys. The role ne
 kubectl -n scylla create secret generic soda-cql --from-file=username=./user --from-file=password=./password
 ```
 
+Optionally, let SODA read beyond the namespace:
+- [rbac-cluster-read.yaml](../../../examples/soda/rbac-cluster-read.yaml): Kubernetes Nodes, PersistentVolumes and
+  the ScyllaOperatorConfig;
+- [rbac-operator-read.yaml](../../../examples/soda/rbac-operator-read.yaml): the operator's Deployment and logs.
+
+Without them, those collectors are skipped and the report names the manifest that would enable them.
+
 ### 3a. From a workstation
 
 Apply [rbac-workstation.yaml](../../../examples/soda/rbac-workstation.yaml) too; it lets SODA create and delete its
@@ -83,7 +93,8 @@ apply it. The Job's comments show how to copy the archive out.
 
 ### Useful flags
 
-`--node-timeout`, `--parallelism`, `--side-files-limit-bytes`, `--skip-analyzer`, `--skip-must-gather`, `--dest-dir`, `--bundle-pull-secret`,
+`--node-timeout`, `--parallelism`, `--side-files-limit-bytes`, `--log-limit-bytes`, `--operator-namespace`,
+`--skip-analyzer`, `--dest-dir`, `--bundle-pull-secret`,
 `--analysis-memory`, `--keep-running-after`. By default, `ScyllaUpdateAnalyzer` and `DriverVersionAnalyzer` are
 skipped because they call scylladb.com, so analysis works without internet access.
 
@@ -98,13 +109,13 @@ skipped because they call scylladb.com, so analysis works without internet acces
 | SODA's vitals and analysis use Scylla Doctor's formats but live in separate files | Scylla Doctor's tools reject vitals without their own version collector (checked). Scylla Doctor's files stay byte-identical for support tooling. |
 | The combined report is Scylla Doctor Cluster's JSON plus an optional `soda` key | Existing readers keep working. See [formats.md](formats.md). |
 | A node is judged by its vitals, not by exit codes | Scylla Doctor exits 0 with failed checks, and Scylla Doctor Cluster exits 1 on any finding. SODA checks that the vitals parse and that `ScyllaConfigurationFile`, `Cqlsh` and `SystemConfig` passed. |
-| Failures are recorded, not fatal | A failed node, analysis step or must-gather becomes a finding or a "problem during the run"; the rest continues. |
+| Failures are recorded, not fatal | A failed node or analysis step becomes a finding or a "problem during the run"; a read the identity may not do makes a collector SKIPPED with the permission it needs; the rest continues. |
 | Secrets only over stdin | Exec arguments end up in API requests and audit logs. `sd.conf` is written with umask 077 and removed even when the run is cancelled. |
 | Output goes to files in the container and is read back with separate execs | A broken or hanging exec stream (seen once on GKE) then loses nothing: SODA reads the exit code and vitals back, and fails the node only when Scylla Doctor didn't finish. Kind can't reproduce the hang, so this path is untested. |
 | Scylla Doctor's side files are collected | Scylla Doctor runs with `TMPDIR` set to SODA's run directory. Files it writes there (today only the log collectors, which skip in containers) are copied into the archive up to a size limit and listed with checksums, instead of being lost or left in the container. See [formats.md](formats.md#files-that-belong-to-vitals). |
 | Cleanup stops an unfinished run | Closing an exec stream doesn't stop the command. Cleanup stops Scylla Doctor by its PID when it hasn't written an exit code, then removes the run directory. |
 | ScyllaCluster (v1) only | Enough for the PoC. ScyllaDBDatacenter and ScyllaDBCluster need their own lookup of the member Pods. |
-| must-gather is reused for manifests and logs, as a stopgap | It was the quickest way to have them in the archive. Its dump is organized by API resource, not by ScyllaDB node or cluster, so SODA should gather them itself in node- and cluster-scoped directories ([formats.md](formats.md), proposed layout). With the `view` role it collects what `view` can read in the namespace and logs the rest (for example Roles, Leases, monitoring CRs) as forbidden. |
+| Kubernetes objects and logs are gathered by SODA, by node and cluster | must-gather's dump is organized by API resource. SODA's collectors write `kubernetes/nodes/<node>/` and `kubernetes/cluster/`, the same scopes and names as the vitals, and list their files in `data.files` ([formats.md](formats.md)). Reads outside the namespace are optional: `rbac-cluster-read.yaml` (Nodes, PersistentVolumes, ScyllaOperatorConfigs) and `rbac-operator-read.yaml` (the operator's Deployment and logs). |
 
 ## What was validated (kind, ScyllaDB 2026.3.3, three nodes with CQL authentication)
 
@@ -117,7 +128,13 @@ skipped because they call scylladb.com, so analysis works without internet acces
   - the runtime contract passes, with only the six optional network tools missing.
   Node 0 has extra tools from an earlier spike run, which accounts for the differences between nodes.
 - **Hygiene:** no CQL password in the run directory or the archive; no `/tmp/soda-*` left in the scylla containers;
-  the analysis Pod is deleted; Secrets are not in the must-gather dump.
+  the analysis Pod is deleted; no Secrets in the archive.
+- **Scoped Kubernetes collection:**
+  - With only `rbac.yaml`, the cluster's objects and each node's Pod, member Service, logs (init containers
+    included), events and claim were collected. `KubernetesNodeCollector` and `ScyllaOperatorCollector` were
+    SKIPPED, naming the manifest to apply, and the storage collector listed the PersistentVolume as not allowed.
+  - With both optional manifests, everything was collected, including both operator Pods' logs.
+  - `ScyllaClusterAnalyzer` passed. The in-cluster Job produced the same layout.
 - **Wrong CQL password:** every node is reported as Degraded, and SODA's first failure names the cause ("calling cqlsh
   failed, please check cql authentication configuration"). The run still completes.
 - **Interrupted mid-collection (SIGINT):**
@@ -135,12 +152,9 @@ skipped because they call scylladb.com, so analysis works without internet acces
 - **Operator orchestration and periodic runs with opt-in upload:** not built. The Job shows the shape.
 - **Distribution:** the full Scylla Doctor build and Scylla Doctor Cluster are private (DOCTOR-159), so who may pull
   the bundle needs deciding.
-- **Structured Kubernetes collection:** manifests and logs come from a must-gather dump of the namespace. They
-  should be gathered by SODA itself, by node and cluster, as proposed in [formats.md](formats.md).
 - **Multi-datacenter clusters, ScyllaDBDatacenter and ScyllaDBCluster:** not covered.
-- **Collection scope:** only the ScyllaCluster's namespace, because the role is namespaced. The operator's logs and
-  configuration, ScyllaOperatorConfig, NodeConfigs and Kubernetes nodes are not collected. They need a cluster-scoped
-  read role, or the existing `must-gather` run by an admin.
+- **Collection scope:** NodeConfigs and node tuning, the NodeConfig daemons' logs and Scylla Manager aren't
+  collected yet. Like the operator, they need the optional read roles.
 - **Production-like clusters:** nothing ran on GKE or OpenShift in this PoC; everything above is kind.
 - **Cluster-scoped Kubernetes vitals:** SODA's collectors are per node. A proposal for cluster-scoped ones is in
   [formats.md](formats.md).
