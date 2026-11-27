@@ -355,12 +355,18 @@ func (d *ShapeDeserializer) ReadBlob(s *smithy.Schema, v *[]byte) error {
 		return fmt.Errorf("expected string, got %s", tok)
 	}
 
-	sv, err := unquote(tok)
-	if err != nil {
-		return err
+	encoded := tok[1 : len(tok)-1]
+	// The parser already checked for escapes. Unescaped base64 can be
+	// decoded without another scan or a temporary string copy.
+	if d.p.escaped {
+		var ok bool
+		encoded, ok = stdlib.UnquoteBytes(tok)
+		if !ok {
+			return fmt.Errorf("cannot unquote %s", tok)
+		}
 	}
 
-	b, err := base64.StdEncoding.DecodeString(sv)
+	b, err := base64.StdEncoding.AppendDecode([]byte{}, encoded)
 	if err != nil {
 		return fmt.Errorf("decode base64 blob: %w", err)
 	}
@@ -528,20 +534,7 @@ func (d *ShapeDeserializer) ReadUnion(s *smithy.Schema) (*smithy.Schema, error) 
 			return nil, nil
 		}
 
-		// save escaped before peek overwrites it
-		keyEscaped := d.p.escaped
-
-		// inline null check
-		ptok, err := d.peek()
-		if err != nil {
-			return nil, err
-		}
-		if isN(ptok) {
-			d.peeked = nil
-			continue
-		}
-
-		member, err := memberFromToken(s, tok, keyEscaped)
+		member, err := memberFromToken(s, tok, d.p.escaped)
 		if err != nil {
 			return nil, err
 		}
@@ -562,6 +555,16 @@ func (d *ShapeDeserializer) ReadUnion(s *smithy.Schema) (*smithy.Schema, error) 
 			if err := d.p.Skip(); err != nil {
 				return nil, err
 			}
+			continue
+		}
+
+		// inline null check
+		ptok, err := d.peek()
+		if err != nil {
+			return nil, err
+		}
+		if isN(ptok) {
+			d.peeked = nil
 			continue
 		}
 
@@ -606,7 +609,7 @@ func memberFromToken(s *smithy.Schema, tok []byte, escaped bool) (*smithy.Schema
 	// if the string had no escapes, the raw bytes ARE the unquoted form --
 	// no point re-trying the lookup
 	if !escaped {
-		return nil, nil
+		return errorMessageMember(s, inner), nil
 	}
 
 	unq, err := unquote(tok)
@@ -614,7 +617,29 @@ func memberFromToken(s *smithy.Schema, tok []byte, escaped bool) (*smithy.Schema
 		return nil, err
 	}
 
-	return s.Member(unq), nil
+	if m := s.Member(unq); m != nil {
+		return m, nil
+	}
+	return errorMessageMember(s, []byte(unq)), nil
+}
+
+// Services do not consistently use the casing that is modeled for the message
+// part of errors, handle that here.
+func errorMessageMember(s *smithy.Schema, name []byte) *smithy.Schema {
+	var alt string
+	switch string(name) {
+	case "message":
+		alt = "Message"
+	case "Message":
+		alt = "message"
+	default:
+		return nil
+	}
+
+	if _, ok := smithy.SchemaTrait[*traits.Error](s); !ok {
+		return nil
+	}
+	return s.Members()[alt]
 }
 
 func isN(tok []byte) bool   { return tok[0] == 'n' }
